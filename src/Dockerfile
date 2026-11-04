@@ -55,6 +55,8 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0
 # pandoc and codex-sandbox: Quick preview (L7.3) renders HTML in the web process. Tectonic (PDF) stays in the worker.
 # PANDOC_VERSION matches Dockerfile.worker and scripts/install-print-tools.sh.
 ARG PANDOC_VERSION=3.12
+# TECTONIC_VERSION is not installed here: it only names the worker's pin in CODEX_TOOLCHAIN, so web and worker hash alike.
+ARG TECTONIC_VERSION=0.15.0
 ARG PANDOC_SHA256=67d7d011fed8c8543306022b985b9b2499ab9b74818df91d8727c7e9ebc5ba06
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
@@ -64,6 +66,8 @@ RUN apt-get update \
     && install -m 0755 "/tmp/pandoc-${PANDOC_VERSION}/bin/pandoc" /usr/local/bin/pandoc \
     && rm -rf /tmp/pandoc.tgz "/tmp/pandoc-${PANDOC_VERSION}" /var/lib/apt/lists/*
 COPY --from=sandbox /codex-sandbox /usr/local/bin/codex-sandbox
+# The toolchain string the content hash covers; Dockerfile.worker sets the same value from the same pins (a test compares them).
+ENV CODEX_TOOLCHAIN="pandoc ${PANDOC_VERSION}|Tectonic ${TECTONIC_VERSION}"
 
 WORKDIR /app
 COPY --from=build /app .
