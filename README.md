@@ -39,7 +39,7 @@ Every screen shares the same chapters, sources and entries, so you never copy an
 | **References** | Every source you quote, where you used it and whether you're cleared to print it. Quoted words are counted against publisher limits, permission letters are drafted for you, and the bibliography comes out in your citation style. |
 | **Layout** | A live preview of the book in its print template, and a real proof when you need exact pages. Preflight flags low-resolution images; export with bleed and crop marks. |
 
-A book uses its series' settings unless it sets its own, and AI drafts get both style guides. Changes save as you type, so there is no Save button to forget. Light and dark themes throughout.
+Changes save as you type, so there is no Save button to forget. Light and dark themes throughout.
 
 ## Status
 
