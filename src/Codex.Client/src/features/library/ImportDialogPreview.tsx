@@ -1,7 +1,7 @@
 import type { ImportPreview } from './importApi';
 import { importTestIds } from './importTestIds';
 
-// Step 2 of the Import dialog: what the import will create (count → destination) and what it skips, in warn.
+// (temporary CI check) Step 2 of the Import dialog: what the import will create (count → destination) and what it skips, in warn.
 export function ImportDialogPreview({
   preview,
   sourceName,
