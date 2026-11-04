@@ -116,3 +116,7 @@ The acceptance job runs one shard per namespace, filtered with a trailing dot so
 `Lanes.PlanX`: `Harness`, `Lanes.Shell`, `Lanes.Library`, `Lanes.Plan`, `Lanes.Write`, `Lanes.Kb`,
 `Lanes.References`, `Lanes.Settings`, `Journeys`. Tests in any other namespace run in the `Other` shard (that is where
 `Lanes.MobileEditor` runs), so nothing is skipped, but put tests in the listed namespaces. A shard with no tests passes.
+
+`Journeys` splits by class-name prefix: `Journeys.J0`, `Journeys.J1`, and `Journeys.Rest` for every other journey.
+The shards are grouped into four jobs balanced on test time. Each job uploads its timings as `acceptance-trx-<group>`,
+so rebalance from those. `main`'s ruleset requires each job by name, so adding or removing a group means updating it.

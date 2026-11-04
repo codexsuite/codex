@@ -48,11 +48,11 @@ A novel-writing app. The screens, their routes and how they link together are in
 | `src/Directory.Build.props`, `.editorconfig` | net10, warnings as errors, Sonar + Agoda analyzers, `TimeProvider`-only clock (`src/BannedSymbols.txt`) |
 | `src/Dockerfile`, `src/Dockerfile.worker`, `src/docker-compose.yml` | App image, worker image (pandoc + Tectonic), compose with `postgres:18`. Build context is the repo root |
 | `scripts/db-reset.sh` | Drops and recreates a dev database from `db/` |
-| `.github/workflows/` | `ci.yml` (every pull request, since main's ruleset requires its checks; build/lint/typecheck/vitest, unit, API, component, acceptance shards by namespace plus an `Other` shard for any namespace not listed, run in two grouped jobs, image builds; on a pull request, the client's Vitest and component tests run only what the diff reaches, so a stale page shot can surface on a later PR) and `docker-publish.yml` |
+| `.github/workflows/` | `ci.yml` (every pull request, since main's ruleset requires its checks; build/lint/typecheck/vitest, unit, API, component, acceptance shards by namespace plus an `Other` shard for any namespace not listed, run in four grouped jobs, image builds; on a pull request, the client's Vitest and component tests run only what the diff reaches, so a stale page shot can surface on a later PR) and `docker-publish.yml` |
 
 ## Commands
 
-**Test locally, and only what your change touches.** CI is slow: about 8 jobs per pull-request push. So:
+**Test locally, and only what your change touches.** CI is slow: about 10 jobs per pull-request push. So:
 
 - Verify on your machine before pushing, never by pushing and waiting for CI.
 - Run the tests your change can affect, not the whole suite: the test classes for the code you changed (`--filter "FullyQualifiedName~<Class>"`), the API or acceptance namespace of your feature, and the component spec or vitest file next to your component.

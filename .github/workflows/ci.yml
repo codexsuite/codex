@@ -231,16 +231,22 @@ jobs:
       fail-fast: false
       matrix:
         # Shards are namespaces, so later slices add tests under these namespaces and never edit this file.
-        # They are grouped into two jobs because each job spends ~1.5 min on setup (client bundle, build,
-        # Chromium, print tools); the groups are balanced on test time (Journeys alone is ~6 min, the rest ~4 min).
+        # Journeys is the exception, at ~6 min on its own: it splits by class-name prefix, J0x and J1x, with
+        # Journeys.Rest taking every other journey. Each job spends ~2.5 min on setup (client bundle, build, Chromium,
+        # print tools), so shards are grouped into jobs, balanced on test time from the acceptance-trx-* artifacts.
         # Each shard still runs in its own `dotnet test`, so a test host's memory is what one shard needs.
         # `Other` runs every test outside the listed namespaces (a new lane's namespace lands there until it
         # gets a shard), so nothing is silently skipped. A shard with no tests passes (dotnet test exits 0).
+        # main's ruleset requires these checks by name, so a change to the groups changes the ruleset too.
         include:
           - group: 1
-            shards: Journeys Harness
+            shards: Journeys.J0
           - group: 2
-            shards: Lanes.Write Other Lanes.References Lanes.Kb Lanes.Library Lanes.Plan Lanes.Settings Lanes.Shell
+            shards: Journeys.J1 Lanes.Settings Lanes.Library
+          - group: 3
+            shards: Journeys.Rest Lanes.References Lanes.Kb
+          - group: 4
+            shards: Lanes.Write Other Lanes.Plan Harness Lanes.Shell
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -280,18 +286,23 @@ jobs:
         env:
           SHARDS: ${{ matrix.shards }}
         # Every shard runs even after one fails; the step fails at the end, naming the failed shards.
-        # The trailing dot keeps Lanes.Plan from also matching a Lanes.PlanX namespace.
+        # The trailing dot keeps Lanes.Plan from also matching a Lanes.PlanX namespace. Journeys.J0 and Journeys.J1
+        # have none because they are class-name prefixes, not namespaces.
         run: |
           failed=""
+          journeys=Codex.AcceptanceTests.Journeys
           for shard in $SHARDS; do
-            if [ "$shard" = "Other" ]; then
-              filter=""
-              for ns in Harness Lanes.Shell Lanes.Library Lanes.Plan Lanes.Write Lanes.Kb Lanes.References Lanes.Settings Journeys; do
-                filter="${filter:+$filter&}FullyQualifiedName!~Codex.AcceptanceTests.$ns."
-              done
-            else
-              filter="FullyQualifiedName~Codex.AcceptanceTests.$shard."
-            fi
+            case "$shard" in
+              Other)
+                filter=""
+                for ns in Harness Lanes.Shell Lanes.Library Lanes.Plan Lanes.Write Lanes.Kb Lanes.References Lanes.Settings Journeys; do
+                  filter="${filter:+$filter&}FullyQualifiedName!~Codex.AcceptanceTests.$ns."
+                done
+                ;;
+              Journeys.Rest) filter="FullyQualifiedName~$journeys.&FullyQualifiedName!~$journeys.J0&FullyQualifiedName!~$journeys.J1" ;;
+              Journeys.J*) filter="FullyQualifiedName~Codex.AcceptanceTests.$shard" ;;
+              *) filter="FullyQualifiedName~Codex.AcceptanceTests.$shard." ;;
+            esac
             echo "::group::$shard"
             dotnet test src/Codex.AcceptanceTests --configuration Release --no-build --filter "$filter" --logger "trx;LogFileName=$shard.trx" --results-directory artifacts/test-results || failed="$failed $shard"
             echo "::endgroup::"
