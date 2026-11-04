@@ -175,6 +175,8 @@ jobs:
       image: mcr.microsoft.com/playwright:v1.62.0-resolute
     defaults:
       run:
+        # A job with a container defaults to `sh`, which is dash in this image and has no `<<<`.
+        shell: bash
         working-directory: src/Codex.Client
     steps:
       - uses: actions/checkout@v4
@@ -198,9 +200,10 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           # The job container runs as root and the checkout belongs to the runner, so Git treats the worktree as
           # unsafe and `git diff` exits 129. Playwright --only-changed invokes git too, so it is set on the step.
+          # `*`, not github.workspace: in a container job that expression is the host path, not /__w/codex/codex.
           GIT_CONFIG_COUNT: "1"
           GIT_CONFIG_KEY_0: safe.directory
-          GIT_CONFIG_VALUE_0: ${{ github.workspace }}
+          GIT_CONFIG_VALUE_0: "*"
         run: |
           set -euo pipefail
           if [ "$EVENT_NAME" != "pull_request" ]; then
