@@ -43,16 +43,20 @@ Settings and style guides copy down to every book in a series. Changes save as y
 
 ## Status
 
-The designs are done and version 1 is being built, in waves.
+Version 1 is built and in use. This table is checked against `main`.
 
-| Stage | State |
+| Area | State |
 |---|---|
-| Design | **Done.** Seven reference screens in light and dark, under `design/screens/`. |
-| Skeleton, contracts, seed, test harness | **Done.** |
-| Library, Plan, Write, Knowledge base, References, Settings | **Done.** Each lane has API, component and acceptance tests. |
-| Layout and print pipeline, manuscript import, AI provider, realtime transport, MCP server | **Next.** The Layout tab is a placeholder for now. The Write screen's AI draft flow is built end to end, but production answers `not_configured` until the Anthropic provider lands. |
-| Journeys J1 to J27 as end-to-end tests, keyboard pass, screenshot baselines | After that. |
-| Real-time collaboration, chat, review, plugins, more exporters | On the roadmap. A reference screen for collaboration is in `design/collab.html`. |
+| Library, Plan, Write, Knowledge base, References, Settings | Built. Each has API, component and acceptance tests. |
+| Layout and print pipeline | Built. Quick preview, proofs and Export for printer run in the worker image, from versioned LaTeX template packages (`docs/print.md`). Printing needs Landlock ABI 4, see Configuration. |
+| Manuscript import and export | Built. Import reads Markdown folders, Novelcrafter zips, `.docx` and pandoc folders (`docs/import.md`). Export covers the printer PDF, Markdown and a source archive. |
+| AI drafts | Built. Each user connects their own provider in Settings, AI. There is no server-wide key (`docs/ai-integrations.md`). |
+| Real-time updates | Built. A SignalR hub and a Postgres bridge show edits made by agents and other processes (`docs/events.md`). |
+| Sharing | Built. An owner shares a book with another user, with a role (`docs/auth.md`). |
+| MCP server | Built. `/mcp` over HTTP with personal access tokens, and a stdio server (`docs/mcp.md`). |
+| Journeys J1 to J28 | Built as end-to-end tests. Keyboard-only variants exist for J1, J9 and J10 only. |
+| Mobile app | In `src/Codex.Mobile`: Plan, Write, Knowledge, Settings and Library. |
+| Real-time co-editing, chat, review, plugins | Not built. A reference screen for collaboration is in `design/collab.html`. |
 
 Sign-in is by email and password, and there is no sign-up: an admin adds users from the user management page. See
 [docs/auth.md](docs/auth.md).
@@ -94,7 +98,7 @@ CODEX_DB_MIGRATE=false dotnet run --project src/Codex.WebApi
 
 For a production-style run, `pnpm run build` emits the SPA into `src/Codex.WebApi/wwwroot` and the API serves it.
 
-Configuration is by `CODEX_`-prefixed environment variables: `CODEX_DB_CONNECTION`, `CODEX_DB_MIGRATE` (default true), `CODEX_BLOB_ROOT` (uploads, renditions and exports), `CODEX_SEQ_URL`, `CODEX_SEQ_API_KEY`, `CODEX_ANTHROPIC_API_KEY` (AI drafts), `CODEX_ROLE` and `CODEX_EVENTS_LISTEN` (the worker container sets `worker` and `false`).
+Configuration is by `CODEX_`-prefixed environment variables. See [Configuration](#configuration).
 
 ### Tests
 
@@ -108,6 +112,37 @@ cd src/Codex.Client && pnpm run lint && pnpm run typecheck && pnpm test && pnpm 
 ```
 
 Database tests start a `postgres:18` Testcontainers container unless `CODEX_TEST_DB` points at a long-lived server. Each test class clones a template database and starts its own instance of the app, so classes run in parallel and nothing is mocked. The conventions are in `docs/testing.md`.
+
+## Configuration
+
+Set these on the `codex` service. The `worker` service needs the database, files and keys, and role variables too. `src/docker-compose.yml` shows a working set.
+
+| Variable | Group | What it does | Default |
+|---|---|---|---|
+| `CODEX_DB_CONNECTION` | Database | Npgsql connection string to the PostgreSQL 18 database. Every session runs at UTC whatever the string says. | None. Required. |
+| `CODEX_DB_MIGRATE` | Database | Applies the schema and migrations at start. The seed is never applied. Set `false` on the worker, so only the web service migrates. | `true` |
+| `CODEX_ADMIN_EMAIL` | First admin | With the password, creates the first admin on boot, or gives a password to an existing user who has none. Remove both after the first sign-in. | None |
+| `CODEX_ADMIN_PASSWORD` | First admin | Password for that admin. Both variables must be set, or neither takes effect. | None |
+| `CODEX_BLOB_ROOT` | Files and keys | Folder for uploads, renditions and exports. The web and worker containers share it. A relative path resolves against the app folder. | None. Required. |
+| `CODEX_DATA_PROTECTION_DIR` | Files and keys | Folder for the key ring that encrypts users' AI keys. Keep it off the database and share it with the worker. Without it, AI keys cannot be saved. | None |
+| `CODEX_ROLE` | Worker | `web` serves the app and claims no print jobs. `worker` claims render and export jobs. `all` does both in one process. | `web` |
+| `CODEX_EVENTS_LISTEN` | Worker | Whether this process listens for book events from other processes. The worker image sets `false`. | `true` |
+| `CODEX_AI_ALLOW_LOCAL_ENDPOINTS` | AI | `true` lets users point an AI integration at `http://` and private-network addresses, such as Ollama or LM Studio. Read on every call. | Off |
+| `CODEX_TEMPLATES_ROOT` | Print | Folder of the built-in layout template packages. A relative path resolves against the app folder. | `../../templates` (`/templates` in the images) |
+| `CODEX_TEMPLATE_CACHE` | Print | Where template packages are unpacked from their stored zip. | `codex-template-cache` in the temp folder |
+| `CODEX_RENDER_WORK` | Print | Parent folder of the per-job work folders. | `codex-render` in the temp folder |
+| `CODEX_RENDER_TIMEOUT_SECONDS` | Print | Wall-clock limit for one Tectonic run. Pandoc gets a third of it. | `300` |
+| `CODEX_RENDER_MAX_PDF_MB` | Print | Largest PDF a run may write, in megabytes. A bigger PDF fails the run. | `1024` |
+| `CODEX_RENDER_MAX_PROCS` | Print | Process and thread limit for a run. The kernel counts every process of the user, so a shared host needs headroom. | `4096` |
+| `CODEX_TECTONIC` | Print | Path to Tectonic, or a name looked up on `PATH`. | `tectonic` |
+| `CODEX_TECTONIC_CACHE` | Print | Tectonic's bundle cache. Mounted read-only during a run. | `~/.cache/Tectonic` (`/var/cache/tectonic` in the worker image) |
+| `CODEX_PANDOC` | Print | Path to pandoc, or a name looked up on `PATH`. | `pandoc` |
+| `CODEX_SANDBOX` | Print | Path to `codex-sandbox`, or a name looked up on `PATH`. There is no way to turn the sandbox off. | `codex-sandbox` |
+| `CODEX_MCP_MAX_GENERATIONS` | MCP | How many Codex drafts one MCP client may start. A personal access token counts over a sliding hour. The next draft is refused as `rate_limited`. | `20` |
+| `CODEX_SEQ_URL` | Logging | Seq server URL. Logs go to the console only until this is set. | None |
+| `CODEX_SEQ_API_KEY` | Logging | API key for Seq. | None |
+
+Printing needs Landlock ABI 4, which arrived in Linux 6.7. `codex-sandbox` refuses to run without it, so the worker cannot render on an older kernel, including WSL2 on kernel 6.6.
 
 ## Repository layout
 
