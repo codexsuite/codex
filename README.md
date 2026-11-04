@@ -32,7 +32,7 @@ Every screen shares the same chapters, sources and entries, so you never copy an
 
 | Workspace | What it does |
 |---|---|
-| **Library** | Every book and series on one shelf. Series share a style guide and settings; progress shows against the word target. |
+| **Library** | Every book and series on one shelf. Progress shows against the word target. |
 | **Plan** | A board of acts, chapters and scenes, or a plain outline. Scene summaries, word counts, labels like *Needs research*, and knowledge base entries pinned to scenes. |
 | **Write** | A calm manuscript editor with the plan in the margin. Scene beats draft 200 to 600 words with AI; `@` mentions link to the knowledge base as you type; focus mode and a minimap. |
 | **Knowledge base** | One entry per person, idea or source, with aliases so every mention links itself. See every scene that uses an entry, and a timeline for people and events. |
