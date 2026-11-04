@@ -39,7 +39,7 @@ Every screen shares the same chapters, sources and entries, so you never copy an
 | **References** | Every source you quote, where you used it and whether you're cleared to print it. Quoted words are counted against publisher limits, permission letters are drafted for you, and the bibliography comes out in your citation style. |
 | **Layout** | A live preview of the book in its print template, and a real proof when you need exact pages. Preflight flags low-resolution images; export with bleed and crop marks. |
 
-Settings and style guides copy down to every book in a series. Changes save as you type, so there is no Save button to forget. Light and dark themes throughout.
+A book uses its series' settings unless it sets its own, and AI drafts get both style guides. Changes save as you type, so there is no Save button to forget. Light and dark themes throughout.
 
 ## Status
 
@@ -127,7 +127,7 @@ The `codex` (web) service takes the Database, First admin, Files and keys, Worke
 | `CODEX_DATA_PROTECTION_DIR` | Files and keys | Folder for the key ring that encrypts users' AI keys. Store it outside the database, so a database dump alone cannot decrypt the keys. Share it with the worker. Without it, AI keys cannot be saved. | None |
 | `CODEX_ROLE` | Worker | `web` serves the app and claims no print jobs. `worker` claims render and export jobs. `all` does both in one process. | `web` |
 | `CODEX_EVENTS_LISTEN` | Worker | Whether this process listens for book events from other processes. Set `false` on the worker. The image does not set it. | `true` |
-| `CODEX_AI_ALLOW_LOCAL_ENDPOINTS` | AI | `true` lets users point an AI integration at `http://` and private-network addresses, such as Ollama or LM Studio. Codex reads it on every call, so a change needs no restart. | Off |
+| `CODEX_AI_ALLOW_LOCAL_ENDPOINTS` | AI | `true` lets users point an AI integration at `http://` and private-network addresses, such as Ollama or LM Studio. Codex reads it on every call. Recreate the container to apply a new value. | Off |
 | `CODEX_TEMPLATES_ROOT` | Print | Folder of the built-in layout template packages. A relative path resolves against the app folder. | `../../templates` (`/templates` in the images) |
 | `CODEX_TEMPLATE_CACHE` | Print | Where template packages are unpacked from their stored zip. | `codex-template-cache` in the temp folder |
 | `CODEX_RENDER_WORK` | Print | Parent folder of the per-job work folders. | `codex-render` in the temp folder |
