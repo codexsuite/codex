@@ -34,16 +34,15 @@ COPY src/Codex.WebApi/Codex.WebApi.csproj src/Codex.WebApi/
 COPY src/Codex.Application/Codex.Application.csproj src/Codex.Application/
 COPY src/Codex.Core/Codex.Core.csproj src/Codex.Core/
 COPY src/Codex.Contracts/Codex.Contracts.csproj src/Codex.Contracts/
-# The NuGet cache mount (shared by id across images) is empty on a fresh builder and warm on one that has built before.
-RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
-    dotnet restore src/Codex.WebApi -r linux-x64
+# The packages stay in this layer, not a cache mount: CI's layer cache keeps layers but not mounts, so a cached restore
+# would leave the publish below with no packages.
+RUN dotnet restore src/Codex.WebApi -r linux-x64
 COPY src/ ./src/
 COPY db/ ./db/
 COPY prompts/ ./prompts/
 COPY --from=frontend /source/src/Codex.WebApi/wwwroot/ ./src/Codex.WebApi/wwwroot/
 # Analyzers off here: CI already builds every project with them on and warnings as errors.
-RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
-    dotnet publish src/Codex.WebApi -c Release -r linux-x64 --self-contained false --no-restore -o /app -p:SourceRevisionId=$SOURCE_COMMIT -p:RunAnalyzers=false
+RUN dotnet publish src/Codex.WebApi -c Release -r linux-x64 --self-contained false --no-restore -o /app -p:SourceRevisionId=$SOURCE_COMMIT -p:RunAnalyzers=false
 
 # codex-sandbox (src/sandbox/codex-sandbox.c): Landlock and rlimits around every pandoc run, as in Dockerfile.worker.
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS sandbox
