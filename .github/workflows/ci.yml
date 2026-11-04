@@ -3,13 +3,9 @@ name: CI
 on:
   # Pull requests only: a merge to main is the code its pull request already tested.
   # main's images are built by docker-publish. Run it by hand on any branch with workflow_dispatch.
+  # No paths-ignore: main's ruleset requires these checks, and a workflow skipped by a path filter leaves them
+  # pending, so that pull request could never merge.
   pull_request:
-    # Changes CI cannot see. Only top-level *.md: Markdown under src/, db/, templates/ and prompts/ is
-    # test or app input. ci.yml itself is not listed, so a change to it still runs everything.
-    paths-ignore:
-      - '*.md'
-      - 'docs/**'
-      - '.github/workflows/docker-publish.yml'
   workflow_dispatch:
 
 concurrency:

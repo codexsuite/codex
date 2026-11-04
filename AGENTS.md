@@ -48,7 +48,7 @@ A novel-writing app. The screens, their routes and how they link together are in
 | `src/Directory.Build.props`, `.editorconfig` | net10, warnings as errors, Sonar + Agoda analyzers, `TimeProvider`-only clock (`src/BannedSymbols.txt`) |
 | `src/Dockerfile`, `src/Dockerfile.worker`, `src/docker-compose.yml` | App image, worker image (pandoc + Tectonic), compose with `postgres:18`. Build context is the repo root |
 | `scripts/db-reset.sh` | Drops and recreates a dev database from `db/` |
-| `.github/workflows/` | `ci.yml` (pull requests only, skipped for top-level `*.md`, `docs/**` and `docker-publish.yml`; build/lint/typecheck/vitest, unit, API, component, acceptance shards by namespace plus an `Other` shard for any namespace not listed, run in two grouped jobs, image builds; on a pull request, the client's Vitest and component tests run only what the diff reaches, so a stale page shot can surface on a later PR) and `docker-publish.yml` |
+| `.github/workflows/` | `ci.yml` (every pull request, since main's ruleset requires its checks; build/lint/typecheck/vitest, unit, API, component, acceptance shards by namespace plus an `Other` shard for any namespace not listed, run in two grouped jobs, image builds; on a pull request, the client's Vitest and component tests run only what the diff reaches, so a stale page shot can surface on a later PR) and `docker-publish.yml` |
 
 ## Commands
 
