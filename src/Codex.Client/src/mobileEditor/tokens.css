@@ -1,0 +1,89 @@
+/*
+ * The design tokens this page uses, copied from design/tokens.css (the source of truth). The page does not load the
+ * SPA's index.css: that pulls in Tailwind and the SPA's utilities, and this entry stays lean. tokens.test.ts fails if
+ * a value here drifts from design/tokens.css. Touch density is the only density the app uses.
+ */
+:root {
+  color-scheme: light;
+  --color-bg: #e8eef7;
+  --color-surface: #f7f9fd;
+  --color-surface-2: #dfe7f3;
+  --color-border: #cdd9ea;
+  --color-text: #1c2638;
+  --color-muted: #52627c;
+  --color-accent: #2563c9;
+  --color-accent-fg: #ffffff;
+  --color-accent-soft: #dae6fb;
+  --color-ok: #3f8a3a;
+  --color-warn: #b7701b;
+  --color-info: #1d7fb8;
+  --color-danger: #c2353b;
+  --shadow-raised: 0 1px 2px rgb(16 24 40 / 0.08), 0 4px 12px -6px rgb(16 24 40 / 0.12);
+
+  --font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, monospace;
+  --text-2xs: 10.5px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 18px;
+  --leading: 1.45;
+  --leading-prose: 1.7;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  --radius-xs: 3px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+
+  --category-blog: #a86200;
+  --category-law: #3b5bdb;
+  --category-story: #2f8a4c;
+  --category-research: #7c4dce;
+  --category-person: #c2416b;
+}
+
+/* The font is the SPA's: Inter Variable from @fontsource-variable/inter (imported by main.tsx). */
+:root {
+  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-bg: #171e2d;
+  --color-surface: #1f2839;
+  --color-surface-2: #29344a;
+  --color-border: #334058;
+  --color-text: #eef2f8;
+  --color-muted: #a0aec6;
+  --color-accent: #5cc8f0;
+  --color-accent-fg: #06192a;
+  --color-accent-soft: #163a57;
+  --color-ok: #9fdc8a;
+  --color-warn: #f4cf72;
+  --color-info: #7aa7f5;
+  --color-danger: #f08a8f;
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 16px -8px rgb(0 0 0 / 0.6);
+  --category-blog: #f2c063;
+  --category-law: #93a8ff;
+  --category-story: #8fd6a0;
+  --category-research: #c3a6ff;
+  --category-person: #f49ab8;
+}
+
+:root[data-density='touch'] {
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-md: 16px;
+  --text-lg: 22px;
+  --row-height: 44px;
+}

@@ -1,0 +1,1430 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Codex · Layout (reference)</title>
+<!--
+  Reference implementation of the Layout view (#13, screen 9 in #8): print preview, layout templates,
+  preflight and Export for printer, inside the book workspace chrome. Open directly in a browser.
+  Uses ../tokens.css for the UI. Always shows the Players Guide (book players-guide in the Forsaken Gods series); tab, Back and
+  Open in Write links follow the "Moving between screens" rules (?book=, #scene=). Pages are paper-coloured in both themes and use the template's own fonts:
+  like book covers, they are the book's artwork, not UI.
+  Working: Quick preview (paginated in the browser from the same blocks the print build uses), Proof
+  (a simulated chapter-only LaTeX render with a content-hash cache), scope (front matter, chapter, scene),
+  the template picker (Fantasy RPG, Novel, Standard manuscript, and a user fork with no preview.css),
+  template options that re-flow the pages live, version pinning with a previewed upgrade, effective DPI per
+  image, raw-LaTeX flags, Preflight, the Export for printer dialog and a background export job that
+  survives a reload. The "Preview" panel bottom-left is a review aid, not part of the design.
+-->
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--color-bg); color: var(--color-text); font: var(--text-base)/var(--leading) var(--font-sans); -webkit-font-smoothing: antialiased; display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+button, input, select { font: inherit; color: inherit; }
+svg { flex: none; }
+a { color: inherit; }
+.spacer { flex: 1; }
+.dim-t { color: var(--color-muted); }
+
+/* Shared controls (same as references.html) */
+.btn { display: inline-flex; align-items: center; gap: 5px; height: var(--control-height); padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: var(--color-surface); font-size: var(--text-sm); font-weight: var(--weight-medium); cursor: pointer; white-space: nowrap; text-decoration: none; }
+.btn:hover { background: var(--color-surface-2); }
+.btn.primary { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-accent-fg); }
+.btn.primary:hover { filter: brightness(1.07); }
+.btn.primary:disabled { opacity: .5; cursor: not-allowed; filter: none; }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--color-surface-2); }
+.btn.sm { height: 24px; padding: 0 8px; font-size: var(--text-xs); }
+.btn svg, .seg svg, .ib svg, .mini svg, .sel svg { width: 13px; height: 13px; }
+.btn:focus-visible, .seg button:focus-visible, .ib:focus-visible, .mini:focus-visible, .tab:focus-visible, .sel:focus-visible, .entry:focus-visible, .th:focus-visible, .pf-item:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.search { display: flex; align-items: center; gap: 6px; height: var(--control-height); width: 220px; max-width: 100%; padding: 0 var(--space-2); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); }
+.search svg { width: 13px; height: 13px; color: var(--color-muted); }
+.search input { flex: 1; min-width: 0; border: 0; background: transparent; outline: 0; font-size: var(--text-sm); }
+.search input::placeholder { color: var(--color-muted); }
+.sel { display: inline-flex; align-items: center; gap: 4px; height: var(--control-height); padding: 0 var(--space-2); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); font-size: var(--text-sm); white-space: nowrap; cursor: pointer; min-width: 0; }
+.sel:hover { background: var(--color-surface-2); }
+.sel em { font-style: normal; color: var(--color-muted); }
+.sel .t { overflow: hidden; text-overflow: ellipsis; }
+.sel > svg:last-child { width: 11px; height: 11px; color: var(--color-muted); }
+.sel .ver { font-size: var(--text-2xs); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.seg { display: inline-flex; height: var(--control-height); border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; background: var(--color-surface); flex: none; }
+.seg button { display: inline-flex; align-items: center; gap: 4px; padding: 0 9px; border: 0; border-right: 1px solid var(--color-border); background: transparent; color: var(--color-muted); font-size: var(--text-sm); cursor: pointer; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--color-accent-soft); color: var(--color-text); font-weight: var(--weight-semibold); }
+.seg button:disabled { opacity: .45; cursor: not-allowed; }
+.seg.sm { height: 24px; }
+.seg.sm button { padding: 0 8px; font-size: var(--text-xs); }
+.overline { font-size: var(--text-2xs); font-weight: var(--weight-medium); color: var(--color-muted); text-transform: uppercase; letter-spacing: .02em; }
+.ib { display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--color-muted); cursor: pointer; flex: none; }
+.ib:hover { background: var(--color-surface-2); color: var(--color-text); }
+.ib:disabled { opacity: .4; cursor: default; background: none; }
+.cover.thumb { width: 20px; aspect-ratio: 2 / 3; border-radius: 2px; background: linear-gradient(160deg, #3c4e6d, #141d2e 70%); box-shadow: 0 0 0 1px rgb(0 0 0 / .15); flex: none; }
+.mini { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 6px; border: 0; border-radius: var(--radius-xs); background: none; color: var(--color-muted); font-size: var(--text-xs); font-weight: var(--weight-medium); cursor: pointer; white-space: nowrap; text-decoration: none; }
+.mini:hover { background: var(--color-surface-2); color: var(--color-text); }
+.mini.go { color: var(--color-accent); }
+.mini svg { width: 11px; height: 11px; }
+.badge { display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: color-mix(in srgb, var(--tone) 16%, transparent); color: var(--tone); font-size: var(--text-2xs); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+.st { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-xs); font-weight: var(--weight-medium); white-space: nowrap; }
+.st i { width: 6px; height: 6px; border-radius: 50%; background: var(--tone); flex: none; }
+
+/* Book header (#6 shared chrome, same as references.html) plus the Layout destination */
+.bookbar { height: var(--bar-height); flex: none; display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); background: var(--color-surface); border-bottom: 1px solid var(--color-border); min-width: 0; }
+.book-id { display: flex; align-items: center; gap: 7px; min-width: 0; padding-right: var(--space-2); border-right: 1px solid var(--color-border); height: 100%; }
+.book-id .t { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+.book-id b { font-size: var(--text-sm); font-weight: var(--weight-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+.book-id span { font-size: var(--text-2xs); color: var(--color-muted); white-space: nowrap; }
+.tabs { display: flex; align-items: center; height: 100%; }
+.tab { position: relative; display: inline-flex; align-items: center; gap: 5px; height: 100%; padding: 0 10px; border: 0; background: none; color: var(--color-muted); font-size: var(--text-sm); font-weight: var(--weight-medium); cursor: pointer; text-decoration: none; white-space: nowrap; }
+.tab:hover { color: var(--color-text); }
+.tab[aria-selected="true"] { color: var(--color-text); font-weight: var(--weight-semibold); }
+.tab[aria-selected="true"]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--color-accent); }
+.tabs .vr { width: 1px; height: 16px; margin: 0 4px; background: var(--color-border); }
+.scope { display: flex; align-items: center; gap: var(--space-2); min-width: 0; font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sync { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; }
+.sync i { width: 6px; height: 6px; border-radius: 50%; background: var(--color-ok); }
+.avatar { width: 22px; height: 22px; border-radius: 50%; background: var(--color-accent-soft); color: var(--color-accent); font-size: 10px; font-weight: 700; display: grid; place-items: center; flex: none; }
+
+/* Workspace + Knowledge base sidebar (same as references.html; here a click finds where an entry prints) */
+.ws { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); }
+.ws.no-side { grid-template-columns: minmax(0, 1fr); }
+.ws.no-side .side { display: none; }
+.side { min-height: 0; display: flex; flex-direction: column; background: var(--color-surface); border-right: 1px solid var(--color-border); }
+.side-h { padding: 10px var(--space-3) 0; font-size: var(--text-md); font-weight: var(--weight-semibold); }
+.side-note { padding: 4px var(--space-3) 0; font-size: var(--text-xs); color: var(--color-muted); }
+.side-tools { display: flex; gap: 6px; padding: var(--space-2); }
+.side-tools .search { width: auto; flex: 1; }
+.side-list { flex: 1; overflow: auto; padding: 0 var(--space-1) var(--space-3); }
+.cat-h { display: flex; align-items: center; gap: 6px; padding: 10px 6px 4px; font-size: var(--text-2xs); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .04em; color: var(--color-muted); }
+.cat-h i { width: 7px; height: 7px; border-radius: 2px; background: var(--cat); flex: none; }
+.entry { width: 100%; display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 6px; border: 0; border-radius: var(--radius-sm); background: none; font-size: var(--text-sm); text-align: left; cursor: pointer; }
+.entry:hover { background: var(--color-surface-2); }
+.entry[aria-pressed="true"] { background: var(--color-accent-soft); font-weight: var(--weight-medium); }
+.entry .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.entry .u { font-size: var(--text-2xs); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+
+/* Layout: toolbar */
+.main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.toolbar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--space-2); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--color-border); }
+.toolbar h1 { margin: 0 var(--space-2) 0 2px; font-size: var(--text-lg); font-weight: var(--weight-semibold); line-height: 1; white-space: nowrap; }
+.toolbar .sel.tpl { max-width: 260px; }
+.toolbar .sel.scope-sel { max-width: 280px; }
+
+/* Body: page rail + canvas + panel */
+.body { flex: 1; min-height: 0; display: grid; grid-template-columns: 112px minmax(0, 1fr) var(--panel-width); }
+.body.no-panel { grid-template-columns: 112px minmax(0, 1fr); }
+.body.no-panel .panel { display: none; }
+.rail { min-height: 0; overflow: auto; padding: var(--space-2) 0 var(--space-5); border-right: 1px solid var(--color-border); background: var(--color-surface); }
+.th { display: grid; justify-items: center; gap: 3px; width: 100%; padding: 5px 0; border: 0; background: none; cursor: pointer; }
+.th .tf { position: relative; overflow: hidden; border-radius: 1px; box-shadow: 0 0 0 1px var(--color-border); }
+.th .tf .pg { transform-origin: 0 0; pointer-events: none; }
+.th span { font-size: var(--text-2xs); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.th:hover .tf { box-shadow: 0 0 0 1px var(--color-muted); }
+.th[aria-current="true"] .tf { box-shadow: 0 0 0 2px var(--color-accent); }
+.th[aria-current="true"] span { color: var(--color-accent); font-weight: var(--weight-semibold); }
+.th .fl { position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--color-warn); box-shadow: 0 0 0 1.5px var(--color-surface); }
+.rail-h { padding: 2px 10px 4px; font-size: var(--text-2xs); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .04em; color: var(--color-muted); }
+
+.stagewrap { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.cbar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--space-2); min-height: 36px; padding: 4px var(--space-3); border-bottom: 1px solid var(--color-border); background: var(--color-surface); font-size: var(--text-xs); }
+.live { display: inline-flex; align-items: center; gap: 6px; color: var(--color-muted); white-space: nowrap; }
+.live i { width: 6px; height: 6px; border-radius: 50%; background: var(--color-ok); }
+.live[data-s="busy"] i { background: var(--color-accent); animation: pulse .7s ease-in-out infinite alternate; }
+.live[data-s="stale"] i { background: var(--color-warn); }
+.live b { color: var(--color-text); font-weight: var(--weight-medium); }
+@keyframes pulse { to { opacity: .25; } }
+.pnav { display: inline-flex; align-items: center; gap: 2px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pnav .n { min-width: 92px; text-align: center; }
+.chk { display: inline-flex; align-items: center; gap: 5px; color: var(--color-muted); white-space: nowrap; cursor: pointer; }
+.chk input { margin: 0; accent-color: var(--color-accent); }
+
+/* Banners above the pages (proof, upgrade preview, house style hint) */
+.banner { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--space-3); padding: 6px var(--space-3); border-bottom: 1px solid color-mix(in srgb, var(--tone) 40%, var(--color-border)); background: color-mix(in srgb, var(--tone) 9%, var(--color-surface)); font-size: var(--text-xs); }
+.banner > svg { width: 14px; height: 14px; color: var(--tone); }
+.banner b { font-weight: var(--weight-semibold); }
+.banner .m { color: var(--color-muted); }
+.banner .acts { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* Canvas: pages sit on the app background, single or as spreads */
+.canvas { position: relative; flex: 1; min-height: 0; overflow: auto; padding: var(--space-5) var(--space-4) 90px; }
+.rows { display: flex; flex-direction: column; align-items: center; gap: 22px; width: max-content; min-width: 100%; }
+.row { display: flex; align-items: flex-start; }
+.row .ph { flex: none; }
+.lbls { display: flex; justify-content: space-between; margin-top: 4px; font-size: var(--text-2xs); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.frame { position: relative; flex: none; overflow: hidden; box-shadow: 0 0 0 1px rgb(0 0 0 / .08), 0 2px 10px -2px rgb(0 0 0 / .25); }
+.row .frame + .frame::before { content: ""; position: absolute; z-index: 3; left: 0; top: 0; bottom: 0; width: 18px; background: linear-gradient(to right, rgb(0 0 0 / .12), transparent); pointer-events: none; }
+.row .frame:first-child:not(:last-child)::after { content: ""; position: absolute; z-index: 3; right: 0; top: 0; bottom: 0; width: 18px; background: linear-gradient(to left, rgb(0 0 0 / .1), transparent); pointer-events: none; }
+.frame > .pg { transform-origin: 0 0; }
+.frame.cur { box-shadow: 0 0 0 1px rgb(0 0 0 / .08), 0 0 0 3px color-mix(in srgb, var(--color-accent) 35%, transparent), 0 2px 10px -2px rgb(0 0 0 / .25); }
+.proofv .frame { box-shadow: 0 0 0 1px rgb(0 0 0 / .3), 0 6px 16px -4px rgb(0 0 0 / .45); }
+.empty { max-width: 440px; margin: 60px auto; padding: var(--space-5); text-align: center; border: 1px dashed var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); }
+.empty h2 { margin: 0 0 6px; font-size: var(--text-md); font-weight: var(--weight-semibold); }
+.empty p { margin: 0 0 var(--space-3); font-size: var(--text-sm); color: var(--color-muted); }
+.empty .acts { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.steps { list-style: none; margin: var(--space-3) auto 0; padding: 0; max-width: 280px; text-align: left; font-size: var(--text-sm); }
+.steps li { display: flex; align-items: center; gap: 8px; padding: 3px 0; color: var(--color-muted); }
+.steps li i { width: 14px; height: 14px; display: grid; place-items: center; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--color-border); flex: none; }
+.steps li i svg { width: 9px; height: 9px; }
+.steps li.done { color: var(--color-text); }
+.steps li.done i { background: var(--color-ok); box-shadow: none; color: var(--color-accent-fg); }
+.steps li.now { color: var(--color-text); font-weight: var(--weight-medium); }
+.steps li.now i { box-shadow: inset 0 0 0 2px var(--color-accent); border-top-color: transparent; animation: spin 1s linear infinite; }
+.steps li .k { margin-left: auto; font-size: var(--text-2xs); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.bar { height: 4px; border-radius: 2px; background: var(--color-surface-2); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--color-accent); transition: width .3s; }
+
+/* UI marks drawn over pages (never printed) */
+#hov { position: fixed; z-index: 15; pointer-events: none; display: none; border: 1.5px solid var(--color-accent); border-radius: 2px; background: color-mix(in srgb, var(--color-accent) 5%, transparent); }
+#hov span { position: absolute; left: -1.5px; bottom: 100%; margin-bottom: 2px; padding: 1px 6px; border-radius: 3px; background: var(--color-accent); color: var(--color-accent-fg); font: var(--weight-medium) var(--text-2xs)/1.5 var(--font-sans); white-space: nowrap; }
+.ui-flag { position: absolute; z-index: 2; top: 4px; right: 4px; display: inline-flex; align-items: center; gap: 3px; padding: 1px 5px 1px 4px; border-radius: 3px; background: var(--color-warn); color: #fff; font: 600 8px/1.5 var(--font-sans); letter-spacing: .02em; white-space: nowrap; }
+.ui-flag svg { width: 8px; height: 8px; }
+.no-flags .ui-flag, .no-flags .ui-raw { display: none !important; }
+.ui-raw { display: flex; align-items: center; gap: 4px; height: 15px; margin: 4px 0 !important; padding: 0 5px; border: 1px dashed color-mix(in srgb, var(--color-warn) 75%, transparent); border-radius: 2px; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--color-warn) 10%, transparent) 0 4px, transparent 4px 8px); color: #8a5310; font: 600 7.5px/1 var(--font-sans); text-indent: 0; white-space: nowrap; overflow: hidden; }
+.cxhl { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: 1px; }
+.flash { animation: flash 1.6s ease-out; }
+@keyframes flash { 0%, 30% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 55%, transparent); background-color: color-mix(in srgb, var(--color-accent) 12%, transparent); } 100% { box-shadow: 0 0 0 3px transparent; } }
+.overset { outline: 1.5px dashed var(--color-danger); }
+.proofv p.overfull { position: relative; }
+.proofv p.overfull::after { content: ""; position: absolute; right: -8px; top: 3px; width: 5px; height: 9px; background: #000; }
+
+/* ---------- Pages (template look-alikes; colours here are the book's, not the UI's) ---------- */
+.pg { position: relative; overflow: hidden; background: var(--paper); color: #221d17; font-size: var(--fs); line-height: 1.32; text-rendering: optimizeLegibility; font-kerning: normal; }
+.pg .pb { position: absolute; display: flex; flex-direction: column; }
+.pg .span:empty { display: none; }
+.pg .cols { flex: 1; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr); }
+.pg .col { min-width: 0; min-height: 0; overflow: hidden; }
+.pg .col > * { margin: 0 0 .55em; }
+.pg p { margin: 0 !important; text-indent: 1.1em; text-align: justify; hyphens: auto; -webkit-hyphens: auto; }
+.pg p.noind, .pg p.cont { text-indent: 0; }
+.pg p.split { text-align-last: justify; }
+.pg .col > p + :not(p) { margin-top: .55em; }
+.pg figure { margin: 0; position: relative; }
+.pg .art { position: relative; overflow: hidden; }
+.pg .artsvg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.pg figcaption { margin-top: 3px; font-size: .82em; font-style: italic; text-align: center; line-height: 1.25; }
+.pg table { width: 100%; border-collapse: collapse; font-size: .86em; line-height: 1.25; }
+.pg caption { text-align: left; font-weight: 700; padding-bottom: 2px; }
+.pg th, .pg td { text-align: left; vertical-align: top; padding: 1.5px 4px; }
+.pg h2, .pg h3, .pg h4 { margin: 0; break-after: avoid; }
+.pg .folio, .pg .rhead { position: absolute; white-space: nowrap; }
+.pg.full .fullart { position: absolute; inset: 0; }
+.pg.full .fullart .artsvg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.pg .dl b { font-weight: 700; }
+.pg .dl p { text-indent: 0; }
+.pg .sb-abil { display: grid; grid-template-columns: repeat(6, 1fr); text-align: center; font-size: .9em; line-height: 1.2; margin: 2px 0; }
+.pg .sb-abil b { display: block; }
+
+/* Fantasy RPG (5e style): parchment, two columns, red-brown heads, tinted boxes */
+.s-rpg { font-family: "EB Garamond", Georgia, serif; }
+.s-rpg h2 { font: 700 1.6em/1.1 "EB Garamond", serif; font-variant: small-caps; color: #58180d; border-bottom: 1.5px solid #c9ad6a; padding-bottom: 1px; margin-top: .5em !important; }
+.s-rpg.v15 h2 { font-family: Cinzel, serif; font-variant: normal; font-size: 1.32em; letter-spacing: .01em; }
+.s-rpg h3 { font: 700 1.28em/1.15 "EB Garamond", serif; font-variant: small-caps; color: #58180d; margin-top: .35em !important; }
+.s-rpg .dropcap::first-letter { float: left; font: 700 3.5em/.8 Cinzel, serif; color: #58180d; margin: 3px 3px 0 0; }
+.s-rpg.v15 .dropcap::first-letter { color: #8a5a12; }
+.s-rpg caption { font: 700 1.1em/1.2 "EB Garamond", serif; font-variant: small-caps; color: #58180d; }
+.s-rpg thead th { font-weight: 700; }
+.s-rpg tbody tr:nth-child(odd) td { background: #e0e5c1; }
+.s-rpg.v15 thead th { background: #58180d; color: #f6efdd; }
+.s-rpg .readaloud { padding: 5px 8px; background: #ece2c6; border-left: 3px solid #4b3a2a; border-right: 3px solid #4b3a2a; }
+.s-rpg .readaloud p { text-indent: 0; }
+.s-rpg .sidebar { padding: 6px 8px; background: #e0e5c1; border-top: 2px solid #231f1a; border-bottom: 2px solid #231f1a; box-shadow: 0 2px 4px rgb(0 0 0 / .18); }
+.s-rpg .sidebar h4, .s-rpg .dndcomment h4 { font: 700 1.15em/1.2 "EB Garamond", serif; font-variant: small-caps; margin-bottom: 2px; }
+.s-rpg .sidebar p + p { text-indent: 1em; }
+.s-rpg .dndcomment { padding: 6px 8px; background: #d9ccaa; border-radius: 4px; box-shadow: inset 0 0 0 1px #b8a77e; font-style: italic; }
+.s-rpg .dndcomment p { text-indent: 0; }
+.s-rpg .spell h4 { font: 700 1.3em/1.15 "EB Garamond", serif; font-variant: small-caps; color: #58180d; }
+.s-rpg .spell .school { font-style: italic; margin-bottom: 3px; }
+.s-rpg .spell .ln { text-indent: 0; text-align: left; }
+.s-rpg .spell .ln + p:not(.ln) { margin-top: 3px !important; }
+.s-rpg .statblock { padding: 5px 8px 6px; background: #fdf1dc; border-top: 3px solid #e69a28; border-bottom: 3px solid #e69a28; box-shadow: 0 0 5px rgb(0 0 0 / .22); }
+.s-rpg .statblock h4 { font: 700 1.55em/1.1 Cinzel, serif; color: #58180d; }
+.s-rpg .statblock .ty { font-style: italic; }
+.s-rpg .statblock .rule { height: 4px; margin: 4px 0; background: #9c2b1b; clip-path: polygon(0 0, 100% 50%, 0 100%); }
+.s-rpg .statblock .ln { text-indent: 0; text-align: left; color: #58180d; }
+.s-rpg .statblock .ln b { color: #58180d; }
+.s-rpg .statblock .sb-abil { color: #58180d; }
+.s-rpg .statblock .acts { font: 1.25em/1.2 "EB Garamond", serif; font-variant: small-caps; color: #58180d; border-bottom: 1px solid #58180d; margin: 5px 0 3px; }
+.s-rpg .statblock p:not(.ln) { text-indent: 0; }
+.s-rpg .folio { bottom: 26px; display: flex; align-items: baseline; gap: 8px; font: 600 9px/1 "EB Garamond", serif; font-variant: small-caps; color: #58180d; letter-spacing: .03em; }
+.s-rpg .folio b { font: 700 11px/1 "EB Garamond", serif; color: #231f1a; }
+.s-rpg .chead { margin-bottom: 14px; text-align: center; }
+.s-rpg .chead .num { font: 600 10px/1 Cinzel, serif; letter-spacing: .25em; color: #8a6d3b; }
+.s-rpg .chead .ttl { font: 700 30px/1.1 Cinzel, serif; color: #58180d; margin-top: 6px; }
+.s-rpg .chead::after { content: ""; display: block; height: 3px; width: 60%; margin: 10px auto 0; background: #c9ad6a; clip-path: polygon(0 50%, 50% 0, 100% 50%, 50% 100%); }
+.opener .band { position: absolute; left: 0; right: 0; bottom: 0; padding: 60px 48px 54px; background: linear-gradient(transparent, rgb(8 10 18 / .82)); color: #f6efdd; }
+.opener .band .num { font: 600 12px/1 Cinzel, serif; letter-spacing: .3em; opacity: .85; }
+.opener .band .ttl { font: 700 42px/1.05 Cinzel, serif; margin-top: 8px; }
+.opener .band .cap { font: italic 11px/1.3 "EB Garamond", serif; margin-top: 10px; opacity: .8; }
+.pg.full .fcap { position: absolute; left: 0; right: 0; bottom: 0; padding: 30px 40px 26px; background: linear-gradient(transparent, rgb(8 10 18 / .7)); color: #f6efdd; font: italic 11px/1.3 "EB Garamond", serif; text-align: center; }
+
+/* Novel (memoir class look): cream, one column, running heads, sunk chapter titles */
+.s-novel { font-family: "EB Garamond", Georgia, serif; color: #1b1a18; line-height: 1.36; }
+.s-novel h2 { font: 500 1.05em/1.3 "EB Garamond", serif; font-variant: small-caps; letter-spacing: .06em; text-align: center; margin: .9em 0 .5em !important; }
+.s-novel h3 { font: italic 400 1em/1.3 "EB Garamond", serif; margin-top: .5em !important; }
+.s-novel .dropcap::first-letter { float: left; font: 400 3.1em/.82 "EB Garamond", serif; margin: 2px 4px 0 0; }
+.s-novel caption { font-style: italic; font-weight: 400; text-align: center; }
+.s-novel table { border-top: 1px solid #1b1a18; border-bottom: 1px solid #1b1a18; }
+.s-novel thead th { border-bottom: .5px solid #1b1a18; font-weight: 600; }
+.s-novel .readaloud { margin-left: 1.4em !important; margin-right: 1.4em !important; font-style: italic; }
+.s-novel .readaloud p { text-indent: 0; }
+.s-novel .sidebar, .s-novel .statblock, .s-novel .spell { padding: 5px 8px; border: .5px solid #1b1a18; }
+.s-novel .sidebar h4, .s-novel .statblock h4, .s-novel .spell h4 { font: 600 1em/1.3 "EB Garamond", serif; font-variant: small-caps; letter-spacing: .04em; }
+.s-novel .spell .school, .s-novel .statblock .ty { font-style: italic; }
+.s-novel .ln { text-indent: 0; text-align: left; }
+.s-novel .statblock .rule { height: .5px; margin: 3px 0; background: #1b1a18; }
+.s-novel .statblock .acts { font-variant: small-caps; margin-top: 3px; }
+.s-novel .statblock p, .s-novel .spell p { text-indent: 0; }
+.s-novel .chead { padding-top: 92px; margin-bottom: 30px; text-align: center; }
+.s-novel .chead .num { font-size: 9px; letter-spacing: .3em; text-transform: uppercase; }
+.s-novel .chead .ttl { font: italic 22px/1.2 "EB Garamond", serif; margin-top: 8px; }
+.s-novel .rhead { top: 34px; font-size: 8px; letter-spacing: .18em; text-transform: uppercase; }
+.s-novel .folio { bottom: 30px; font-size: 9.5px; }
+.s-novel .dndcomment { font-style: italic; }
+
+/* Standard manuscript (Shunn): Courier, double-spaced, plain */
+.s-ms { font-family: "Courier Prime", "Courier New", monospace; color: #000; line-height: 2; }
+.s-ms.times { font-family: "Times New Roman", Times, serif; }
+.s-ms p { text-indent: 36px; text-align: left; hyphens: manual; -webkit-hyphens: manual; }
+.s-ms p.split { text-align-last: auto; }
+.s-ms .col > * { margin-bottom: 0; }
+.s-ms h2 { font: 700 1em/2 inherit; font-family: inherit; }
+.s-ms h3 { font: italic 400 1em/2 inherit; font-family: inherit; }
+.s-ms caption { font-weight: 400; text-decoration: underline; }
+.s-ms table { font-size: 1em; line-height: 2; }
+.s-ms thead th { font-weight: 400; text-decoration: underline; }
+.s-ms .readaloud, .s-ms .sidebar, .s-ms .spell, .s-ms .statblock { margin-left: 36px !important; }
+.s-ms .readaloud p, .s-ms .sidebar p, .s-ms .spell p, .s-ms .statblock p { text-indent: 0; }
+.s-ms h4 { font: inherit; font-weight: 700; }
+.s-ms .school, .s-ms .ty { font-style: italic; }
+.s-ms .rule { display: none; }
+.s-ms .acts { text-decoration: underline; }
+.s-ms .figph { text-indent: 0; text-align: center; }
+.s-ms .chead { padding-top: 170px; margin-bottom: 24px; text-align: center; }
+.s-ms .chead .ttl { text-transform: uppercase; }
+.s-ms .rhead { top: 36px; font-size: 12px; }
+
+/* House style: Quick preview for a template without preview.css */
+.s-house { font-family: Georgia, "Times New Roman", serif; color: #222; }
+.s-house h2 { font: 600 1.35em/1.2 var(--font-sans); color: #333; margin-top: .5em !important; }
+.s-house h3 { font: 600 1.1em/1.2 var(--font-sans); color: #444; margin-top: .3em !important; }
+.s-house h4 { font: 600 1.05em/1.2 var(--font-sans); }
+.s-house caption { font: 600 .95em/1.2 var(--font-sans); }
+.s-house thead th { border-bottom: 1px solid #999; }
+.s-house tbody tr:nth-child(odd) td { background: #f0f0f0; }
+.s-house .readaloud, .s-house .sidebar, .s-house .spell, .s-house .statblock, .s-house .dndcomment { padding: 5px 8px; border: 1px solid #bbb; background: #f6f6f6; }
+.s-house .readaloud p, .s-house .sidebar p, .s-house .spell p, .s-house .statblock p { text-indent: 0; }
+.s-house .school, .s-house .ty { font-style: italic; }
+.s-house .rule { height: 1px; margin: 3px 0; background: #bbb; }
+.s-house .acts { font-weight: 600; margin-top: 3px; }
+.s-house .chead { margin-bottom: 14px; }
+.s-house .chead .num { font: 600 9px/1 var(--font-sans); letter-spacing: .1em; text-transform: uppercase; color: #777; }
+.s-house .chead .ttl { font: 600 26px/1.1 var(--font-sans); color: #333; margin-top: 4px; }
+.s-house .folio { bottom: 28px; font: 9px/1 var(--font-sans); color: #777; }
+.s-house .opener .band .num, .s-house .opener .band .ttl { font-family: var(--font-sans); }
+
+/* Front matter */
+.pg .front { position: absolute; display: flex; flex-direction: column; }
+.pg .tp-c { text-align: center; }
+.toc { list-style: none; margin: 0; padding: 0; }
+.toc li { display: flex; align-items: baseline; gap: 4px; padding: 2px 0; }
+.toc li .d { flex: 1; border-bottom: 1px dotted currentColor; opacity: .5; transform: translateY(-3px); }
+
+/* Panel */
+.panel { min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--color-border); background: var(--color-surface); }
+.ptabs { flex: none; display: flex; align-items: center; height: 36px; padding: 0 var(--space-2); border-bottom: 1px solid var(--color-border); }
+.ptabs .tab { height: 100%; }
+.ptabs .p-close { margin-left: auto; display: none; }
+.pbody { flex: 1; min-height: 0; overflow: auto; }
+.sec { padding: var(--space-3); border-bottom: 1px solid var(--color-border); }
+.sec:last-child { border-bottom: 0; }
+.sec-h { display: flex; align-items: center; gap: 6px; margin-bottom: var(--space-2); }
+.sec-h h3 { margin: 0; flex: 1; font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.sec-h .k { font-size: var(--text-xs); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.note { font-size: var(--text-xs); color: var(--color-muted); margin: var(--space-2) 0 0; }
+.note button { padding: 0; border: 0; background: none; color: var(--color-accent); font-size: inherit; cursor: pointer; }
+
+/* Template card */
+.tcard { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 2px 10px; align-items: start; }
+.tcard .tth { grid-row: span 3; }
+.tcard b { font-size: var(--text-md); font-weight: var(--weight-semibold); line-height: 1.25; }
+.tcard .m { grid-column: 2; font-size: var(--text-xs); color: var(--color-muted); }
+.tcard .btn { grid-column: 3; grid-row: 1; }
+.pin { display: inline-flex; align-items: center; gap: 3px; height: 17px; padding: 0 6px; border-radius: 9px; background: var(--color-surface-2); font-size: var(--text-2xs); font-weight: var(--weight-medium); color: var(--color-text); font-variant-numeric: tabular-nums; }
+.pin svg { width: 10px; height: 10px; color: var(--color-muted); }
+.upg { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: var(--space-2); padding: 7px 9px; border: 1px solid color-mix(in srgb, var(--color-info) 40%, var(--color-border)); border-radius: var(--radius-md); background: color-mix(in srgb, var(--color-info) 7%, var(--color-surface)); font-size: var(--text-xs); }
+.upg > svg { width: 13px; height: 13px; color: var(--color-info); }
+.upg .t { flex: 1; min-width: 160px; }
+.upg ul { flex-basis: 100%; margin: 2px 0 0; padding-left: 20px; color: var(--color-muted); }
+.hint { display: flex; gap: 7px; margin-top: var(--space-2); padding: 7px 9px; border-radius: var(--radius-md); background: color-mix(in srgb, var(--color-warn) 8%, var(--color-surface)); border: 1px solid color-mix(in srgb, var(--color-warn) 40%, var(--color-border)); font-size: var(--text-xs); }
+.hint svg { width: 13px; height: 13px; color: var(--color-warn); margin-top: 1px; }
+
+/* Template thumbnails (picker + card): a tiny page in the template's look */
+.tth { position: relative; width: 44px; height: 57px; border-radius: 2px; box-shadow: 0 0 0 1px rgb(0 0 0 / .12), 0 1px 3px rgb(0 0 0 / .15); overflow: hidden; flex: none; }
+.tth.r { background: #f6efdd; }
+.tth.r::before { content: ""; position: absolute; left: 5px; right: 5px; top: 6px; height: 3px; background: #58180d; }
+.tth.r::after { content: ""; position: absolute; left: 5px; right: 5px; top: 12px; bottom: 6px; background: repeating-linear-gradient(#7a6a55 0 1px, transparent 1px 3px) left / 45% 100% no-repeat, repeating-linear-gradient(#7a6a55 0 1px, transparent 1px 3px) right / 45% 70% no-repeat, linear-gradient(#e0e5c1, #e0e5c1) right bottom / 45% 22% no-repeat; opacity: .8; }
+.tth.n { background: #fbf8f1; }
+.tth.n::before { content: ""; position: absolute; left: 13px; right: 13px; top: 15px; height: 2px; background: #3a3530; }
+.tth.n::after { content: ""; position: absolute; left: 8px; right: 8px; top: 22px; bottom: 7px; background: repeating-linear-gradient(#8d857a 0 1px, transparent 1px 3px); opacity: .8; }
+.tth.m { background: #fff; }
+.tth.m::before { content: ""; position: absolute; right: 5px; top: 4px; width: 14px; height: 1.5px; background: #333; }
+.tth.m::after { content: ""; position: absolute; left: 7px; right: 7px; top: 10px; bottom: 7px; background: repeating-linear-gradient(#555 0 1px, transparent 1px 5px); opacity: .7; }
+.tth.h { background: #fff; }
+.tth.h::before { content: ""; position: absolute; left: 5px; right: 5px; top: 6px; height: 3px; background: #999; }
+.tth.h::after { content: ""; position: absolute; left: 5px; right: 5px; top: 12px; bottom: 6px; background: repeating-linear-gradient(#aaa 0 1px, transparent 1px 3px) left / 45% 100% no-repeat, repeating-linear-gradient(#aaa 0 1px, transparent 1px 3px) right / 45% 100% no-repeat; }
+
+/* Options form (from the template's options schema) */
+.fields { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 6px 10px; align-items: center; font-size: var(--text-sm); }
+.fields > label { font-size: var(--text-xs); color: var(--color-muted); }
+.fields .seg { justify-self: start; max-width: 100%; }
+.fields .changed { color: var(--color-text); font-weight: var(--weight-medium); }
+.fields .changed::after { content: " •"; color: var(--color-accent); }
+
+/* Package files */
+.files { list-style: none; margin: 0; padding: 0; font-size: var(--text-xs); }
+.files li { display: grid; grid-template-columns: minmax(0, 150px) minmax(0, 1fr); gap: 8px; padding: 3px 0; border-bottom: 1px dashed var(--color-border); }
+.files li:last-child { border-bottom: 0; }
+.files code { font-family: var(--font-mono); font-size: var(--text-2xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.files span { color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.files li.missing code { color: var(--color-warn); text-decoration: line-through; }
+
+/* Preflight */
+.verdict { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px; padding: 9px 10px; border-radius: var(--radius-md); border: 1px solid color-mix(in srgb, var(--tone) 40%, var(--color-border)); background: color-mix(in srgb, var(--tone) 8%, var(--color-surface)); }
+.verdict > svg { width: 16px; height: 16px; color: var(--tone); margin-top: 1px; }
+.verdict b { font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--tone); }
+.verdict p { margin: 0; grid-column: 2; font-size: var(--text-xs); color: var(--color-muted); }
+.pf-g { margin: var(--space-3) 0 4px; font-size: var(--text-2xs); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .04em; color: var(--color-muted); display: flex; align-items: center; gap: 6px; }
+.pf-g i { width: 6px; height: 6px; border-radius: 50%; background: var(--tone); }
+.pf-item { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 0 8px; padding: 7px 0; border-bottom: 1px dashed var(--color-border); font-size: var(--text-sm); }
+.pf-item:last-child { border-bottom: 0; }
+.pf-item .ic { display: grid; place-items: center; width: 16px; height: 16px; margin-top: 1px; border-radius: 50%; background: color-mix(in srgb, var(--tone) 16%, transparent); color: var(--tone); }
+.pf-item .ic svg { width: 10px; height: 10px; }
+.pf-item b { font-weight: var(--weight-medium); }
+.pf-item .d { display: block; font-size: var(--text-xs); color: var(--color-muted); }
+.pf-item .loc { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin: 3px 0 0 -6px; }
+.pf-item .loc .where { padding: 0 6px; font-size: var(--text-2xs); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.dpi { font-variant-numeric: tabular-nums; font-weight: var(--weight-semibold); color: var(--tone); }
+
+/* Exports */
+.job { padding: 10px; border: 1px solid color-mix(in srgb, var(--color-accent) 40%, var(--color-border)); border-radius: var(--radius-md); background: color-mix(in srgb, var(--color-accent) 5%, var(--color-surface)); }
+.job-h { display: flex; align-items: center; gap: 6px; }
+.job-h b { flex: 1; font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.job .m { margin: 2px 0 8px; font-size: var(--text-xs); color: var(--color-muted); }
+.job .steps { margin: 8px 0 0; max-width: none; font-size: var(--text-xs); }
+.xrow { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 2px 8px; align-items: start; padding: 8px 0; border-bottom: 1px dashed var(--color-border); font-size: var(--text-sm); }
+.xrow:last-child { border-bottom: 0; }
+.xrow > svg { width: 15px; height: 15px; color: var(--tone); margin-top: 1px; }
+.xrow b { font-weight: var(--weight-medium); }
+.xrow .m { grid-column: 2; font-size: var(--text-xs); color: var(--color-muted); }
+.xrow .err { grid-column: 2 / 4; margin-top: 3px; padding: 5px 7px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--color-danger) 8%, var(--color-bg)); font: var(--text-2xs)/1.45 var(--font-mono); color: var(--color-danger); overflow-wrap: anywhere; }
+.xrow .acts { grid-column: 3; grid-row: 1 / 3; display: flex; gap: 2px; }
+
+/* Popover menu / picker (same as references.html) */
+#pop { position: fixed; z-index: 40; width: 236px; max-height: min(460px, calc(100vh - 16px)); display: none; flex-direction: column; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-raised), 0 12px 32px -12px rgb(0 0 0 / .35); overflow: hidden; }
+#pop.open { display: flex; }
+#pop.wide { width: 300px; }
+#pop.xwide { width: 380px; max-width: calc(100vw - 16px); }
+#pop .plist { overflow: auto; padding: 4px; }
+#pop .item { width: 100%; display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 0 8px; border: 0; border-radius: var(--radius-sm); background: none; font-size: var(--text-sm); text-align: left; cursor: pointer; }
+#pop .item:hover, #pop .item.on { background: var(--color-accent-soft); }
+#pop .item:disabled { cursor: default; background: none; color: var(--color-muted); }
+#pop .item.sub { padding-left: 22px; font-size: var(--text-xs); min-height: 24px; }
+#pop .item .k { margin-left: auto; font-size: var(--text-2xs); color: var(--color-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+#pop .item .ck { margin-left: auto; color: var(--color-accent); }
+#pop .item .ck svg { width: 13px; height: 13px; }
+#pop .item.tall { align-items: flex-start; padding: 7px 8px; }
+#pop .item.tall > span:not(.ck) { flex: 1; min-width: 0; }
+#pop .item.tall b { display: block; font-weight: var(--weight-medium); }
+#pop .item.tall small { display: block; font-size: var(--text-xs); color: var(--color-muted); line-height: 1.35; }
+#pop .item svg { width: 13px; height: 13px; }
+#pop .sep { height: 1px; margin: 4px 0; background: var(--color-border); }
+#pop .grp { padding: 8px 8px 2px; font-size: var(--text-2xs); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .04em; color: var(--color-muted); }
+#pop .form { padding: 10px 12px; display: grid; gap: 8px; font-size: var(--text-sm); overflow: auto; }
+#pop .form h4 { margin: 0; font-size: var(--text-md); font-weight: var(--weight-semibold); }
+#pop .form .ov { margin-bottom: -4px; }
+#pop .form p { margin: 0; font-size: var(--text-xs); color: var(--color-muted); }
+#pop .form .acts { display: flex; flex-wrap: wrap; gap: 6px; }
+#pop .kv { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 3px 8px; font-size: var(--text-xs); }
+#pop .kv span:nth-child(odd) { color: var(--color-muted); }
+#pop .kv b { font-weight: var(--weight-medium); }
+
+/* Export dialog */
+#dlg { position: fixed; inset: 0; z-index: 45; display: none; place-items: center; padding: var(--space-4); background: rgb(10 14 24 / .45); }
+#dlg.open { display: grid; }
+.dlg { width: min(560px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-raised), 0 24px 60px -20px rgb(0 0 0 / .5); overflow: hidden; }
+.dlg-h { display: flex; align-items: center; gap: 8px; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-border); }
+.dlg-h h2 { margin: 0; flex: 1; font-size: var(--text-md); font-weight: var(--weight-semibold); }
+.dlg-b { padding: var(--space-4); overflow: auto; display: grid; gap: var(--space-3); }
+.dlg-f { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: var(--space-3) var(--space-4); border-top: 1px solid var(--color-border); background: var(--color-bg); }
+.dlg-f .est { margin-right: auto; font-size: var(--text-xs); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.dlg .fields { grid-template-columns: 120px minmax(0, 1fr); }
+.dlg .ro { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: var(--text-sm); }
+.pfsum { display: grid; gap: 4px; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid color-mix(in srgb, var(--tone) 40%, var(--color-border)); background: color-mix(in srgb, var(--tone) 7%, var(--color-surface)); font-size: var(--text-xs); }
+.pfsum b { color: var(--tone); font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.pfsum ul { margin: 0; padding-left: 18px; color: var(--color-muted); }
+.pfsum label { display: flex; align-items: flex-start; gap: 6px; margin-top: 4px; color: var(--color-text); cursor: pointer; }
+.pfsum label input { margin: 2px 0 0; accent-color: var(--color-accent); }
+
+/* Toast */
+#toast { position: fixed; left: 50%; bottom: 16px; z-index: 50; transform: translateX(-50%) translateY(20px); opacity: 0; pointer-events: none; display: flex; align-items: center; gap: var(--space-3); max-width: calc(100vw - 32px); padding: 7px 8px 7px 12px; border-radius: var(--radius-md); background: var(--color-text); color: var(--color-bg); font-size: var(--text-sm); box-shadow: var(--shadow-raised); transition: .18s; }
+#toast.show { opacity: 1; transform: translateX(-50%); pointer-events: auto; }
+#toast button { border: 0; background: none; color: inherit; font-weight: var(--weight-semibold); text-decoration: underline; cursor: pointer; font-size: var(--text-sm); }
+
+/* Review aid (not part of the design) */
+.preview { position: fixed; left: 12px; bottom: 12px; z-index: 20; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; max-width: calc(100vw - 24px); padding: 6px 8px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); box-shadow: var(--shadow-raised); font-size: var(--text-xs); }
+.preview > b { color: var(--color-muted); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .05em; }
+
+.only-narrow { display: none !important; }
+
+/* Narrower screens: drop the page rail, then the panel becomes a sheet over the pages */
+@media (max-width: 1240px) {
+  .body { grid-template-columns: minmax(0, 1fr) var(--panel-width); }
+  .body.no-panel { grid-template-columns: minmax(0, 1fr); }
+  .rail { display: none; }
+  .scope .stat { display: none; }
+}
+@media (max-width: 980px) {
+  .body, .body.no-panel { grid-template-columns: minmax(0, 1fr); }
+  .panel { position: fixed; z-index: 26; top: var(--bar-height); right: 0; bottom: 0; width: min(var(--panel-width), 100vw); box-shadow: var(--shadow-raised), -12px 0 32px -12px rgb(0 0 0 / .3); }
+  .ptabs .p-close { display: inline-grid; }
+  .only-narrow { display: inline-flex !important; }
+  .sync .lbl-t, .book-id .t { display: none; }
+}
+@media (max-width: 720px) {
+  .ws:not(.no-side) { grid-template-columns: minmax(0, 1fr); }
+  .ws:not(.no-side) .side { position: fixed; z-index: 25; top: var(--bar-height); bottom: 0; left: 0; width: min(300px, 86vw); box-shadow: var(--shadow-raised); }
+  .bookbar .hide-sm, .cbar .hide-sm { display: none !important; }
+  .toolbar h1 { display: none; }
+  .toolbar .sel.tpl, .toolbar .sel.scope-sel { max-width: 46vw; }
+  .canvas { padding: var(--space-3) var(--space-2) 90px; }
+  .dlg .fields, .fields { grid-template-columns: minmax(0, 1fr); gap: 2px 0; }
+  .fields > label { margin-top: 4px; }
+}
+</style>
+</head>
+<body>
+<header class="bookbar">
+  <a class="ib" href="library.html#series=fg" aria-label="Back to Forsaken Gods" title="Back to Forsaken Gods"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3 5 8l5 5"/></svg></a>
+  <a class="ib" href="settings.html?book=players-guide" aria-label="Book settings" title="Book settings"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg></a>
+  <div class="book-id">
+    <div class="cover thumb"></div>
+    <div class="t"><b>Players Guide</b><span>Joel Dickson</span></div>
+    <button class="ib" id="sideToggle" aria-label="Toggle sidebar" title="Toggle sidebar"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M6 3v10"/></svg></button>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="Mode">
+    <a class="tab" role="tab" aria-selected="false" href="plan.html?book=players-guide">Plan</a>
+    <a class="tab" role="tab" aria-selected="false" href="write.html?book=players-guide">Write</a>
+    <button class="tab hide-sm" role="tab" aria-selected="false">Chat</button>
+    <button class="tab hide-sm" role="tab" aria-selected="false">Review</button>
+    <span class="vr" aria-hidden="true"></span>
+    <a class="tab hide-sm" role="tab" aria-selected="false" href="references.html?book=players-guide">References</a>
+    <button class="tab" role="tab" aria-selected="true" title="Print preview, layout template and Export for printer (#13)">Layout <span id="tabBadge"></span></button>
+  </nav>
+  <div class="scope hide-sm"><span class="stat" id="stats"></span></div>
+  <span class="spacer"></span>
+  <span class="sync"><i></i><span class="lbl-t">Saved</span></span>
+  <span class="avatar">JD</span>
+</header>
+
+<div class="ws no-side" id="ws">
+  <aside class="side" aria-label="Book sidebar">
+    <div class="side-h">Knowledge base</div>
+    <div class="side-note">Click an entry to find where it prints.</div>
+    <div class="side-tools"><label class="search"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><input id="sideQ" placeholder="Search Knowledge base" aria-label="Search Knowledge base"></label></div>
+    <div class="side-list" id="sideList"></div>
+  </aside>
+  <main class="main">
+    <div class="toolbar">
+      <h1>Layout</h1>
+      <button class="sel scope-sel" data-cmd="scope" aria-haspopup="menu" title="What to preview"><em>Preview</em> <span class="t" id="scopeName"></span> <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6 4 4 4-4"/></svg></button>
+      <div class="seg" role="group" aria-label="Preview mode"><button data-mode="quick" title="Live, in the browser. Close to print; page count is an estimate">Quick</button><button data-mode="proof" title="This chapter compiled with the real LaTeX template">Proof</button></div>
+      <button class="sel tpl" data-cmd="tpl" aria-haspopup="menu" title="Layout template"><span class="tth" id="tplThumb" style="width:12px;height:16px;box-shadow:0 0 0 1px rgb(0 0 0 / .2)"></span> <span class="t" id="tplName"></span> <span class="ver" id="tplVer"></span> <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6 4 4 4-4"/></svg></button>
+      <button class="sel" data-cmd="trim" aria-haspopup="menu" title="Trim size"><em>Trim</em> <span id="trimName"></span> <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6 4 4 4-4"/></svg></button>
+      <span class="spacer"></span>
+      <button class="btn only-narrow" data-cmd="panel" id="panelBtn">Template &amp; preflight</button>
+      <button class="btn primary" data-cmd="export"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4.5 6V2.5h7V6M4.5 11.5h-2v-5h11v5h-2"/><path d="M4.5 9.5h7v4h-7z"/></svg>Export for printer…</button>
+    </div>
+    <div class="body" id="body">
+      <nav class="rail" id="rail" aria-label="Pages"></nav>
+      <div class="stagewrap">
+        <div class="cbar" id="cbar">
+          <span class="live" id="live"></span>
+          <span class="spacer"></span>
+          <label class="chk hide-sm" title="Show low-resolution images and raw LaTeX on the pages. Never printed."><input type="checkbox" id="flagsChk" checked> Print issues</label>
+          <span class="pnav"><button class="ib" data-cmd="prev" aria-label="Previous page"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3 5 8l5 5"/></svg></button><span class="n" id="pageNo"></span><button class="ib" data-cmd="next" aria-label="Next page"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m6 3 5 5-5 5"/></svg></button></span>
+          <div class="seg sm hide-sm" role="group" aria-label="Pages"><button data-view="single">Single</button><button data-view="spread">Spread</button></div>
+          <button class="sel" data-cmd="zoom" aria-haspopup="menu" style="height:24px;font-size:var(--text-xs)"><span id="zoomName"></span> <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6 4 4 4-4"/></svg></button>
+        </div>
+        <div id="banners"></div>
+        <div class="canvas" id="canvas"><div class="rows" id="rows"></div></div>
+      </div>
+      <aside class="panel" id="panel" aria-label="Template, preflight and exports">
+        <div class="ptabs" role="tablist">
+          <button class="tab" role="tab" data-ptab="template">Template</button>
+          <button class="tab" role="tab" data-ptab="preflight">Preflight <span id="pfBadge"></span></button>
+          <button class="tab" role="tab" data-ptab="exports">Exports <span id="xBadge"></span></button>
+          <button class="ib p-close" data-cmd="panel" aria-label="Close panel"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 4 8 8M12 4l-8 8"/></svg></button>
+        </div>
+        <div class="pbody" id="pbody"></div>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<div id="stage" aria-hidden="true" style="position:absolute;left:-20000px;top:0;visibility:hidden"></div>
+<div id="hov"><span></span></div>
+<div id="pop" role="menu"></div>
+<div id="dlg" role="dialog" aria-modal="true" aria-labelledby="dlgTitle"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<div class="preview" aria-label="Preview controls (review aid)">
+  <b>Preview</b>
+  <div class="seg sm"><button data-theme-set="system">System</button><button data-theme-set="light">Light</button><button data-theme-set="dark">Dark</button></div>
+  <div class="seg sm"><button data-density-set="compact">Compact</button><button data-density-set="comfortable">Comfortable</button></div>
+  <button class="btn sm" data-cmd="sim-edit" title="Pretend the author edited Chapter 3 in Write">Simulate an edit in Write</button>
+</div>
+
+<script>
+// ---------- Data ----------
+const IN = 72; // page px per inch (1pt = 1px at 100% scale before zoom)
+const TRIMS = { 'Letter': [8.5, 11], 'A4': [8.27, 11.69], '6×9': [6, 9], '5.5×8.5': [5.5, 8.5] };
+const BOOK = { title: 'Players Guide', series: 'Forsaken Gods', n: 'Book One', author: 'Joel Dickson', surname: 'Dickson' };
+
+// A template's options schema drives the Template tab. k: key, l: label, o: values.
+const RPG_SCHEMA = [
+  { k: 'cols', l: 'Columns', o: [1, 2] },
+  { k: 'size', l: 'Body size', o: [9, 9.5, 10], f: v => v + ' pt' },
+  { k: 'paper', l: 'Paper', o: ['Parchment', 'White'] },
+  { k: 'dropcaps', l: 'Drop caps', o: [true, false] },
+  { k: 'numbers', l: 'Heading numbers', o: ['None', '3.1', '3.1.1'] },
+  { k: 'openers', l: 'Part openers', o: ['Art page', 'Title only'] },
+  { k: 'foot', l: 'Running footer', o: [true, false] },
+];
+const TPL = {
+  rpg: { name: 'Fantasy RPG (5e style)', short: 'Fantasy RPG', ver: '1.4.2', latest: '1.5.0', engine: 'pdfLaTeX', kind: 'Built-in', css: true, style: 'rpg', th: 'r', trims: ['Letter', 'A4'],
+    desc: 'Two columns on parchment, part-opener art, drop caps, spells and stat blocks. The Players Guide build, ported.',
+    changes: ['Section headings use the display face', 'Table cells keep bold, italics and links', 'Table headers on a dark band'],
+    schema: RPG_SCHEMA, def: { cols: 2, size: 9.5, paper: 'Parchment', dropcaps: true, numbers: 'None', openers: 'Art page', foot: true },
+    files: [['template.yaml', 'name, engine, trims, options schema'], ['wrapper.tex', 'pandoc template: $title$, $toc$, $body$'], ['filters/tables.lua', 'pipe tables → DndTable, keeps inline formatting'], ['filters/directives.lua', 'spell, statblock, readaloud, sidebar, aside'], ['filters/openers.lua', 'part opener pages from opener_asset_id'], ['preview.css', 'Paged.js look-alike for Quick preview'], ['tex/dndbook.cls', 'rpgtex DND-5e-LaTeX-Template, MIT'], ['sample.md', 'renders the picker thumbnail']] },
+  fork: { name: 'Forsaken RPG', short: 'Forsaken RPG', ver: '0.3.0', engine: 'pdfLaTeX', kind: 'Yours · forked from Fantasy RPG v1.4.0', css: false, style: 'rpg', th: 'h', trims: ['Letter', 'A4'],
+    desc: 'Your fork: a custom title page and the Forsaken sigil in the footer. No preview.css yet.',
+    schema: RPG_SCHEMA, def: { cols: 2, size: 9.5, paper: 'Parchment', dropcaps: true, numbers: 'None', openers: 'Art page', foot: true },
+    files: [['template.yaml', 'forked from fantasy-rpg 1.4.0'], ['wrapper.tex', 'custom title page'], ['filters/*.lua', '3 filters, unchanged'], ['preview.css', 'missing: Quick preview uses the house style'], ['tex/dndbook.cls', 'rpgtex, MIT'], ['tex/sigil.pdf', 'footer ornament']] },
+  novel: { name: 'Novel', short: 'Novel', ver: '2.1.0', engine: 'XeLaTeX', kind: 'Built-in', css: true, style: 'novel', th: 'n', trims: ['6×9', '5.5×8.5'],
+    desc: 'Trade paperback on the memoir class: one column, running heads, sunk chapter titles.',
+    schema: [
+      { k: 'size', l: 'Body size', o: [10.5, 11, 12], f: v => v + ' pt' },
+      { k: 'paper', l: 'Paper', o: ['Cream', 'White'] },
+      { k: 'dropcaps', l: 'Drop caps', o: [true, false] },
+      { k: 'openers', l: 'Chapter openers', o: ['Sunk title', 'Art page'] },
+      { k: 'chapnum', l: 'Chapter numbers', o: ['Words', 'Numerals', 'None'] },
+      { k: 'heads', l: 'Running heads', o: [true, false] },
+    ], def: { size: 11, paper: 'Cream', dropcaps: false, openers: 'Sunk title', chapnum: 'Words', heads: true },
+    files: [['template.yaml', 'name, engine, trims, options schema'], ['wrapper.tex', 'memoir, trade paperback'], ['filters/fallbacks.lua', 'spell / statblock → definition lists'], ['preview.css', 'Paged.js look-alike'], ['sample.md', 'picker thumbnail']] },
+  ms: { name: 'Standard manuscript', short: 'Manuscript', ver: '1.0.3', engine: 'XeLaTeX', kind: 'Built-in', css: true, style: 'ms', th: 'm', trims: ['Letter', 'A4'],
+    desc: 'Shunn format for submissions: monospaced, double-spaced, one-inch margins, no art.',
+    schema: [{ k: 'font', l: 'Typeface', o: ['Courier', 'Times'] }], def: { font: 'Courier' },
+    files: [['template.yaml', 'name, engine, trims'], ['wrapper.tex', 'Shunn manuscript format'], ['filters/plain.lua', 'images → [Figure: caption]'], ['preview.css', 'Paged.js look-alike']] },
+};
+const TPL_ORDER = ['rpg', 'novel', 'ms', 'fork'];
+
+// Chapters of the Players Guide. Only 3 and 4 carry text in this reference.
+const CHAPTERS = [
+  [1, 'Welcome to the Realms', 3100], [2, 'Peoples of the Realms', 6800], [3, 'Classes', 7900], [4, 'Magic of the Forsaken', 6200], [5, 'Gods and the Forsaken', 4900],
+  [6, 'The Frozen Frontier', 5600], [7, 'Kharbad, City of Embers', 4300], [8, 'Equipment and Trade', 3900], [9, 'Rules of the Road', 2800], [10, 'Appendices', 2710],
+].map(([n, title, words]) => ({ n, title, words }));
+const SCENES = { '3.1': 'Choosing a class', '3.2': 'Fighter', '3.3': 'Ranger', '4.1': 'Magic after the Sundering', '4.2': 'Spells of the Frozen Frontier' };
+
+// Asset renditions: the print rendition is placed at 300 dpi for its placed size; dpi below that is flagged.
+const IMAGES = {
+  op3: { name: 'Chapter 03 Classes.png', px: [2560, 3328], art: 'classes', where: 'Chapter 3 opener', src: '3.1' },
+  op4: { name: 'Chapter 04 Magic.png', px: [1792, 2304], art: 'magic', where: 'Chapter 4 opener', src: '4.1' },
+  fighter: { name: 'Fighter of the Frozen Marches.webp', px: [1792, 1024], art: 'fighter', place: 'column', src: '3.2' },
+  ranger: { name: 'Ranger, SD batch 14.png', px: [512, 768], art: 'ranger', place: 'column', src: '3.3' },
+  spellfire: { name: 'Spellfire over Kharbad.webp', px: [1024, 1792], art: 'spellfire', place: 'page', src: '4.1' },
+};
+
+const KB_CATS = [['research', 'Spells'], ['law', 'Creatures'], ['person', 'People'], ['story', 'Places'], ['blog', 'Lore']];
+const KB = [
+  { id: 'frostbrand', cat: 'research', name: 'Frostbrand' }, { id: 'emberward', cat: 'research', name: 'Ember Ward' }, { id: 'cairn', cat: 'research', name: 'Whispering Cairn' },
+  { id: 'wraith', cat: 'law', name: 'Ember Wraith' }, { id: 'wyrm', cat: 'law', name: 'frost wyrm' },
+  { id: 'guyon', cat: 'person', name: 'Guyon the Grey' }, { id: 'maren', cat: 'person', name: 'Sister Maren' },
+  { id: 'kharbad', cat: 'story', name: 'Kharbad' }, { id: 'mere', cat: 'story', name: 'Shattered Mere' }, { id: 'gallow', cat: 'story', name: "Gallow's Gate" },
+  { id: 'sundering', cat: 'blog', name: 'Sundering' },
+];
+
+const SPELLS = {
+  frostbrand: { name: 'Frostbrand', school: '1st-level evocation', lines: [['Casting Time', '1 bonus action'], ['Range', 'Self'], ['Components', 'V, S, M (a pinch of hoarfrost)'], ['Duration', 'Concentration, up to 1 minute']],
+    text: ['Rime spreads along a weapon you hold. Until the spell ends, the weapon deals an extra 1d6 cold damage on a hit, and a creature hit by it can’t take reactions until the start of its next turn.', '<b><i>At Higher Levels.</i></b> The extra damage increases by 1d6 for each slot level above 1st.'] },
+  emberward: { name: 'Ember Ward', school: '2nd-level abjuration', lines: [['Casting Time', '1 action'], ['Range', 'Touch'], ['Components', 'V, S, M (a coal from a hearth that has burned all winter)'], ['Duration', '8 hours']],
+    text: ['You touch a doorway, window or other opening no larger than 10 feet on a side. For the duration, the opening glows a dull red. A creature that passes through it takes 2d6 fire damage, or half as much on a successful Dexterity saving throw. You can name up to ten creatures that pass unharmed.'] },
+  cairn: { name: 'Whispering Cairn', school: '3rd-level divination (ritual)', lines: [['Casting Time', '10 minutes'], ['Range', 'Touch'], ['Components', 'V, S, M (a stone from a grave)'], ['Duration', 'Instantaneous']],
+    text: ['You stack stones over a grave and ask the dead below a single question. If they knew the answer in life, they whisper it back. The dead of the Realms are rarely at peace, and the answer may be true, partly true, or a warning about something else entirely.'] },
+};
+
+// Prose blocks: the same blocks feed Quick preview, Proof and Export (#10 prose model + #13 directives).
+const P = (src, text, x = {}) => ({ t: 'p', src, text, ...x });
+const CONTENT = {
+  3: [
+    P('3.1', 'Every hero of the Realms begins with a calling. Your class is the training, oath or gift that sets you apart from the farmers, traders and soldiers of the Frozen Frontier. It decides how you fight, which tools you trust, and what the forsaken gods might want from you when they finally notice. This chapter describes the classes open to player characters, each reshaped for a world where the gods have gone quiet and the cold is creeping south.', { drop: true, id: 'c3-intro' }),
+    P('3.1', 'Each class entry opens with the role it plays in a party, then lists its hit points, proficiencies and the features it gains as it levels. Where a class differs from the core rules, the change is marked and explained in a sidebar, so you can tell at a glance what is new to the Realms.'),
+    { t: 'h2', src: '3.2', text: 'Fighter' },
+    P('3.2', 'Fighters are the shield wall of the north. Some learned their trade holding the passes above Kharbad against raiders; others came up through the mercenary companies that follow the ember caravans across the ice. A fighter is defined less by a single weapon than by discipline: the habit of standing firm when the snow closes in and every instinct says to run.', { drop: true }),
+    P('3.2', 'In the Realms, fighters are often the only characters who have seen a real war. The Sundering left the old orders broken, and the companies that replaced them prize experience over birth. A fighter of common blood can rise to command a fortress, and many of the frontier’s lords began their careers as hired swords.', { id: 'c3-edit' }),
+    { t: 'image', src: '3.2', img: 'fighter', cap: 'A fighter of the Frozen Marches holds the pass at Gallow’s Gate.' },
+    { t: 'h3', src: '3.2', text: 'Class Features' },
+    P('3.2', 'As a fighter, you gain the following class features. Hit Dice: 1d10 per fighter level. Hit points at 1st level: 10 plus your Constitution modifier. Proficiencies: all armour, shields, and simple and martial weapons.'),
+    { t: 'table', src: '3.2', cap: 'The Fighter', head: ['Level', 'Prof.', 'Features'], rows: [['1st', '+2', 'Fighting Style, Second Wind'], ['2nd', '+2', 'Action Surge (one use)'], ['3rd', '+2', 'Martial Archetype'], ['4th', '+2', 'Ability Score Improvement'], ['5th', '+3', 'Extra Attack'], ['6th', '+3', '<i>Cold Discipline</i>'], ['7th', '+3', 'Martial Archetype feature']] },
+    { t: 'h3', src: '3.2', text: 'Fighting Style' },
+    P('3.2', 'You adopt a particular style of fighting as your speciality. Choose one of the styles below; you can’t take the same Fighting Style more than once, even if you later get to choose again. Frontier fighters favour Defence and Protection, while the caravan companies train their recruits in Archery for the long open stretches of the ice road.'),
+    { t: 'sidebar', src: '3.2', title: 'New in the Realms: Cold Discipline', text: ['At 6th level, a fighter who has spent a winter on the frontier ignores the first level of exhaustion caused by extreme cold.', 'This replaces the 6th-level Ability Score Improvement in the core rules, and reflects how much of a fighter’s life in the Realms is spent simply surviving the weather.'] },
+    { t: 'raw', src: '3.2', id: 'raw1', tex: '\\DndComment{Playtest note}{...}', title: 'Playtest note', text: 'Cold Discipline may be too strong in the Frozen Frontier adventure. Revisit after session four.' },
+    P('3.2', 'Fighters who reach 3rd level choose a martial archetype. The Champion and Battle Master work as described in the core rules. The Shieldwarden, unique to the Realms, is described at the end of this chapter.'),
+    { t: 'h2', src: '3.3', text: 'Ranger' },
+    P('3.3', 'Rangers walk the edges of the map. Long before the cold came south, they guided pilgrims between the temples of the old gods; now they guide refugees, hunt the things that follow the ice, and carry word between settlements that have no other way of hearing from each other. Most rangers answer to no lord, though the free towns pay well for one who will stay the winter.', { drop: true }),
+    P('3.3', 'A ranger’s favoured terrain matters more in the Realms than in most settings, because the land itself has turned hostile. The table below lists the terrains of the Frozen Frontier and the benefit each grants.'),
+    { t: 'image', src: '3.3', img: 'ranger', cap: 'A ranger tracks a frost wyrm across the Shattered Mere.' },
+    { t: 'h3', src: '3.3', text: 'Favoured Terrain' },
+    { t: 'table', src: '3.3', cap: 'Terrains of the Frontier', head: ['Terrain', 'Region', 'Benefit'], rows: [['Ice field', 'Shattered Mere', 'Ignore difficult terrain from snow and ice'], ['Pine forest', 'Gallow’s Wood', 'Advantage on Stealth outside combat'], ['Mountain', 'Kharbad Spine', 'Climbing costs no extra movement'], ['Ruins', 'Drowned Temples', 'Advantage on checks to find traps'], ['Tundra', 'The White Reach', 'Forage for twice as many creatures']] },
+    P('3.3', 'When you choose a favoured terrain, pick one your character has actually lived in. Your Game Master may let you change it after you spend a full season somewhere new, which reflects how quickly the frontier shifts as the ice advances.'),
+  ],
+  4: [
+    P('4.1', 'Magic did not die when the gods fell silent, but it changed. Spells that once called on divine favour now draw on something older and colder, and every caster in the Realms learns early that power has a price. This chapter explains how magic works after the Sundering, and lists the new spells available to characters who study it.', { drop: true }),
+    { t: 'readaloud', src: '4.1', text: 'The lamps in the hall gutter all at once. In the sudden dark you hear Sister Maren’s voice, very calm: “Don’t move. Whatever answered me this time was not my god.”' },
+    { t: 'h2', src: '4.1', text: 'The Sundering of Magic' },
+    P('4.1', 'Before the Sundering, clerics and paladins drew their power directly from the gods of the Realms. When the gods withdrew, those prayers went unanswered for a full year. Then, slowly, they began to be answered again, though not always by the gods the faithful had called on.'),
+    { t: 'image', src: '4.1', img: 'spellfire', cap: 'Spellfire over Kharbad, the night the ember wards failed.' },
+    P('4.1', 'In play, divine casters work as described in the core rules, with one exception. When a cleric or paladin casts a spell of 3rd level or higher, the Game Master may call for a Wisdom saving throw to see who, or what, has answered. On a failure the spell still works, but it carries a mark of the Forsaken.'),
+    { t: 'h2', src: '4.2', text: 'Spells of the Frozen Frontier' },
+    P('4.2', 'The spells below are new to the Realms. Each is listed with its level and school, followed by the classes that can learn it. Your Game Master decides whether these spells are common knowledge or must be found in the field.'),
+    { t: 'table', src: '4.2', cap: 'Frontier Spells', head: ['Level', 'Spell', 'Classes'], rows: [['1st', 'Frostbrand', 'Eldritch Knight, Wizard'], ['2nd', 'Ember Ward', 'Cleric, Druid, Wizard'], ['3rd', 'Whispering Cairn', 'Cleric, Ranger']] },
+    { t: 'spell', src: '4.2', cx: 'frostbrand' },
+    { t: 'spell', src: '4.2', cx: 'emberward' },
+    { t: 'spell', src: '4.2', cx: 'cairn' },
+    { t: 'statblock', src: '4.2', cx: 'wraith' },
+    P('4.2', 'An Ember Wraith answers when Ember Ward is cast by a caster who failed the Forsaken saving throw. It fights beside the caster until the ward ends, then turns on the nearest living creature.'),
+  ],
+};
+CONTENT[3].concat(CONTENT[4]).forEach((b, i) => { b.id = b.id || 'b' + i; });
+const OPENERS = { 3: { img: 'op3', cap: 'The Kharbad Spine at first light' }, 4: { img: 'op4', cap: 'The tower of Sister Maren under the aurora' } };
+
+// Issues that sit outside the chapters drawn in this reference
+const OFFSCOPE = {
+  copyright: { sev: 'danger', t: 'Copyright risk: 1 source', d: '“The Cold Road” (song lyrics) is quoted in Chapter 6 without permission. References (#2) has the details.', where: 'Ch 6 · Sc 2', act: '<a class="mini go" href="references.html?book=players-guide">Open References</a>' },
+  missing: { sev: 'danger', t: 'Missing asset: Chapter 7 opener', d: 'The opener image was deleted from the asset library. Choose another, or switch Part openers to Title only.', where: 'Ch 7', act: '<button class="mini go" data-toast="Asset picker opens here">Choose image…</button>' },
+  lowres: { sev: 'warn', t: '6 more images below 300 dpi', d: 'In Chapters 5, 6 and 9, at their placed size. Upscaling is planned; for now replace them or place them smaller.', where: 'Ch 5–9' },
+  directive: { sev: 'warn', t: 'Unknown directive ::trap', d: 'Fantasy RPG doesn’t define it, so it prints as a plain boxed aside.', where: 'Ch 6 · Sc 3', act: '<a class="mini" href="write.html?book=players-guide#scene=6.3">Open in Write</a>' },
+};
+
+const EXPORTS0 = [
+  { id: 'x3', at: 'Oct 12, 4:10 PM', ver: '1.4.2', tpl: 'rpg', trim: 'Letter', bleed: 'None', crop: false, q: 'print', pages: 263, size: '214 MB', warns: 5, ok: true },
+  { id: 'x2', at: 'Sep 28, 9:02 AM', ver: '1.4.1', tpl: 'rpg', trim: 'Letter', bleed: '0.125 in', crop: true, q: 'print', ok: false, err: '! Undefined control sequence. l.212 \\DndSpellHeader — Chapter 4. Template 1.4.1 dropped the spell macro; fixed in 1.4.2.' },
+  { id: 'x1', at: 'Sep 3, 6:45 PM', ver: '1.4.0', tpl: 'rpg', trim: 'Letter', bleed: 'None', crop: false, q: 'screen', pages: 259, size: '61 MB', warns: 3, ok: true },
+];
+
+// ---------- State ----------
+const S = {
+  tpl: 'rpg', ver: { rpg: '1.4.2', fork: '0.3.0', novel: '2.1.0', ms: '1.0.3' }, upgradePreview: false,
+  trim: { rpg: 'Letter', fork: 'Letter', novel: '6×9', ms: 'Letter' },
+  opts: Object.fromEntries(Object.entries(TPL).map(([k, t]) => [k, { ...t.def }])),
+  scope: 'ch3', mode: 'quick', view: 'spread', zoom: 'fit', ptab: 'template', panel: true, side: false, flags: true,
+  place: {}, rawConverted: false, edits: 0, proofs: {}, rendering: null, cx: null,
+  exports: [...EXPORTS0], job: null, sideQ: '',
+};
+
+// ---------- Helpers ----------
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const tone = t => `var(--color-${t})`;
+const I = {
+  check: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="m3.5 8.5 3 3 6-7"/></svg>',
+  warn: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2.5 14 13H2z"/><path d="M8 6.5v3M8 11.2v.3"/></svg>',
+  x: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="m4.5 4.5 7 7M11.5 4.5l-7 7"/></svg>',
+  info: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v4M8 4.8v.3"/></svg>',
+  stop: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6"/><path d="m5 11 6-6"/></svg>',
+  pin: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>',
+  up: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 13V3M4 7l4-4 4 4"/></svg>',
+  doc: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 1.5h5.5L12.5 4.5v10h-8.5z"/><path d="M9.5 1.5v3h3"/></svg>',
+  down: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10"/></svg>',
+  redo: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12.5 7.5A4.5 4.5 0 1 1 11 4.2"/><path d="M12.5 2.5v3h-3"/></svg>',
+  fork: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="4.5" cy="3.5" r="1.5"/><circle cx="11.5" cy="3.5" r="1.5"/><circle cx="8" cy="12.5" r="1.5"/><path d="M4.5 5v1.5a2 2 0 0 0 2 2h3a2 2 0 0 0 2-2V5M8 8.5V11"/></svg>',
+  upload: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 10.5v-8M4.5 6 8 2.5 11.5 6M3 13.5h10"/></svg>',
+  write: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10.5 2.5 13.5 5.5 6 13H3v-3z"/></svg>',
+  eye: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg>',
+  print: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4.5 6V2.5h7V6M4.5 11.5h-2v-5h11v5h-2"/><path d="M4.5 9.5h7v4h-7z"/></svg>',
+};
+const NUMW = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+const T = () => TPL[S.tpl];
+const O = () => S.opts[S.tpl];
+const trim = () => S.trim[S.tpl];
+const ver = () => S.upgradePreview ? T().latest : S.ver[S.tpl];
+const yesno = v => v === true ? 'On' : v === false ? 'Off' : v;
+// Proof always uses the real template; Quick preview needs the template's preview.css, or falls back to the house style
+const style = () => S.mode === 'proof' ? T().style : (T().css ? T().style : 'house');
+const chapterOf = scope => scope === 'front' ? null : +String(scope).replace('ch', '').split('.')[0];
+const scopeLabel = s => s === 'front' ? 'Front matter' : s.startsWith('ch') ? `Chapter ${chapterOf(s)} · ${CHAPTERS[chapterOf(s) - 1].title}` : `Ch ${chapterOf(s)} · Scene ${s.split('.')[1]} · ${SCENES[s]}`;
+const srcLabel = src => { const [c, s] = src.split('.'); return `Chapter ${c} · Scene ${s} · ${SCENES[src]}`; };
+// Deep link into Write ("Moving between screens": ?book= plus #scene=<chapter>.<scene>)
+const W = src => `write.html?book=players-guide#scene=${src}`;
+try { localStorage.setItem('codex.last.players-guide', 'print'); } catch {}
+
+// rng for the artwork
+function rng(seed) { let h = 1779033703; for (const c of seed) h = Math.imul(h ^ c.charCodeAt(0), 3432918353), h = h << 13 | h >>> 19; return () => { h = Math.imul(h ^ h >>> 16, 2246822507); h = Math.imul(h ^ h >>> 13, 3266489909); return ((h ^= h >>> 16) >>> 0) / 4294967296; }; }
+
+// ---------- Artwork (stands in for the book's AI-generated art; renders the same in both themes) ----------
+const ARTS = {
+  classes: { sky: ['#1d2b4a', '#9fb6d3'], glow: '#ffe7c2', sun: [.72, .3, .06], ranges: ['#6a7f9f', '#475a7a', '#2b3a55', '#141d2e'], fig: .32 },
+  magic: { sky: ['#0f0c26', '#4b2a6b'], glow: '#d8c2ff', sun: [.25, .2, .04], ranges: ['#3b2d5a', '#2a2045', '#1b1530', '#0d0a1c'], aurora: true, stars: true, tower: .7 },
+  fighter: { sky: ['#56677d', '#cdd6df'], glow: '#fff5e0', sun: [.22, .38, .07], ranges: ['#8a99ab', '#617186', '#3e4b5e', '#1f2836'], fig: .58 },
+  ranger: { sky: ['#1f3f3e', '#a3c7bc'], glow: '#f1ffe8', sun: [.8, .26, .06], ranges: ['#6a958a', '#46726a', '#2a4c48', '#132826'], trees: true, fig: .4 },
+  spellfire: { sky: ['#160909', '#b5481f'], glow: '#ffb35c', sun: [.5, .3, .1], ranges: ['#6b2a17', '#4a1c12', '#2c110c', '#150806'], stars: true, tower: .3, embers: true },
+  title: { sky: ['#0d1426', '#3a5276'], glow: '#ffd9a0', sun: [.5, .34, .05], ranges: ['#4a5f82', '#33435f', '#1f2a40', '#0c1220'], stars: true, tower: .5 },
+};
+function art(key, ar) {
+  const a = ARTS[key], W = 100, H = +(100 * ar).toFixed(1), r = rng(key), id = 'art-' + key;
+  let s = `<svg class="artsvg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><linearGradient id="${id}-s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${a.sky[0]}"/><stop offset="1" stop-color="${a.sky[1]}"/></linearGradient><radialGradient id="${id}-g"><stop offset="0" stop-color="${a.glow}" stop-opacity=".9"/><stop offset=".4" stop-color="${a.glow}" stop-opacity=".25"/><stop offset="1" stop-color="${a.glow}" stop-opacity="0"/></radialGradient></defs><rect width="${W}" height="${H}" fill="url(#${id}-s)"/>`;
+  if (a.stars) for (let i = 0; i < 46; i++) s += `<circle cx="${(r() * W).toFixed(1)}" cy="${(r() * H * .5).toFixed(1)}" r="${(r() * .3 + .1).toFixed(2)}" fill="#fff" opacity="${(r() * .6 + .2).toFixed(2)}"/>`;
+  if (a.aurora) ['#6ee7b7', '#a78bfa', '#67e8f9'].forEach((c, i) => { const y = H * (.14 + i * .06); s += `<path d="M-5 ${y.toFixed(1)} C 25 ${(y - 9).toFixed(1)} 60 ${(y + 11).toFixed(1)} 105 ${(y - 5).toFixed(1)}" stroke="${c}" stroke-width="${5 - i}" fill="none" opacity=".3"/>`; });
+  const [sx, sy, sr] = a.sun;
+  s += `<circle cx="${sx * W}" cy="${(sy * H).toFixed(1)}" r="${sr * W * 4}" fill="url(#${id}-g)"/><circle cx="${sx * W}" cy="${(sy * H).toFixed(1)}" r="${sr * W}" fill="${a.glow}" opacity=".95"/>`;
+  a.ranges.forEach((c, i) => {
+    const base = H * (.46 + i * .12), amp = H * (.2 - i * .035), n = 5 + i * 2;
+    let d = `M0 ${H} L0 ${(base - r() * amp).toFixed(1)}`;
+    for (let k = 1; k <= n; k++) d += ` L${(k * W / n).toFixed(1)} ${(base - (k % 2 ? r() * amp : r() * amp * .3)).toFixed(1)}`;
+    s += `<path d="${d} L${W} ${H}Z" fill="${c}"/>`;
+    if (i === 0 && !a.embers) s += `<path d="${d} L${W} ${H}Z" fill="#fff" opacity=".12"/>`;
+  });
+  const gy = H * .9, ink = a.ranges.at(-1);
+  if (a.trees) for (let i = 0; i < 14; i++) { const x = r() * W, h = 4 + r() * 7, y = H * (.82 + r() * .12); s += `<path d="M${x.toFixed(1)} ${(y - h).toFixed(1)} l${(h * .3).toFixed(1)} ${h.toFixed(1)} h-${(h * .6).toFixed(1)}z" fill="${ink}"/>`; }
+  if (a.tower) { const x = a.tower * W; s += `<path d="M${x - 2} ${gy} V${(H * .5).toFixed(1)} l2 -4 l2 4 V${gy}z" fill="${ink}"/><rect x="${x - .5}" y="${(H * .56).toFixed(1)}" width="1" height="1.6" fill="${a.glow}"/>`; }
+  if (a.fig) { const x = a.fig * W, y = H * .86; s += `<g fill="${ink}"><circle cx="${x}" cy="${(y - 6.3).toFixed(1)}" r="1.1"/><path d="M${x - 1.3} ${(y - 5).toFixed(1)}h2.6l1 5.6h-4.6z"/><path d="M${x + 2.2} ${(y - 11).toFixed(1)}v11.6" stroke="${ink}" stroke-width=".45"/></g>`; }
+  if (a.embers) for (let i = 0; i < 30; i++) s += `<circle cx="${(r() * W).toFixed(1)}" cy="${(H * (.3 + r() * .55)).toFixed(1)}" r="${(r() * .5 + .2).toFixed(2)}" fill="#ffb35c" opacity="${(r() * .7 + .3).toFixed(2)}"/>`;
+  return s + '</svg>';
+}
+
+// ---------- Geometry + estimates ----------
+const MARGINS = { rpg: { t: .55, b: .75, i: .7, o: .55, g: .25 }, house: { t: .6, b: .75, i: .7, o: .6, g: .25 }, novel: { t: .75, b: .8, i: .85, o: .6, g: 0 }, ms: { t: 1, b: 1, i: 1, o: 1, g: 0 } };
+function geo() {
+  const st = style(), [tw, th] = TRIMS[trim()], M = MARGINS[st];
+  const cols = (st === 'rpg' || st === 'house') ? O().cols : 1;
+  return { st, tw, th, M, cols, colW: (tw - M.i - M.o - (cols - 1) * M.g) / cols, W: tw * IN, H: th * IN };
+}
+function placement(id) { return S.place[id] || IMAGES[id].place || 'page'; }
+// Effective DPI of the print rendition at its placed size for this template and trim
+function dpi(id) {
+  const im = IMAGES[id], g = geo(), [w, h] = im.px;
+  if (id.startsWith('op') || placement(id) === 'page') return Math.round(Math.min(w / g.tw, h / g.th));
+  return Math.round(w / g.colW);
+}
+const dpiTone = d => d >= 300 ? 'ok' : 'warn';
+function wordsPerPage() {
+  const t = T(), o = O(), tr = trim();
+  if (t.style === 'ms') return 235;
+  if (t.style === 'novel') return (tr === '6×9' ? 125 : 104) * 11 / o.size;
+  return (o.cols === 2 ? 185 : 165) * 9.5 / o.size * (tr === 'A4' ? 1.04 : 1);
+}
+function openerPages() { const t = T(), o = O(); return (t.style !== 'ms' && o.openers === 'Art page') ? 1 : 0; }
+function chapterStarts() {
+  const starts = {}; let p = 5; // title, credits, contents, blank
+  CHAPTERS.forEach(c => { starts[c.n] = p; p += openerPages() + Math.ceil(c.words / wordsPerPage()); });
+  return { starts, total: p - 1 };
+}
+
+// ---------- Flow: what to paginate for the scope ----------
+function flowFor(scope) {
+  const st = style(), o = O(), flow = [];
+  if (scope === 'front') return [{ t: 'title' }, { t: 'credits' }, { t: 'toc' }, { t: 'blank' }];
+  const n = chapterOf(scope), ch = CHAPTERS[n - 1], sceneOnly = scope.includes('.') ? scope : null;
+  if (!sceneOnly) {
+    const artOpener = st !== 'ms' && o.openers === 'Art page';
+    if (artOpener) flow.push({ t: 'artpage', ch, img: OPENERS[n].img, cap: OPENERS[n].cap, opener: true });
+    if (st === 'novel' || st === 'ms' || !artOpener) flow.push({ t: 'chead', ch });
+  }
+  let h2 = 0, h3 = 0, after = true;
+  CONTENT[n].forEach(b => {
+    if (b.t === 'h2') { h2++; h3 = 0; } if (b.t === 'h3') h3++;
+    const num = o.numbers === '3.1' ? (b.t === 'h2' ? `${n}.${h2} ` : '') : o.numbers === '3.1.1' ? (b.t === 'h2' ? `${n}.${h2} ` : b.t === 'h3' ? `${n}.${h2}.${h3} ` : '') : '';
+    if (sceneOnly && b.src !== sceneOnly) return;
+    flow.push({ ...b, ch, num, noind: after });
+    after = /^h/.test(b.t);
+  });
+  return flow;
+}
+
+// ---------- Block → element ----------
+function el(html) { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstElementChild; }
+function blockEl(b, proof) {
+  const st = style(), o = O();
+  let e;
+  if (b.t === 'p') {
+    let text = b.text; if (b.id === 'c3-edit' && S.edits) text += ' Even now, the oldest companies keep a roll of every sword who held the line for them.'.repeat(1);
+    e = el(`<p class="${b.drop && o.dropcaps && st !== 'ms' ? 'dropcap' : ''} ${b.noind ? 'noind' : ''}"></p>`); e.textContent = text;
+  } else if (b.t === 'h2' || b.t === 'h3') e = el(`<${b.t}>${esc(b.num || '')}${esc(b.text)}</${b.t}>`);
+  else if (b.t === 'image') {
+    const im = IMAGES[b.img];
+    if (st === 'ms') e = el(`<p class="figph">[Figure: ${esc(b.cap)}]</p>`);
+    else {
+      const d = dpi(b.img);
+      e = el(`<figure data-img="${b.img}"><div class="art" style="aspect-ratio:${im.px[0]}/${im.px[1]}">${art(im.art, im.px[1] / im.px[0])}</div><figcaption>${esc(b.cap)}</figcaption>${d < 300 ? `<span class="ui-flag">${I.warn}${d} dpi</span>` : ''}</figure>`);
+    }
+  } else if (b.t === 'table') e = el(`<table><caption>${esc(b.cap)}</caption><thead><tr>${b.head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${b.rows.map(r => `<tr>${r.map(c => `<td>${(S.upgradePreview || st === 'novel') ? c : esc(c.replace(/<[^>]+>/g, ''))}</td>`).join('')}</tr>`).join('')}</tbody></table>`);
+  else if (b.t === 'readaloud') e = el(`<div class="readaloud"><p>${esc(b.text)}</p></div>`);
+  else if (b.t === 'sidebar') e = el(`<div class="sidebar"><h4>${esc(b.title)}</h4>${b.text.map(t => `<p>${esc(t)}</p>`).join('')}</div>`);
+  else if (b.t === 'raw') {
+    if (S.rawConverted) e = el(`<div class="sidebar"><h4>${esc(b.title)}</h4><p>${esc(b.text)}</p></div>`);
+    else if (!proof) e = el(`<div class="ui-raw" title="${esc(b.tex)}">${I.warn.replace('<svg', '<svg width="9" height="9"')}Raw LaTeX · skipped in Quick preview</div>`);
+    else if (T().style === 'rpg') e = el(`<div class="dndcomment"><h4>${esc(b.title)}</h4><p>${esc(b.text)}</p></div>`);
+    else return null; // dropped: the template doesn't define \DndComment
+  } else if (b.t === 'spell') {
+    const s = SPELLS[b.cx];
+    e = el(`<div class="spell"><h4>${esc(s.name)}</h4><p class="school ln">${esc(s.school)}</p>${s.lines.map(([k, v]) => `<p class="ln"><b>${k}:</b> ${esc(v)}</p>`).join('')}${s.text.map(t => `<p>${t}</p>`).join('')}</div>`);
+  } else if (b.t === 'statblock') {
+    e = el(`<div class="statblock"><h4>Ember Wraith</h4><p class="ty ln">Medium undead, chaotic evil</p><div class="rule"></div>
+      <p class="ln"><b>Armor Class</b> 13</p><p class="ln"><b>Hit Points</b> 45 (10d8)</p><p class="ln"><b>Speed</b> 0 ft., fly 40 ft. (hover)</p><div class="rule"></div>
+      <div class="sb-abil">${[['STR', '6 (−2)'], ['DEX', '16 (+3)'], ['CON', '14 (+2)'], ['INT', '10 (+0)'], ['WIS', '11 (+0)'], ['CHA', '15 (+2)']].map(([k, v]) => `<span><b>${k}</b>${v}</span>`).join('')}</div><div class="rule"></div>
+      <p class="ln"><b>Damage Immunities</b> fire, poison</p><p class="ln"><b>Senses</b> darkvision 60 ft., passive Perception 10</p><p class="ln"><b>Challenge</b> 3 (700 XP)</p><div class="rule"></div>
+      <p><b><i>Ember Body.</i></b> A creature that touches the wraith or hits it with a melee attack while within 5 feet takes 5 (1d10) fire damage.</p>
+      <div class="acts">Actions</div><p><b><i>Burning Touch.</i></b> <i>Melee Spell Attack:</i> +5 to hit, reach 5 ft., one target. <i>Hit:</i> 14 (3d6 + 3) fire damage.</p></div>`);
+  }
+  if (!e) return null;
+  e.dataset.src = b.src; e.dataset.b = b.id; e.dataset.kind = b.t;
+  const cx = b.cx ? [b.cx] : KB.filter(k => (b.text && typeof b.text === 'string' && b.text.includes(k.name)) || (b.cap && b.cap.includes(k.name))).map(k => k.id);
+  if (cx.length) e.dataset.cx = cx.join(' ');
+  return e;
+}
+
+// ---------- Paginator (block-level, splits long paragraphs; floats full-page images to the next page) ----------
+let PAGES = [];
+function paginate(scope, proof) {
+  const stage = $('#stage'); stage.innerHTML = '';
+  const g = geo(), st = g.st, o = O(), { starts } = chapterStarts();
+  const n = chapterOf(scope);
+  let no = scope === 'front' ? 1 : starts[n] + (scope.includes('.') ? openerPages() + ({ 1: 0, 2: 1, 3: 4 })[scope.split('.')[1]] : 0);
+  const pages = []; let cur = null, ci = 0, floats = [];
+  const paper = st === 'rpg' ? (o.paper === 'White' ? '#ffffff' : '#f6efdd') : st === 'novel' ? (o.paper === 'White' ? '#ffffff' : '#fbf8f1') : '#ffffff';
+  const fs = st === 'ms' ? 12 : st === 'novel' ? o.size : st === 'house' ? o.size + .5 : o.size;
+  function mk(kind, ch) {
+    const p = document.createElement('div');
+    p.className = `pg s-${st} ${kind}${st === 'ms' && o.font === 'Times' ? ' times' : ''}${S.upgradePreview && st === 'rpg' ? ' v15' : ''}`;
+    p.style.cssText = `width:${g.W}px;height:${g.H}px;--paper:${paper};--fs:${fs}px`;
+    p._no = no++; p._ch = ch; p._kind = kind;
+    const recto = p._no % 2 === 1, L = (recto ? g.M.i : g.M.o) * IN, R = (recto ? g.M.o : g.M.i) * IN;
+    p._lr = [L, R];
+    if (kind === 'text') p.innerHTML = `<div class="pb" style="top:${g.M.t * IN}px;bottom:${g.M.b * IN}px;left:${L}px;right:${R}px"><div class="span"></div><div class="cols" style="grid-template-columns:repeat(${g.cols},minmax(0,1fr));column-gap:${g.M.g * IN}px">${'<div class="col"></div>'.repeat(g.cols)}</div></div>`;
+    stage.appendChild(p); pages.push(p); return p;
+  }
+  function artPage(f) {
+    const im = IMAGES[f.img], p = mk('full' + (f.opener ? ' opener' : ''), f.ch);
+    p._noFolio = true;
+    p.innerHTML = `<div class="fullart" data-img="${f.img}" data-src="${im.src}" data-b="${f.b || 'op-' + f.img}" data-kind="image">${art(im.art, g.H / g.W)}${dpi(f.img) < 300 ? `<span class="ui-flag" style="top:10px;right:10px">${I.warn}${dpi(f.img)} dpi</span>` : ''}</div>` +
+      (f.opener && st !== 'novel' ? `<div class="band"><div class="num">${st === 'house' ? 'Chapter' : 'Part'} ${f.ch.n}</div><div class="ttl">${esc(f.ch.title)}</div><div class="cap">${esc(f.cap)}</div></div>` : f.cap && !f.opener ? `<div class="fcap">${esc(f.cap)}</div>` : '');
+  }
+  const flush = () => { const f = floats; floats = []; f.forEach(artPage); };
+  const newText = ch => { flush(); cur = mk('text', ch); ci = 0; };
+  const cols = () => $$('.col', cur);
+  const fits = col => col.scrollHeight <= col.clientHeight + 1;
+  function advance() { ci++; if (ci >= g.cols) newText(cur._ch); }
+  function splitP(col, e) {
+    const words = e.textContent.split(' '), min = e.classList.contains('dropcap') ? 24 : 9;
+    if (words.length < min + 6) return null;
+    const full = e.textContent; let lo = min, hi = words.length - 5, best = 0;
+    col.appendChild(e);
+    while (lo <= hi) { const mid = (lo + hi) >> 1; e.textContent = words.slice(0, mid).join(' '); if (fits(col)) { best = mid; lo = mid + 1; } else hi = mid - 1; }
+    if (!best) { col.removeChild(e); e.textContent = full; return null; }
+    e.textContent = words.slice(0, best).join(' '); e.classList.add('split');
+    const rest = document.createElement('p'); rest.className = 'cont'; Object.assign(rest.dataset, e.dataset); rest.textContent = words.slice(best).join(' ');
+    return rest;
+  }
+  function place(e) {
+    for (let guard = 0; guard < 60; guard++) {
+      const col = cols()[ci];
+      col.appendChild(e);
+      if (fits(col)) return;
+      col.removeChild(e);
+      if (e.tagName === 'P') { const rest = splitP(col, e); if (rest) { e = rest; advance(); continue; } }
+      if (!col.children.length) { col.appendChild(e); e.classList.add('overset'); return; }
+      const carry = [];
+      while (col.children.length > 1 && /^H[23]$/.test(col.lastElementChild.tagName)) carry.unshift(col.removeChild(col.lastElementChild));
+      advance(); carry.forEach(c => cols()[ci].appendChild(c));
+    }
+  }
+  const fr = (p, html) => { p.innerHTML = `<div class="front" style="top:${g.M.t * IN}px;bottom:${g.M.b * IN}px;left:${p._lr[0]}px;right:${p._lr[1]}px">${html}</div>`; };
+  for (const f of flowFor(scope)) {
+    if (f.t === 'title') {
+      const p = mk('full', null); p._noFolio = true;
+      if (st === 'rpg' || st === 'house') p.innerHTML = `<div class="fullart">${art('title', g.H / g.W)}</div><div class="band" style="position:absolute;left:0;right:0;top:0;padding:${g.H * .14}px 40px 0;text-align:center;color:#f6efdd"><div style="font:600 11px/1 ${st === 'house' ? 'var(--font-sans)' : 'Cinzel,serif'};letter-spacing:.3em;opacity:.8">${esc(BOOK.series.toUpperCase())}</div><div style="font:700 48px/1.05 ${st === 'house' ? 'var(--font-sans)' : 'Cinzel,serif'};margin-top:14px">${BOOK.title}</div><div style="font:italic 14px/1 'EB Garamond',serif;margin-top:14px;opacity:.85">${BOOK.author}</div></div>`;
+      else if (st === 'novel') fr(p, `<div class="tp-c" style="margin-top:${g.H * .22}px"><div style="font:italic 28px/1.1 'EB Garamond',serif">${BOOK.title}</div><div style="margin-top:10px;font-size:9px;letter-spacing:.25em;text-transform:uppercase">${esc(BOOK.series)} · ${BOOK.n}</div><div style="margin-top:${g.H * .3}px;font-size:12px;letter-spacing:.15em;text-transform:uppercase">${BOOK.author}</div></div>`);
+      else fr(p, `<div style="display:flex;justify-content:space-between"><span>${BOOK.author}</span><span>About 48,000 words</span></div><div class="tp-c" style="margin-top:200px">${BOOK.title.toUpperCase()}<br><br>by ${BOOK.author}</div>`);
+      continue;
+    }
+    if (f.t === 'credits') { const p = mk('full', null); fr(p, `<div style="position:absolute;bottom:0;left:0;right:0;font-size:${st === 'ms' ? 12 : 8.5}px;line-height:1.6">${esc(BOOK.series)}, ${BOOK.n}<br>© 2026 ${BOOK.author}. All rights reserved.<br><br>Set with ${esc(T().name)} v${ver()} · ${trim()} · Codex</div>`); continue; }
+    if (f.t === 'blank') { const p = mk('full', null); p._noFolio = true; continue; }
+    if (f.t === 'toc') {
+      const { starts } = chapterStarts(), p = mk('full', null);
+      const head = st === 'rpg' ? `<div style="font:700 26px/1 Cinzel,serif;color:#58180d;margin-bottom:18px">Contents</div>` : st === 'novel' ? `<div style="font:italic 20px/1 'EB Garamond',serif;text-align:center;margin:40px 0 24px">Contents</div>` : `<div style="text-align:center;margin-bottom:24px">${st === 'ms' ? 'CONTENTS' : '<b style="font:600 22px/1 var(--font-sans)">Contents</b>'}</div>`;
+      fr(p, head + `<ol class="toc" style="font-size:${st === 'ms' ? 12 : st === 'novel' ? 10.5 : 11}px">${CHAPTERS.map(c => `<li><span>${st === 'novel' ? NUMW[c.n] : c.n}${st === 'novel' ? ' · ' : '. '}${esc(c.title)}</span><span class="d"></span><span>${starts[c.n]}</span></li>`).join('')}</ol>`);
+      continue;
+    }
+    if (f.t === 'artpage') { if (cur) { cur = null; } flush(); artPage(f); continue; }
+    if (f.t === 'chead') {
+      newText(f.ch); cur._opening = true;
+      const nm = st === 'novel' ? (o.chapnum === 'Words' ? 'Chapter ' + NUMW[f.ch.n] : o.chapnum === 'Numerals' ? 'Chapter ' + f.ch.n : '') : st === 'ms' ? 'Chapter ' + f.ch.n : (st === 'house' ? 'Chapter ' : 'Part ') + f.ch.n;
+      $('.span', cur).innerHTML = `<div class="chead">${nm ? `<div class="num">${nm}</div>` : ''}<div class="ttl">${esc(f.ch.title)}</div></div>`;
+      continue;
+    }
+    if (f.t === 'image' && placement(f.img) === 'page' && st !== 'ms') { floats.push({ img: f.img, cap: f.cap, ch: f.ch, b: f.id }); if (!cur) newText(f.ch); continue; }
+    const e = blockEl(f, proof); if (!e) continue;
+    if (!cur) newText(f.ch);
+    place(e);
+  }
+  flush();
+  // Folios and running heads
+  pages.forEach(p => {
+    if (p._noFolio) return;
+    const recto = p._no % 2 === 1, [L, R] = p._lr, ch = p._ch;
+    if (st === 'rpg' || st === 'house') {
+      if (!o.foot && st === 'rpg') return;
+      p.insertAdjacentHTML('beforeend', `<div class="folio" style="${recto ? `right:${R}px;flex-direction:row` : `left:${L}px;flex-direction:row-reverse`}">${ch && st === 'rpg' ? `<span>${S.tpl === 'fork' ? '✶ ' : ''}Chapter ${ch.n} | ${esc(ch.title)}</span>` : ''}<b>${p._no}</b></div>`);
+    } else if (st === 'novel') {
+      if (o.heads && !p._opening && ch) p.insertAdjacentHTML('beforeend', `<div class="rhead" style="left:${L}px;right:${R}px;text-align:center">${recto ? esc(ch.title) : BOOK.title}</div>`);
+      p.insertAdjacentHTML('beforeend', `<div class="folio" style="left:${L}px;right:${R}px;text-align:center">${p._no}</div>`);
+    } else if (st === 'ms' && p._no > 1) p.insertAdjacentHTML('beforeend', `<div class="rhead" style="right:${g.M.o * IN}px">${BOOK.surname} / ${BOOK.title.toUpperCase()} / ${p._no}</div>`);
+  });
+  // A proof marks overfull lines in the margin, as LaTeX's draft mode does
+  if (proof && st === 'rpg') $$('p:not(.ln)', stage).filter((_, i) => i === 3 || i === 11).forEach(p => p.classList.add('overfull'));
+  return pages;
+}
+
+// ---------- Canvas layout ----------
+function scale() {
+  const g = geo(), cv = $('#canvas'), avail = cv.clientWidth - 40;
+  if (S.zoom !== 'fit') return +S.zoom / 100 * 96 / 72;
+  const single = S.view === 'single' || innerWidth < 720;
+  return Math.max(.25, Math.min(single ? 1.333 : 1.2, avail / (single ? g.W : g.W * 2)));
+}
+function layout() {
+  const rows = $('#rows'), z = scale(), g = geo(), single = S.view === 'single' || innerWidth < 720;
+  rows.innerHTML = '';
+  const frame = p => { const f = document.createElement('div'); f.className = 'frame'; f.style.width = g.W * z + 'px'; f.style.height = g.H * z + 'px'; p.style.transform = `scale(${z})`; f.appendChild(p); f._pg = p; p._frame = f; return f; };
+  const ph = () => { const d = document.createElement('div'); d.className = 'ph'; d.style.width = g.W * z + 'px'; return d; };
+  let row = null;
+  PAGES.forEach(p => {
+    if (single) { row = document.createElement('div'); row.className = 'row'; row.appendChild(frame(p)); rows.appendChild(row); return; }
+    if (p._no % 2 === 0 || !row || row.children.length === 2) { row = document.createElement('div'); row.className = 'row'; rows.appendChild(row); if (p._no % 2 === 1) row.appendChild(ph()); }
+    row.appendChild(frame(p));
+  });
+  $('#canvas').classList.toggle('no-flags', !S.flags);
+  $('#zoomName').textContent = S.zoom === 'fit' ? `Fit · ${Math.round(z * 72 / 96 * 100)}%` : S.zoom + '%';
+  buildRail();
+  onScroll();
+}
+function buildRail() {
+  const rail = $('#rail'), g = geo(), w = 74, z = w / g.W;
+  rail.innerHTML = `<div class="rail-h">${PAGES.length} pages</div>` + PAGES.map((p, i) => `<button class="th" data-goto="${i}" aria-label="Page ${p._no}"><div class="tf" style="width:${w}px;height:${g.H * z}px"></div><span>${p._noFolio && p._kind.startsWith('full') && !p._ch ? p._no : p._no}</span></button>`).join('');
+  $$('.th', rail).forEach((b, i) => {
+    const c = PAGES[i].cloneNode(true); c.style.transform = `scale(${z})`; c.removeAttribute('id');
+    $$('[data-b]', c).forEach(x => x.removeAttribute('data-b'));
+    b.firstElementChild.appendChild(c);
+    if (S.flags && c.querySelector('.ui-flag, .ui-raw, .overset')) b.firstElementChild.insertAdjacentHTML('beforeend', '<i class="fl"></i>');
+  });
+}
+let curIdx = 0;
+function onScroll() {
+  const cv = $('#canvas'), top = cv.getBoundingClientRect().top + cv.clientHeight * .35;
+  let idx = 0;
+  PAGES.forEach((p, i) => { const r = p._frame?.getBoundingClientRect(); if (r && r.top <= top) idx = i; });
+  curIdx = idx;
+  const p = PAGES[idx]; if (!p) { $('#pageNo').textContent = '–'; return; }
+  const first = PAGES[0]._no, last = PAGES.at(-1)._no;
+  $('#pageNo').textContent = `p. ${p._no} · ${first}–${last}`;
+  $$('.th').forEach((b, i) => b.setAttribute('aria-current', i === idx));
+  $$('.frame.cur').forEach(f => f.classList.remove('cur'));
+  const th = $(`.th[data-goto="${idx}"]`); if (th) { const r = th.getBoundingClientRect(), rr = $('#rail').getBoundingClientRect(); if (r.top < rr.top || r.bottom > rr.bottom) th.scrollIntoView({ block: 'nearest' }); }
+}
+function goPage(i) { const p = PAGES[Math.max(0, Math.min(PAGES.length - 1, i))]; if (!p) return; const cv = $('#canvas'); cv.scrollTo({ top: p._frame.offsetTop - 16, behavior: 'smooth' }); p._frame.classList.add('cur'); setTimeout(() => p._frame.classList.remove('cur'), 1200); }
+
+// ---------- Proof cache ----------
+const proofChapter = () => S.scope === 'front' ? null : 'ch' + chapterOf(S.scope);
+const proofKey = () => [proofChapter(), S.tpl, ver(), trim(), JSON.stringify(O()), S.edits, S.rawConverted, JSON.stringify(S.place)].join('|');
+function lastProofFor(ch) { return Object.entries(S.proofs).filter(([k]) => k.startsWith(ch + '|' + S.tpl + '|')).sort((a, b) => b[1].at - a[1].at)[0]; }
+const ago = t => { const s = Math.round((Date.now() - t) / 1000); return s < 10 ? 'just now' : s < 60 ? s + 's ago' : Math.round(s / 60) + ' min ago'; };
+
+// ---------- Render ----------
+function render() {
+  const cv = $('#canvas'); cv.classList.toggle('proofv', S.mode === 'proof');
+  if (S.mode === 'proof') {
+    const ch = proofChapter();
+    if (!ch) { PAGES = []; $('#rows').innerHTML = `<div class="empty"><h2>Proofs are one chapter at a time</h2><p>Front matter needs the whole book for its page numbers and contents. Export for printer builds it, or pick a chapter to proof.</p><div class="acts"><button class="btn" data-scope="ch3">Proof Chapter 3</button><button class="btn primary" data-cmd="export">Export for printer…</button></div></div>`; return chrome(); }
+    if (S.rendering) { PAGES = []; $('#rows').innerHTML = renderingHTML(); return chrome(); }
+    if (!S.proofs[proofKey()]) {
+      PAGES = []; const last = lastProofFor(ch);
+      $('#rows').innerHTML = `<div class="empty"><h2>${last ? 'This proof is out of date' : `No proof of Chapter ${chapterOf(S.scope)} yet`}</h2><p>${last ? `The chapter or its layout changed since the last proof (${ago(last[1].at)}). ` : ''}Render proof compiles this chapter with ${esc(T().name)} v${ver()}, the real LaTeX template, using 150 dpi proxy images. About 15 seconds the first time; unchanged chapters come back from the cache.</p><div class="acts">${last ? `<button class="btn" data-cmd="show-old">Show the old proof</button>` : ''}<button class="btn primary" data-cmd="render-proof">${I.redo}Render proof</button></div></div>`;
+      return chrome();
+    }
+  }
+  PAGES = paginate(S.mode === 'proof' && S.showOld ? S.scope : S.scope, S.mode === 'proof');
+  layout();
+  if (S.cx) highlightCx(false);
+  chrome();
+}
+function renderingHTML() {
+  const r = S.rendering;
+  return `<div class="empty"><h2>Rendering proof of Chapter ${chapterOf(S.scope)}</h2><p>${esc(T().name)} v${ver()} · ${trim()} · proxy images</p><div class="bar"><i style="width:${Math.round(r.step / PSTEPS.length * 100)}%"></i></div><ol class="steps">${PSTEPS.map(([t], i) => `<li class="${i < r.step ? 'done' : i === r.step ? 'now' : ''}"><i>${i < r.step ? I.check : ''}</i>${t}</li>`).join('')}</ol><div class="acts" style="margin-top:12px"><button class="btn sm" data-cmd="cancel-proof">Cancel</button></div></div>`;
+}
+const PSTEPS = [['Assemble the chapter', 350], ['pandoc and Lua filters', 500], ['Tectonic, pass 1 of 2', 1100], ['Tectonic, pass 2 of 2', 800], ['Rasterise for the viewer', 450]];
+function renderProof() {
+  S.rendering = { step: 0 }; S.showOld = false; render();
+  const tick = () => {
+    if (!S.rendering) return;
+    if (S.rendering.step >= PSTEPS.length) {
+      S.rendering = null;
+      S.proofs[proofKey()] = { at: Date.now(), tpl: S.tpl, ver: ver(), ch: proofChapter() };
+      render(); S.proofs[proofKey()].pages = PAGES.length; renderPanel();
+      return toast(`Proof ready · Chapter ${chapterOf(S.scope)} · ${PAGES.length} pages${T().style === 'rpg' ? ' · 2 overfull lines' : ''}`);
+    }
+    setTimeout(() => { if (!S.rendering) return; S.rendering.step++; if (S.mode === 'proof') $('#rows').innerHTML = renderingHTML(); tick(); }, PSTEPS[S.rendering.step][1]);
+  };
+  tick();
+}
+
+// ---------- Chrome: toolbar, status, banners, badges ----------
+function chrome() {
+  const t = T(), pf = preflight(), blockers = pf.filter(x => x.sev === 'danger').length, warns = pf.filter(x => x.sev === 'warn').length;
+  $('#scopeName').textContent = scopeLabel(S.scope);
+  $('#tplName').textContent = t.short; $('#tplVer').textContent = 'v' + ver();
+  $('#tplThumb').className = 'tth ' + t.th;
+  $('#trimName').textContent = trim();
+  $$('[data-mode]').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === S.mode));
+  $$('[data-view]').forEach(b => b.setAttribute('aria-pressed', b.dataset.view === S.view));
+  $$('[data-ptab]').forEach(b => b.setAttribute('aria-selected', b.dataset.ptab === S.ptab));
+  $('#body').classList.toggle('no-panel', !S.panel);
+  $('#ws').classList.toggle('no-side', !S.side);
+  const { total } = chapterStarts();
+  $('#stats').textContent = `48.2k words · ≈ ${total} pages in ${t.short} ${trim()}`;
+  $('#tabBadge').innerHTML = blockers ? `<span class="badge" style="--tone:${tone('danger')}" title="${blockers} issues block export">${blockers}</span>` : '';
+  $('#pfBadge').innerHTML = `<span class="badge" style="--tone:${tone(blockers ? 'danger' : warns ? 'warn' : 'ok')}">${blockers + warns}</span>`;
+  $('#xBadge').innerHTML = S.job ? `<span class="badge" style="--tone:${tone('accent')}">1</span>` : '';
+  // Status line
+  const live = $('#live');
+  if (S.mode === 'quick') {
+    live.dataset.s = S.updating ? 'busy' : 'ok';
+    live.innerHTML = S.updating ? `<i></i><b>Updating…</b> an edit arrived from Write` : `<i></i><b>Quick preview</b> · live · page breaks are close, not exact · updated ${ago(S.updatedAt || Date.now())}`;
+  } else {
+    const pr = S.proofs[proofKey()];
+    live.dataset.s = S.rendering ? 'busy' : pr ? 'ok' : 'stale';
+    live.innerHTML = S.rendering ? '<i></i><b>Rendering…</b>' : pr ? `<i></i><b>Proof</b> · ${PAGES.length} pages, exact · rendered ${ago(pr.at)} · cached` : `<i></i><b>Proof</b> · not rendered for these settings`;
+  }
+  banners();
+  renderPanel();
+}
+function banners() {
+  const b = [];
+  if (S.mode === 'proof' && PAGES.length) {
+    const dropped = T().style !== 'rpg' && !S.rawConverted && chapterOf(S.scope) === 3;
+    b.push(`<div class="banner" style="--tone:${tone('info')}">${I.doc}<span><b>Proof · Chapter ${chapterOf(S.scope)} only</b> <span class="m">· no contents or cross-references · ${esc(T().name)} v${ver()} · 150 dpi proxy images</span></span>${dropped ? `<span style="color:var(--color-warn)">1 raw LaTeX block uses \\DndComment, which ${esc(T().short)} doesn’t define. It was left out; see the log.</span>` : ''}<span class="acts"><button class="btn sm" data-toast="Proof PDF downloads here (4.1 MB)">${I.down}Download proof</button><button class="btn sm" data-toast="The Tectonic log opens here">Log</button><button class="btn sm" data-cmd="render-proof">${I.redo}Re-render</button></span></div>`);
+  }
+  if (S.upgradePreview) b.push(`<div class="banner" style="--tone:${tone('info')}">${I.up}<span><b>Previewing ${esc(T().short)} v${T().latest}</b> <span class="m">· not applied. This book stays pinned to v${S.ver[S.tpl]} until you apply it.</span></span><span class="acts"><button class="btn sm" data-cmd="upg-cancel">Keep v${S.ver[S.tpl]}</button><button class="btn sm primary" data-cmd="upg-apply">Apply v${T().latest}</button></span></div>`);
+  if (S.mode === 'quick' && !T().css) b.push(`<div class="banner" style="--tone:${tone('warn')}">${I.info}<span><b>House style</b> <span class="m">· ${esc(T().name)} has no preview.css, so Quick preview shows a neutral layout with the template’s options. Render a proof to see the real thing.</span></span><span class="acts"><button class="btn sm" data-mode="proof">Switch to Proof</button></span></div>`);
+  $('#banners').innerHTML = b.join('');
+}
+
+// ---------- Preflight ----------
+function preflight() {
+  const items = [OFFSCOPE.copyright, OFFSCOPE.missing].map(x => ({ ...x }));
+  if (O().openers === 'Title only' || T().style === 'ms' || (T().style === 'novel' && O().openers !== 'Art page')) items.splice(1, 1);
+  Object.keys(IMAGES).forEach(id => {
+    const d = dpi(id), im = IMAGES[id];
+    const isOpener = id.startsWith('op');
+    if (T().style === 'ms') return;
+    if (isOpener && !openerPages()) return;
+    if (d < 300) items.push({ sev: 'warn', id, t: `Low resolution: ${esc(im.name)}`, d: `<span class="dpi" style="--tone:${tone('warn')}">${d} dpi</span> at ${isOpener || placement(id) === 'page' ? 'full page' : `column width (${geo().colW.toFixed(2)} in)`} on ${trim()}. Needs ${Math.ceil(300 * (isOpener || placement(id) === 'page' ? geo().tw : geo().colW))} px wide; it has ${im.px[0]}.`, where: isOpener ? im.where : srcLabel(im.src).replace('Chapter', 'Ch').replace('Scene', 'Sc'), show: isOpener ? 'op-' + id : CONTENT[chapterOf('ch' + im.src)].find(b => b.img === id)?.id, src: im.src, img: id });
+  });
+  if (T().style !== 'ms') items.push({ ...OFFSCOPE.lowres });
+  if (!S.rawConverted) items.push({ sev: 'warn', t: 'Raw LaTeX block', d: '<code style="font-family:var(--font-mono);font-size:var(--text-2xs)">\\DndComment{Playtest note}{…}</code> only prints with Fantasy RPG templates and is skipped in Quick preview.', where: 'Ch 3 · Sc 2', show: 'raw1', src: '3.2', act: '<button class="mini go" data-cmd="convert-raw">Convert to ::aside</button>' });
+  items.push({ ...OFFSCOPE.directive });
+  const pr = Object.values(S.proofs).find(p => p.tpl === 'rpg' || p.tpl === 'fork');
+  if (pr && T().style === 'rpg') items.push({ sev: 'info', t: '2 overfull lines', d: `From the last proof of Chapter ${pr.ch.replace('ch', '')}. LaTeX couldn’t break these lines inside the column; they stick out by 2–4 pt.`, where: 'Proof log' });
+  items.push({ sev: 'info', t: 'Page count is an estimate', d: `≈ ${chapterStarts().total} pages from word counts at this layout. Export gives the exact number.` });
+  return items;
+}
+
+// ---------- Panel ----------
+function renderPanel() {
+  const pb = $('#pbody');
+  const keep = pb.scrollTop;
+  pb.innerHTML = S.ptab === 'template' ? templateTab() : S.ptab === 'preflight' ? preflightTab() : exportsTab();
+  pb.scrollTop = keep;
+}
+function templateTab() {
+  const t = T(), o = O(), latest = t.latest && t.latest !== S.ver[S.tpl];
+  const opt = f => `<label>${f.l}</label><div class="seg sm" role="group" aria-label="${f.l}">${f.o.map(v => `<button data-opt="${f.k}" data-v="${v}" aria-pressed="${o[f.k] === v}">${f.f ? f.f(v) : yesno(v)}</button>`).join('')}</div>`;
+  return `<div class="sec">
+    <div class="tcard"><span class="tth ${t.th}"></span><b>${esc(t.name)}</b><button class="btn sm" data-cmd="tpl">Change…</button>
+      <span class="m">${esc(t.kind)} · ${t.engine} · <span class="pin" title="This book is pinned to this version">${I.pin}v${S.ver[S.tpl]}</span></span><span class="m">${esc(t.desc)}</span></div>
+    ${latest ? `<div class="upg">${I.up}<span class="t"><b>v${t.latest} is available.</b> Upgrading re-flows the book, so preview it first. Other books keep their own version.</span><button class="btn sm" data-cmd="upg-preview">${S.upgradePreview ? 'Previewing…' : 'Preview v' + t.latest}</button><ul>${t.changes.map(c => `<li>${c}</li>`).join('')}</ul></div>` : ''}
+    ${!t.css ? `<div class="hint">${I.warn}<span>No <code>preview.css</code> in this template. Quick preview uses the house style; Proof uses the real template.</span></div>` : ''}
+  </div>
+  <div class="sec"><div class="sec-h"><h3>Options</h3><span class="k">for this book</span></div>
+    <div class="fields"><label>Trim size</label><div class="seg sm" role="group" aria-label="Trim size">${t.trims.map(v => `<button data-trim="${v}" aria-pressed="${trim() === v}">${v}</button>`).join('')}</div>${t.schema.map(opt).join('')}</div>
+    <p class="note">Options change how the book is set, never its text. The pages update as you change them. <button data-cmd="reset-opts">Reset to template defaults</button></p>
+  </div>
+  <div class="sec"><div class="sec-h"><h3>Package</h3><span class="k">${t.files.length} files</span></div>
+    <ul class="files">${t.files.map(([f, d]) => `<li class="${d.startsWith('missing') ? 'missing' : ''}"><code>${f}</code><span>${esc(d)}</span></li>`).join('')}</ul>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">${S.tpl === 'fork' ? `<button class="btn sm" data-toast="The template editor opens here">${I.write}Edit files</button><button class="btn sm" data-toast="Upload a new version (.zip) of Forsaken RPG">${I.upload}Upload new version</button>` : `<button class="btn sm" data-cmd="fork">${I.fork}Fork to customise</button>`}<button class="btn sm ghost" data-toast="Upload a template package (.zip): template.yaml, wrapper.tex, filters, optional preview.css">${I.upload}Upload template</button></div>
+    <p class="note">Compiles run sandboxed: no network, no shell escape, time and memory limits.</p>
+  </div>`;
+}
+function preflightTab() {
+  const pf = preflight(), bl = pf.filter(x => x.sev === 'danger'), wn = pf.filter(x => x.sev === 'warn'), inf = pf.filter(x => x.sev === 'info');
+  const ic = { danger: I.stop, warn: I.warn, info: I.info };
+  const item = x => `<div class="pf-item" style="--tone:${tone(x.sev)}"><span class="ic">${ic[x.sev]}</span><span><b>${x.t}</b><span class="d">${x.d}</span>${x.where || x.show || x.act ? `<span class="loc">${x.where ? `<span class="where">${esc(x.where)}</span>` : ''}${x.show ? `<button class="mini go" data-show="${x.show}" data-src="${x.src || ''}">${I.eye}Show on page</button>` : ''}${x.img && !x.img.startsWith('op') ? `<button class="mini" data-cmd="place-page" data-img="${x.img}">Place at ${placement(x.img) === 'column' ? 'full page' : 'column width'}</button>` : ''}${x.src ? `<a class="mini" href="${W(x.src)}">${I.write}Open in Write</a>` : ''}${x.act || ''}</span>` : ''}</span></div>`;
+  const grp = (t, list, tn) => list.length ? `<div class="pf-g" style="--tone:${tone(tn)}"><i></i>${t} · ${list.length}</div>${list.map(item).join('')}` : '';
+  return `<div class="sec"><div class="verdict" style="--tone:${tone(bl.length ? 'danger' : 'ok')}">${bl.length ? I.stop : I.check}<b>${bl.length ? `${bl.length} issues block export` : 'Ready to export'}</b><p>${bl.length ? 'Fix them, or export a draft with DRAFT on every page.' : 'Warnings don’t stop an export; they are listed with it.'} Checked against ${esc(T().short)} v${ver()} at ${trim()}.</p></div>
+    ${grp('Blocks export', bl, 'danger')}${grp('Warnings', wn, 'warn')}${grp('Notes', inf, 'info')}
+    <p class="note">Preflight runs again before every export. Image resolution is worked out for the current template, trim and columns, so changing them can add or clear warnings.</p></div>`;
+}
+function exportsTab() {
+  const j = S.job;
+  const jobHTML = j ? `<div class="sec"><div class="job"><div class="job-h"><b>Exporting ${BOOK.title}.pdf</b><button class="btn sm ghost" data-cmd="cancel-job">Cancel</button></div><div class="m">${esc(TPL[j.s.tpl].short)} v${j.s.ver} · ${j.s.trim} · bleed ${j.s.bleed}${j.s.crop ? ' + crop marks' : ''} · ${j.s.q === 'print' ? 'print 300 dpi' : 'screen 150 dpi'}${j.s.draft ? ' · DRAFT' : ''}</div><div class="bar"><i style="width:${Math.round(jobProgress() * 100)}%"></i></div><ol class="steps">${XSTEPS.map(([t, d], i) => { const st = jobStep(); return `<li class="${i < st ? 'done' : i === st ? 'now' : ''}"><i>${i < st ? I.check : ''}</i>${t}<span class="k">${i < st ? d + 's' : ''}</span></li>`; }).join('')}</ol><p class="note" style="margin-top:8px">Runs on the server. You can close this page; Codex tells you when it’s ready.</p></div></div>` : '';
+  return jobHTML + `<div class="sec"><div class="sec-h"><h3>Exports</h3><span class="k">whole book</span></div>${S.exports.map(x => `<div class="xrow" style="--tone:${tone(x.ok ? 'ok' : 'danger')}">${x.ok ? I.check : I.stop}<b>${x.ok ? `${BOOK.title}.pdf` : 'Export failed'}</b><span class="m">${x.at} · ${esc(TPL[x.tpl].short)} v${x.ver} · ${x.trim} · bleed ${x.bleed}${x.crop ? ' + crop marks' : ''} · ${x.q === 'print' ? 'print 300 dpi' : 'screen 150 dpi'}${x.draft ? ' · DRAFT' : ''}</span>${x.ok ? `<span class="m">${x.pages} pages · ${x.size} · ${x.warns} warnings</span>` : `<div class="err">${esc(x.err)}</div>`}<span class="acts">${x.ok ? `<button class="ib" title="Download" aria-label="Download" data-toast="${BOOK.title}.pdf (${x.size}) downloads here">${I.down}</button>` : `<button class="ib" title="Show log" aria-label="Show log" data-toast="The full Tectonic log opens here">${I.doc}</button>`}<button class="ib" title="Export again with these settings" aria-label="Export again with these settings" data-rerun="${x.id}">${I.redo}</button></span></div>`).join('')}
+    <p class="note">Each export keeps its settings and the template version it used, so a reprint matches.</p></div>
+    <div class="sec"><div class="sec-h"><h3>Cached proofs</h3><span class="k">${Object.keys(S.proofs).length}</span></div>${Object.keys(S.proofs).length ? Object.entries(S.proofs).sort((a, b) => b[1].at - a[1].at).map(([k, p]) => `<div class="xrow" style="--tone:${tone('info')}">${I.doc}<b>Chapter ${p.ch.replace('ch', '')} proof</b><span class="m">${esc(TPL[p.tpl].short)} v${p.ver} · ${p.pages || '–'} pages · ${ago(p.at)}${k === proofKey() ? ' · current' : ''}</span><span class="acts"><button class="ib" title="Open" aria-label="Open proof" data-open-proof="${p.ch}">${I.eye}</button></span></div>`).join('') : '<p class="note" style="margin:0">Proofs you render appear here. A proof is reused until its chapter, template version or options change.</p>'}</div>`;
+}
+
+// ---------- Export job (survives a reload) ----------
+const XSTEPS = [['Preflight', 1], ['Assemble 10 chapters', 1], ['pandoc and Lua filters', 2], ['Tectonic, pass 1 of 2', 3], ['Tectonic, pass 2 of 2', 2], ['Place 231 images at their print size', 3], ['Store the PDF', 1]];
+const XTOTAL = XSTEPS.reduce((t, s) => t + s[1], 0) * 1000;
+const jobProgress = () => S.job ? Math.min(1, (Date.now() - S.job.start) / XTOTAL) : 0;
+function jobStep() { let t = (Date.now() - S.job.start) / 1000; for (let i = 0; i < XSTEPS.length; i++) { if (t < XSTEPS[i][1]) return i; t -= XSTEPS[i][1]; } return XSTEPS.length; }
+const store = { get() { try { return JSON.parse(localStorage.getItem('codex-print-job')); } catch { return null; } }, set(v) { try { v ? localStorage.setItem('codex-print-job', JSON.stringify(v)) : localStorage.removeItem('codex-print-job'); } catch {} } };
+let jobTimer;
+function runJob() {
+  clearInterval(jobTimer);
+  jobTimer = setInterval(() => {
+    if (!S.job) return clearInterval(jobTimer);
+    if (jobProgress() >= 1) {
+      const s = S.job.s; S.job = null; store.set(null); clearInterval(jobTimer);
+      const size = s.q === 'print' ? (s.bleed === 'None' ? '208 MB' : '214 MB') : '61 MB';
+      S.exports.unshift({ id: 'x' + Date.now(), at: 'Today, ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), ver: s.ver, tpl: s.tpl, trim: s.trim, bleed: s.bleed, crop: s.crop, q: s.q, pages: chapterStarts().total, size, warns: preflight().filter(x => x.sev === 'warn').length, ok: true, draft: s.draft });
+      chrome(); toast(`Export ready · ${BOOK.title}.pdf · ${size}`, `<button data-ptab="exports">Show</button>`);
+      return;
+    }
+    if (S.ptab === 'exports') renderPanel();
+  }, 400);
+}
+
+// ---------- Export dialog ----------
+const X = { bleed: 'None', crop: false, q: 'print', draft: false };
+function exportDialog() {
+  const t = T(), pf = preflight(), bl = pf.filter(x => x.sev === 'danger'), wn = pf.filter(x => x.sev === 'warn');
+  const seg = (k, vals, lab) => `<div class="seg sm" role="group">${vals.map(([v, l, dis]) => `<button data-x="${k}" data-v="${v}" aria-pressed="${String(X[k]) === String(v)}" ${dis ? 'disabled' : ''}>${l}</button>`).join('')}</div>`;
+  const size = X.q === 'print' ? '≈ 210 MB' : '≈ 60 MB';
+  $('#dlg').innerHTML = `<div class="dlg"><div class="dlg-h"><h2 id="dlgTitle">Export for printer</h2><button class="ib" data-cmd="dlg-close" aria-label="Close">${I.x}</button></div>
+    <div class="dlg-b">
+      <div class="fields">
+        <label>Book</label><div class="ro"><b>${BOOK.title}</b><span class="dim-t">· whole book, ${CHAPTERS.length} chapters</span></div>
+        <label>Template</label><div class="ro"><span class="tth ${t.th}" style="width:14px;height:18px"></span>${esc(t.name)} <span class="pin">${I.pin}v${S.ver[S.tpl]}</span>${S.upgradePreview ? '<span class="dim-t">(the v' + t.latest + ' preview isn’t applied)</span>' : ''}</div>
+        <label>Trim size</label>${seg('trim', t.trims.map(v => [v, v]))}
+        <label>Bleed</label>${seg('bleed', [['None', 'None'], ['3 mm', '3 mm'], ['0.125 in', '0.125 in']])}
+        <label>Crop marks</label>${seg('crop', [[false, 'Off'], [true, 'On', X.bleed === 'None']])}
+        <label>Images</label>${seg('q', [['print', 'Print · 300 dpi'], ['screen', 'Screen · 150 dpi']])}
+        <label>Format</label><div class="ro">PDF <span class="dim-t">· EPUB from the same source is planned</span></div>
+      </div>
+      <div class="pfsum" style="--tone:${tone(bl.length ? 'danger' : wn.length ? 'warn' : 'ok')}"><b>${bl.length ? `${bl.length} issues block this export` : wn.length ? `Ready, with ${wn.length} warnings` : 'Ready to export'}</b>
+        <ul>${[...bl, ...wn].slice(0, 5).map(x => `<li>${x.t.replace(/<[^>]+>/g, '')}</li>`).join('')}${bl.length + wn.length > 5 ? `<li>and ${bl.length + wn.length - 5} more</li>` : ''}</ul>
+        ${bl.length ? `<label><input type="checkbox" data-x="draft" ${X.draft ? 'checked' : ''}><span>Export a draft anyway, with <b style="font-size:inherit;color:inherit">DRAFT</b> across every page. Not for the printer.</span></label>` : ''}
+        <button class="mini go" style="justify-self:start;margin-left:-6px" data-cmd="dlg-preflight">Open Preflight</button></div>
+    </div>
+    <div class="dlg-f"><span class="est">${size} · ≈ ${chapterStarts().total} pages · about 3 minutes</span><button class="btn" data-cmd="dlg-close">Cancel</button><button class="btn primary" data-cmd="queue" ${bl.length && !X.draft ? 'disabled' : ''}>${I.print}${bl.length ? 'Export draft' : 'Queue export'}</button></div></div>`;
+  $('#dlg').classList.add('open');
+}
+
+// ---------- Knowledge base sidebar ----------
+function renderSide() {
+  const q = S.sideQ.toLowerCase();
+  $('#sideList').innerHTML = KB_CATS.map(([cat, name]) => {
+    const list = KB.filter(k => k.cat === cat && k.name.toLowerCase().includes(q));
+    if (!list.length) return '';
+    return `<div class="cat-h" style="--cat:var(--category-${cat})"><i></i>${name}</div>` + list.map(k => `<button class="entry" data-cx="${k.id}" aria-pressed="${S.cx === k.id}"><span class="n">${esc(k.name[0].toUpperCase() + k.name.slice(1))}</span><span class="u">${k.cat === 'research' || k.id === 'wraith' ? 'prints' : ''}</span></button>`).join('');
+  }).join('');
+}
+function highlightCx(scroll = true) {
+  $$('.cxhl').forEach(e => e.classList.remove('cxhl'));
+  if (!S.cx) return;
+  const hits = $$(`#rows [data-cx~="${S.cx}"]`);
+  hits.forEach(e => e.classList.add('cxhl'));
+  if (scroll) {
+    if (hits.length) { const f = hits[0].closest('.frame'); $('#canvas').scrollTo({ top: f.offsetTop - 16, behavior: 'smooth' }); toast(`${esc(KB.find(k => k.id === S.cx).name)} prints in ${hits.length} place${hits.length > 1 ? 's' : ''} in this preview`); }
+    else toast('Not printed in this scope');
+  }
+}
+
+// ---------- Popover ----------
+const pop = $('#pop');
+let popCtx = null;
+function openPop(rect, html, ctx, cls = '') {
+  popCtx = ctx; pop.className = 'open ' + cls; pop.innerHTML = html;
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  let top = rect.bottom + 4;
+  if (top + h > innerHeight - 8) top = Math.max(8, rect.top - h - 4);
+  pop.style.left = Math.max(8, Math.min(rect.left, innerWidth - w - 8)) + 'px';
+  pop.style.top = top + 'px';
+}
+function closePop() { pop.className = ''; popCtx = null; }
+const ck = on => on ? `<span class="ck">${I.check}</span>` : '';
+function scopeMenu(rect) {
+  openPop(rect, `<div class="plist"><button class="item" data-scope="front">Front matter<span class="k">title, contents</span>${ck(S.scope === 'front')}</button><div class="sep"></div>` +
+    CHAPTERS.map(c => { const has = CONTENT[c.n]; return `<button class="item" data-scope="ch${c.n}" ${has ? '' : 'data-nocontent'}><span style="${has ? '' : 'color:var(--color-muted)'}">${c.n}. ${esc(c.title)}</span>${S.scope === 'ch' + c.n ? ck(true) : `<span class="k">${has ? '' : 'not in this reference'}</span>`}</button>` + (has ? Object.keys(SCENES).filter(k => k.startsWith(c.n + '.')).map(k => `<button class="item sub" data-scope="${k}">Scene ${k.split('.')[1]} · ${esc(SCENES[k])}${ck(S.scope === k)}</button>`).join('') : ''); }).join('') + `</div>`, { kind: 'scope' }, 'wide');
+}
+function tplMenu(rect) {
+  const it = k => { const t = TPL[k]; return `<button class="item tall" data-tpl="${k}"><span class="tth ${t.th}" style="width:30px;height:39px"></span><span><b>${esc(t.name)}</b><small>${esc(t.desc)}</small><small>${t.trims.join(' · ')} · v${S.ver[k]}${t.css ? '' : ' · no preview.css'}</small></span>${ck(S.tpl === k)}</button>`; };
+  openPop(rect, `<div class="plist"><div class="grp">Built-in</div>${['rpg', 'novel', 'ms'].map(it).join('')}<div class="grp">Yours</div>${it('fork')}<div class="sep"></div><button class="item" data-cmd="fork">${I.fork}Fork ${esc(T().short)}…</button><button class="item" data-toast="Upload a template package (.zip)">${I.upload}Upload template (.zip)…</button></div>`, { kind: 'tpl' }, 'xwide');
+}
+function trimMenu(rect) {
+  openPop(rect, `<div class="plist">${Object.entries(TRIMS).map(([k, [w, h]]) => { const ok = T().trims.includes(k); return `<button class="item" data-trim="${k}" ${ok ? '' : 'disabled'}>${k}<span class="k">${ok ? `${w} × ${h} in` : 'not in this template'}</span>${ck(trim() === k)}</button>`; }).join('')}</div>`, { kind: 'trim' });
+}
+function zoomMenu(rect) {
+  openPop(rect, `<div class="plist">${[['fit', 'Fit width'], ['50', '50%'], ['75', '75%'], ['100', '100%'], ['150', '150%']].map(([k, l]) => `<button class="item" data-zoom="${k}">${l}${ck(S.zoom === k)}</button>`).join('')}</div>`, { kind: 'zoom' });
+}
+// Clicking a block on a page: where it comes from and what can change it
+function blockMenu(e, rect) {
+  const kind = e.dataset.kind, src = e.dataset.src, b = e.dataset.b;
+  let body = '';
+  if (kind === 'image') {
+    const id = e.dataset.img, im = IMAGES[id], d = dpi(id), opener = id.startsWith('op');
+    const pl = opener || placement(id) === 'page';
+    body = `<div class="kv"><span>Asset</span><b>${esc(im.name)}</b><span>Original</span><span>${im.px[0]} × ${im.px[1]} px</span><span>Placed</span><span>${pl ? `full page, ${trim()}` : `column width, ${geo().colW.toFixed(2)} in`}</span><span>Effective</span><span class="dpi" style="--tone:${tone(dpiTone(d))}">${d} dpi${d < 300 ? ' · below 300' : ' · fine for print'}</span></div>
+      ${opener ? `<p>The chapter’s opener image (opener_asset_id). The template draws the opener page.</p>` : `<div class="acts"><span class="dim-t" style="font-size:var(--text-xs)">Placement</span><div class="seg sm">${['column', 'page'].map(v => `<button data-setplace="${id}" data-v="${v}" aria-pressed="${placement(id) === v}">${v === 'column' ? 'Column' : 'Full page'}</button>`).join('')}</div></div>`}
+      <div class="acts"><button class="btn sm" data-toast="The asset library opens here">Replace image…</button><a class="btn sm" href="${W(src)}">${I.write}Open in Write</a></div>`;
+  } else if (kind === 'spell' || kind === 'statblock') {
+    const cx = e.dataset.cx, k = KB.find(x => x.id === cx);
+    body = `<p>Printed from the Knowledge base entry <b style="color:var(--color-text)">${esc(k.name)}</b>. Edit the entry to change every place it prints, and the context the AI sees.</p><div class="acts"><button class="btn sm" data-cx="${cx}">Show in Knowledge base</button><a class="btn sm" href="${W(src)}">${I.write}Open in Write</a></div>`;
+  } else if (kind === 'raw') {
+    body = `<p>Raw LaTeX: <code style="font-family:var(--font-mono)">\\DndComment{Playtest note}{…}</code>. Only Fantasy RPG templates print it; other templates leave it out, and Quick preview skips it.</p><div class="acts"><button class="btn sm primary" data-cmd="convert-raw">Convert to ::aside</button><a class="btn sm" href="${W(src)}">${I.write}Open in Write</a></div>`;
+  } else {
+    body = `<p>${{ p: 'Paragraph', h2: 'Heading', h3: 'Heading', table: 'Table (a pipe table in the prose; the template styles it)', readaloud: 'Read-aloud box (:::readaloud)', sidebar: 'Sidebar (:::sidebar)' }[kind] || 'Block'}. Text is edited in Write; the preview follows within a few seconds.</p><div class="acts"><a class="btn sm primary" href="${W(src)}">${I.write}Open in Write</a></div>`;
+  }
+  openPop(rect, `<div class="form"><div class="overline ov">${esc(srcLabel(src))}</div>${body}</div>`, { kind: 'block', b }, 'wide');
+}
+
+// ---------- Toast ----------
+let toastT;
+function toast(html, extra) {
+  const t = $('#toast');
+  t.innerHTML = `<span>${html}</span>${extra || ''}`;
+  t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 4200);
+}
+
+// ---------- Actions ----------
+function setTemplate(k) {
+  S.tpl = k; S.upgradePreview = false; closePop();
+  render();
+  toast(`Layout set to ${esc(TPL[k].name)} v${S.ver[k]} · ${trim()}. Your text didn’t change.`);
+}
+function simEdit() {
+  S.edits++;
+  if (S.mode === 'quick' && chapterOf(S.scope) === 3) {
+    S.updating = true; chrome();
+    setTimeout(() => { S.updating = false; S.updatedAt = Date.now(); render(); const e = $('#rows [data-b="c3-edit"]'); if (e) { e.classList.add('flash'); const f = e.closest('.frame'); $('#canvas').scrollTo({ top: f.offsetTop - 16, behavior: 'smooth' }); } }, 1100);
+  } else { S.updatedAt = Date.now(); render(); toast(S.mode === 'proof' ? 'Chapter 3 changed in Write, so its proof is out of date' : 'Chapter 3 changed in Write'); }
+}
+
+document.addEventListener('click', e => {
+  const t = e.target;
+  if (popCtx && !pop.contains(t) && !t.closest('[data-cmd="scope"],[data-cmd="tpl"],[data-cmd="trim"],[data-cmd="zoom"]')) closePop();
+  if (t === $('#dlg')) { $('#dlg').classList.remove('open'); return; }
+  const c = t.closest('[data-cmd]')?.dataset.cmd;
+  const r = t.closest('button, a, [data-cmd]')?.getBoundingClientRect();
+  if (c === 'scope') return popCtx?.kind === 'scope' ? closePop() : scopeMenu(r);
+  if (c === 'tpl') return popCtx?.kind === 'tpl' ? closePop() : tplMenu(r);
+  if (c === 'trim') return popCtx?.kind === 'trim' ? closePop() : trimMenu(r);
+  if (c === 'zoom') return popCtx?.kind === 'zoom' ? closePop() : zoomMenu(r);
+  if (c === 'export') { closePop(); X.trim = trim(); return exportDialog(); }
+  if (c === 'dlg-close') return $('#dlg').classList.remove('open');
+  if (c === 'dlg-preflight') { $('#dlg').classList.remove('open'); S.ptab = 'preflight'; S.panel = true; return chrome(); }
+  if (c === 'queue') {
+    $('#dlg').classList.remove('open');
+    S.job = { start: Date.now(), s: { tpl: S.tpl, ver: S.ver[S.tpl], trim: X.trim, bleed: X.bleed, crop: X.crop && X.bleed !== 'None', q: X.q, draft: X.draft && preflight().some(x => x.sev === 'danger') } };
+    store.set(S.job); runJob(); S.ptab = 'exports'; S.panel = innerWidth > 980 || S.panel; chrome();
+    return toast('Export queued. It runs in the background; you can leave this page.');
+  }
+  if (c === 'cancel-job') { S.job = null; store.set(null); clearInterval(jobTimer); chrome(); return toast('Export cancelled'); }
+  if (c === 'render-proof') return renderProof();
+  if (c === 'cancel-proof') { S.rendering = null; return render(); }
+  if (c === 'show-old') { const last = lastProofFor(proofChapter()); if (last) { S.proofs[proofKey()] = { ...last[1], stale: true }; render(); toast('Showing the previous proof. It doesn’t include the latest changes.'); } return; }
+  if (c === 'prev') return goPage(curIdx - 1);
+  if (c === 'next') return goPage(curIdx + 1);
+  if (c === 'panel') { S.panel = !S.panel; return chrome(); }
+  if (c === 'upg-preview') { S.upgradePreview = true; return render(); }
+  if (c === 'upg-cancel') { S.upgradePreview = false; render(); return toast(`Still pinned to v${S.ver[S.tpl]}`); }
+  if (c === 'upg-apply') { const old = S.ver[S.tpl]; S.ver[S.tpl] = T().latest; S.upgradePreview = false; render(); return toast(`${esc(T().short)} upgraded to v${S.ver[S.tpl]} for this book. Other books stay on their version.`, `<button data-cmd="upg-undo" data-old="${old}">Undo</button>`); }
+  if (c === 'upg-undo') { S.ver[S.tpl] = t.closest('[data-old]').dataset.old; render(); return toast(`Back on v${S.ver[S.tpl]}`); }
+  if (c === 'reset-opts') { S.opts[S.tpl] = { ...T().def }; return render(); }
+  if (c === 'fork') { closePop(); return toast(`Forking makes an editable copy of ${esc(T().short)} v${S.ver[S.tpl]} under Yours. Your fork is shown as Forsaken RPG.`, `<button data-tpl="fork">Use it</button>`); }
+  if (c === 'convert-raw') { closePop(); S.rawConverted = true; render(); return toast('Converted to a :::aside{title="Playtest note"} block. It now prints with every template.', '<button data-cmd="unconvert">Undo</button>'); }
+  if (c === 'unconvert') { S.rawConverted = false; return render(); }
+  if (c === 'place-page') { const id = t.closest('[data-img]').dataset.img; S.place[id] = placement(id) === 'column' ? 'page' : 'column'; render(); return toast(`${esc(IMAGES[id].name)} now placed at ${S.place[id] === 'page' ? 'full page' : 'column width'} · ${dpi(id)} dpi`); }
+  if (c === 'sim-edit') return simEdit();
+  const d = t.closest('[data-scope]'); if (d) { closePop(); if (d.hasAttribute('data-nocontent')) return toast('Only Chapters 3 and 4 have text in this reference'); S.scope = d.dataset.scope; S.showOld = false; render(); $('#canvas').scrollTop = 0; return; }
+  const tp = t.closest('[data-tpl]'); if (tp) return setTemplate(tp.dataset.tpl);
+  const tr = t.closest('[data-trim]'); if (tr && !tr.disabled) { closePop(); S.trim[S.tpl] = tr.dataset.trim; return render(); }
+  const z = t.closest('[data-zoom]'); if (z) { closePop(); S.zoom = z.dataset.zoom; return layout(); }
+  const m = t.closest('[data-mode]'); if (m) { S.mode = m.dataset.mode; S.showOld = false; return render(); }
+  const v = t.closest('[data-view]'); if (v) { S.view = v.dataset.view; layout(); return chrome(); }
+  const pt = t.closest('[data-ptab]'); if (pt) { S.ptab = pt.dataset.ptab; S.panel = true; $('#toast').classList.remove('show'); return chrome(); }
+  const op = t.closest('[data-opt]'); if (op) { const f = T().schema.find(x => x.k === op.dataset.opt); S.opts[S.tpl][f.k] = f.o.find(x => String(x) === op.dataset.v); return render(); }
+  const sp = t.closest('[data-setplace]'); if (sp) { S.place[sp.dataset.setplace] = sp.dataset.v; closePop(); return render(); }
+  const xo = t.closest('[data-x]'); if (xo && xo.tagName === 'BUTTON') { const k = xo.dataset.x; X[k] = k === 'crop' ? xo.dataset.v === 'true' : xo.dataset.v; if (k === 'bleed' && X.bleed === 'None') X.crop = false; return exportDialog(); }
+  if (xo && xo.type === 'checkbox') { X.draft = xo.checked; return exportDialog(); }
+  const rr = t.closest('[data-rerun]'); if (rr) { const x = S.exports.find(y => y.id === rr.dataset.rerun); Object.assign(X, { trim: x.trim, bleed: x.bleed, crop: x.crop, q: x.q }); toast(`Settings from ${x.at} loaded${x.ver !== S.ver[x.tpl] ? `. That export used v${x.ver}; this one uses the pinned v${S.ver[x.tpl]}` : ''}`); return exportDialog(); }
+  const opr = t.closest('[data-open-proof]'); if (opr) { S.scope = opr.dataset.openProof; S.mode = 'proof'; return render(); }
+  const sh = t.closest('[data-show]'); if (sh) { const id = sh.dataset.show; const go = () => { const e = $(`#rows [data-b="${id}"]`); if (!e) return toast('Not on these pages'); const f = e.closest('.frame'); $('#canvas').scrollTo({ top: f.offsetTop - 16, behavior: 'smooth' }); e.classList.remove('flash'); void e.offsetWidth; e.classList.add('flash'); }; const ch = sh.dataset.src ? 'ch' + sh.dataset.src.split('.')[0] : null; if (!$(`#rows [data-b="${id}"]`) && ch) { S.scope = ch; S.mode = 'quick'; render(); } if (innerWidth <= 980) { S.panel = false; chrome(); } return setTimeout(go, 60); }
+  const cx = t.closest('[data-cx]'); if (cx && (cx.classList.contains('entry') || cx.tagName === 'BUTTON')) { closePop(); S.cx = S.cx === cx.dataset.cx ? null : cx.dataset.cx; if (!S.side && S.cx) S.side = true; renderSide(); chrome(); return highlightCx(); }
+  const th = t.closest('[data-goto]'); if (th) return goPage(+th.dataset.goto);
+  const ts = t.closest('[data-toast]'); if (ts) { closePop(); return toast(esc(ts.dataset.toast)); }
+  const thm = t.closest('[data-theme-set]'); if (thm) { const h = document.documentElement; thm.dataset.themeSet === 'system' ? delete h.dataset.theme : h.dataset.theme = thm.dataset.themeSet; return aid(); }
+  const den = t.closest('[data-density-set]'); if (den) { document.documentElement.dataset.density = den.dataset.densitySet; aid(); return layout(); }
+  if (t.closest('#sideToggle')) { S.side = !S.side; chrome(); return layout(); }
+  // A block on a page
+  const blk = t.closest('#rows .pg [data-b]');
+  if (blk) return blockMenu(blk, blk.getBoundingClientRect());
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { if ($('#dlg').classList.contains('open')) return $('#dlg').classList.remove('open'); closePop(); }
+  if (e.target.closest('input, textarea')) return;
+  if (e.key === 'PageDown' || (e.key === 'ArrowRight' && e.altKey)) { e.preventDefault(); goPage(curIdx + 1); }
+  if (e.key === 'PageUp' || (e.key === 'ArrowLeft' && e.altKey)) { e.preventDefault(); goPage(curIdx - 1); }
+});
+$('#flagsChk').addEventListener('change', e => { S.flags = e.target.checked; $('#canvas').classList.toggle('no-flags', !S.flags); buildRail(); });
+$('#sideQ').addEventListener('input', e => { S.sideQ = e.target.value; renderSide(); });
+$('#canvas').addEventListener('scroll', () => { onScroll(); $('#hov').style.display = 'none'; }, { passive: true });
+// Hover: outline the block and say which scene it comes from
+$('#canvas').addEventListener('mousemove', e => {
+  const b = e.target.closest('.pg [data-b]'), hov = $('#hov');
+  if (!b || popCtx) { hov.style.display = 'none'; return; }
+  const r = b.getBoundingClientRect();
+  Object.assign(hov.style, { display: 'block', left: r.left - 3 + 'px', top: r.top - 3 + 'px', width: r.width + 6 + 'px', height: r.height + 6 + 'px' });
+  hov.firstElementChild.textContent = `Ch ${b.dataset.src.replace('.', ' · Sc ')} · ${SCENES[b.dataset.src]}`;
+});
+$('#canvas').addEventListener('mouseleave', () => { $('#hov').style.display = 'none'; });
+let rT; addEventListener('resize', () => { clearTimeout(rT); rT = setTimeout(() => { if (PAGES.length) layout(); }, 120); });
+function aid() {
+  const h = document.documentElement;
+  $$('[data-theme-set]').forEach(b => b.setAttribute('aria-pressed', b.dataset.themeSet === (h.dataset.theme || 'system')));
+  $$('[data-density-set]').forEach(b => b.setAttribute('aria-pressed', b.dataset.densitySet === (h.dataset.density || 'compact')));
+}
+setInterval(() => { if (!S.updating && !S.rendering) { const l = $('#live b'); if (l) chrome(); } }, 15000);
+
+// ---------- Boot ----------
+aid(); renderSide();
+S.updatedAt = Date.now();
+const saved = store.get(); if (saved && saved.start) { S.job = saved; runJob(); S.ptab = 'exports'; }
+render();
+document.fonts?.ready.then(() => render());
+</script>
+</body>
+</html>

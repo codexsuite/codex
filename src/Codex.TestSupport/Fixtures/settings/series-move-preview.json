@@ -1,0 +1,11 @@
+{
+  "bookId": "0199a000-0000-7000-8000-000000000011",
+  "title": "Hollow Throne",
+  "from": { "id": "0199a000-0000-7000-8000-000000000001", "name": "The Ashen Crown", "number": 3 },
+  "to": { "id": null, "name": null, "number": null },
+  "steps": [{ "key": "copyCategories", "text": "Copy 2 categories from The Ashen Crown onto this book." }],
+  "notes": ["The Ashen Crown and its other books don't change."],
+  "warnings": ["Moving the book back won't merge the copies again."],
+  "targetSeriesSharedWith": 0,
+  "losingAccess": 2
+}

@@ -1,0 +1,66 @@
+{
+  "id": "0199c0de-0000-7000-8000-000b00000005",
+  "bookId": "0199c0de-0000-7000-8000-00030000000a",
+  "categoryId": "0199c0de-0000-7000-8000-000a00000002",
+  "categoryName": "Laws",
+  "categoryColour": "category-law",
+  "fieldDefs": [
+    { "key": "coinedBy", "label": "Coined by" },
+    { "key": "year", "label": "Year" }
+  ],
+  "name": "Goodhart's Law",
+  "slug": "goodharts-law",
+  "summary": "When a measure becomes a target.",
+  "body": "A measure that becomes a target stops being a good measure.",
+  "fields": { "coinedBy": "Charles Goodhart", "year": "1975" },
+  "customFields": [{ "label": "URL", "value": "https://example.test/goodhart" }],
+  "aliases": ["Goodhart"],
+  "alwaysInContext": false,
+  "tags": ["law"],
+  "excludeFromAutoContext": false,
+  "positionInCategory": 2,
+  "categoryEntryCount": 3,
+  "source": {
+    "id": "0199c0de-0000-7000-8000-000c00000003",
+    "title": "Problems of Monetary Management",
+    "status": "needs_check",
+    "reason": "ready_to_sign_off"
+  },
+  "related": [
+    { "id": "0199c0de-0000-7000-8000-000b00000004", "name": "Conway's Law", "categoryName": "Laws" }
+  ],
+  "usedIn": [
+    {
+      "sceneId": "0199c0de-0000-7000-8000-000800000001",
+      "bookId": "0199c0de-0000-7000-8000-00030000000a",
+      "chapterNumber": 4,
+      "chapterTitle": "Metrics",
+      "number": "4.1",
+      "kinds": [
+        { "kind": "mention", "count": 2 },
+        { "kind": "timeline", "count": 1 }
+      ],
+      "snippet": "Goodhart's Law bites once the metric becomes the goal."
+    },
+    {
+      "sceneId": "0199c0de-0000-7000-8000-000800000002",
+      "bookId": "0199c0de-0000-7000-8000-00030000000a",
+      "chapterNumber": null,
+      "chapterTitle": "Interlude",
+      "number": "1",
+      "kinds": [{ "kind": "text", "count": 1 }],
+      "snippet": ""
+    }
+  ],
+  "timeline": [
+    {
+      "id": "0199c0de-0000-7000-8000-000d00000001",
+      "sceneId": "0199c0de-0000-7000-8000-000800000001",
+      "bookId": "0199c0de-0000-7000-8000-00030000000a",
+      "sceneNumber": "4.1",
+      "body": "From here on the team games the metric."
+    }
+  ],
+  "createdLabel": "2 days ago",
+  "updatedLabel": "Just now"
+}

@@ -1,0 +1,16 @@
+/* Novel (6 x 9): Paged.js approximation for Quick preview. */
+@page { size: 6in 9in; margin: 0.75in 0.625in 0.75in 0.875in; }
+body { background: #fffdf8; color: #1a1a1a; font-family: "Palatino Linotype", Georgia, serif; font-size: 11pt; line-height: 1.4; }
+h1, h2 { text-align: center; font-weight: normal; break-before: page; }
+h2 { font-size: 18pt; margin-top: 1.5in; }
+p { margin: 0; text-indent: 1.5em; }
+h2 + p, .scene-break + p { text-indent: 0; }
+.scene-break::before { content: "*   *   *"; display: block; text-align: center; margin: 1em 0; }
+.sidebar, .aside, .spell, .statblock { border: 1px solid #1a1a1a; padding: 0.5em; margin: 1em 0; }
+.readaloud { margin: 1em 2em; }
+.pagebreak { break-after: page; }
+figure img { width: 100%; }
+.missing-figure { border: 1px dashed #1a1a1a; padding: 1em; text-align: center; font-style: italic; }
+.raw-latex { border: 1px dashed currentColor; padding: 0 0.4em; font-style: italic; font-size: 0.85em; opacity: 0.75; }
+table { border-collapse: collapse; width: 100%; margin: 0.8em 0; }
+th, td { border-bottom: 1px solid currentColor; padding: 0.15em 0.4em; text-align: left; }

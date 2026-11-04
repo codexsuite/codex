@@ -1,0 +1,30 @@
+[
+  {
+    "id": "0199c0de-0000-7000-8000-000f00000001",
+    "sceneId": "0199c0de-0000-7000-8000-00060000000a",
+    "chapterNumber": 6,
+    "chapterTitle": "Listening to users",
+    "sceneNumber": 1,
+    "reason": "quotation_marks",
+    "why": "In quotation marks, with no source marker",
+    "excerpt": "The customer is not in the building",
+    "referenceId": null,
+    "referenceLabel": null,
+    "matchPercent": null,
+    "locator": null
+  },
+  {
+    "id": "0199c0de-0000-7000-8000-000f00000002",
+    "sceneId": "0199c0de-0000-7000-8000-00060000000d",
+    "chapterNumber": 8,
+    "chapterTitle": "What we did instead",
+    "sceneNumber": 1,
+    "reason": "source_match",
+    "why": "93% match with Whitlock, 2021, p. 112",
+    "excerpt": "Velocity measures activity, not progress.",
+    "referenceId": "0199c0de-0000-7000-8000-000d00000004",
+    "referenceLabel": "Whitlock, 2021",
+    "matchPercent": 93,
+    "locator": "p. 112"
+  }
+]

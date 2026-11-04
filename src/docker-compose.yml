@@ -1,0 +1,78 @@
+# From the repository root: docker compose -f src/docker-compose.yml up --build
+services:
+  codex:
+    build:
+      context: ..
+      dockerfile: src/Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - CODEX_DB_CONNECTION=Host=postgres;Port=5432;Database=codex;Username=postgres;Password=${POSTGRES_PASSWORD:-postgres}
+      # Console only until these are set; on the home stack Seq is
+      # http://seq:5341 on arrnet.
+      - CODEX_SEQ_URL=${CODEX_SEQ_URL:-}
+      - CODEX_SEQ_API_KEY=${CODEX_SEQ_API_KEY:-}
+      # Where users' AI keys are encrypted (docs/ai-integrations.md). Keep this volume: without the key ring the saved
+      # keys cannot be decrypted. Shared with the worker.
+      - CODEX_DATA_PROTECTION_DIR=/data/keys
+      # Local model endpoints (Ollama, LM Studio) are refused unless the server owner allows them:
+      # - CODEX_AI_ALLOW_LOCAL_ENDPOINTS=true
+      # First admin on first boot (docs/auth.md); remove both once they have signed in.
+      - CODEX_ADMIN_EMAIL=${CODEX_ADMIN_EMAIL:-}
+      - CODEX_ADMIN_PASSWORD=${CODEX_ADMIN_PASSWORD:-}
+      # Uploaded files, renditions and exports (IBlobStore), shared with the worker.
+      - CODEX_BLOB_ROOT=/data/blobs
+    volumes:
+      - codex-blobs:/data/blobs
+      - codex-keys:/data/keys
+
+  worker:
+    build:
+      context: ..
+      dockerfile: src/Dockerfile.worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - CODEX_DB_CONNECTION=Host=postgres;Port=5432;Database=codex;Username=postgres;Password=${POSTGRES_PASSWORD:-postgres}
+      - CODEX_BLOB_ROOT=/data/blobs
+      - CODEX_DATA_PROTECTION_DIR=/data/keys
+      # The web service applies migrations; this process only claims jobs.
+      - CODEX_DB_MIGRATE=false
+      # Claims render and export jobs and skips the web-only hosted services (CodexRole, WorkerRoleServices).
+      - CODEX_ROLE=worker
+      # Publishes events to the web host over pg_notify but does not listen (Codex.Application/Events).
+      - CODEX_EVENTS_LISTEN=false
+      - CODEX_SEQ_URL=${CODEX_SEQ_URL:-}
+      - CODEX_SEQ_API_KEY=${CODEX_SEQ_API_KEY:-}
+    volumes:
+      - codex-blobs:/data/blobs
+      - codex-keys:/data/keys
+
+  postgres:
+    image: postgres:18
+    # UTC everywhere (.claude/skills/utc-everywhere). The flags win over whatever an existing volume's
+    # postgresql.conf says; TZ is the container's own zone.
+    command: ["postgres", "-c", "timezone=UTC", "-c", "log_timezone=UTC"]
+    environment:
+      - TZ=UTC
+      - POSTGRES_DB=codex
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      # PostgreSQL 18 images keep the cluster under /var/lib/postgresql.
+      - codex-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d codex"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  codex-pgdata:
+  codex-blobs:
+  codex-keys:

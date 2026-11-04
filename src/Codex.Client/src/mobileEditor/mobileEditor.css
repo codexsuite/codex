@@ -1,0 +1,205 @@
+/* The mobile editor page (#35): one column, design tokens at touch density, no desktop chrome. */
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading);
+  overflow-wrap: anywhere;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.me-root {
+  padding: var(--space-1) 0 calc(var(--space-5) + env(safe-area-inset-bottom, 0px));
+}
+
+/* The card above a scene (design/screens/mobile.html .gut): a button that opens the scene sheet. */
+.me-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-sizing: border-box;
+  width: calc(100% - 2 * var(--space-3));
+  margin: 14px var(--space-3) 0;
+  padding: var(--space-2) 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  text-align: left;
+}
+
+.me-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+}
+
+.me-card-head b {
+  flex: none;
+  color: var(--color-text);
+  font-weight: var(--weight-semibold);
+}
+
+.me-card-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text);
+}
+
+.me-untitled {
+  font-style: italic;
+  color: var(--color-muted);
+}
+
+.me-card-words {
+  flex: none;
+  white-space: nowrap;
+}
+
+.me-card-summary {
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+.me-card-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.me-label {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+}
+
+.me-kchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: var(--radius-xs);
+  font-size: var(--text-xs);
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--cat) 14%, transparent);
+}
+
+.me-kchip i {
+  display: block;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 1.5px;
+  background: var(--cat);
+}
+
+/* The prose column. Type size and leading come from prose.css (--text-md, --leading-prose). */
+.me-prose {
+  padding: var(--space-1) 20px 0;
+}
+
+.me-prose .prose-editor {
+  min-height: calc(var(--row-height) * 1.5);
+}
+
+.me-prose .ProseMirror {
+  min-height: calc(var(--row-height) * 1.5);
+  padding-top: var(--space-2);
+}
+
+/* A beat or Codex addition line, read-only (design/screens/mobile.html .beat). */
+.me-beat {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+.me-beat b {
+  color: var(--color-accent);
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-xs);
+}
+
+.me-beat span {
+  flex: 1 1 12em;
+  min-width: 0;
+}
+
+.me-beat .me-beat-length {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* Menus open at the caret; keep them on the screen. */
+.prose-popup {
+  max-width: calc(100vw - 2 * var(--space-3));
+  max-height: 35vh;
+}
+
+.prose-popup-item {
+  min-height: var(--row-height);
+  display: flex;
+  align-items: center;
+}
+
+/* A hidden beat: one line, as on the desktop. */
+.me-beat-hidden {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--color-muted);
+}
+
+.me-beat-kind {
+  flex: none;
+  color: var(--color-accent);
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-xs);
+}
+
+.me-beat-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.me-beat-summary b {
+  color: var(--color-text);
+  font-weight: var(--weight-medium);
+}
+
+.me-beat-words {
+  flex: none;
+  white-space: nowrap;
+}

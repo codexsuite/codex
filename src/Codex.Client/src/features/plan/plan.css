@@ -1,0 +1,45 @@
+/* Plan lane styles that Tailwind utilities do not cover. */
+@keyframes plan-flash {
+  0% {
+    box-shadow: 0 0 0 0 var(--color-accent, #2563c9);
+    background-color: var(--color-accent-soft, #dae6fb);
+  }
+  60% {
+    box-shadow: 0 0 0 4px var(--color-accent, #2563c9);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.plan-flash {
+  animation: plan-flash 1.4s ease-out 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-flash {
+    animation-duration: 0.01s;
+  }
+}
+
+/* A linked Codex entry: tinted by its category colour (design/screens/plan.html .cx). */
+.plan-cx {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  height: 19px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--cat) 14%, transparent);
+  color: var(--color-text);
+  font-size: var(--text-2xs);
+  font-weight: 500;
+  line-height: 1.55;
+  white-space: nowrap;
+}
+.plan-cx > i {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 2px;
+  background: var(--cat);
+}

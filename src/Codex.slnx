@@ -1,0 +1,12 @@
+<Solution>
+  <Project Path="Codex.AcceptanceTests/Codex.AcceptanceTests.csproj" />
+  <Project Path="Codex.Application/Codex.Application.csproj" />
+  <Project Path="Codex.Contracts/Codex.Contracts.csproj" />
+  <Project Path="Codex.Core/Codex.Core.csproj" />
+  <Project Path="Codex.Mcp/Codex.Mcp.csproj" />
+  <Project Path="Codex.Mcp.Tests/Codex.Mcp.Tests.csproj" />
+  <Project Path="Codex.TestSupport/Codex.TestSupport.csproj" />
+  <Project Path="Codex.UnitTest/Codex.UnitTest.csproj" />
+  <Project Path="Codex.WebApi/Codex.WebApi.csproj" />
+  <Project Path="Codex.WebApi.Tests/Codex.WebApi.Tests.csproj" />
+</Solution>

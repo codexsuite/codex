@@ -1,0 +1,22 @@
+{
+  "items": [
+    {
+      "provider": "bibtex",
+      "key": "herodotus2003",
+      "details": {
+        "kind": "book",
+        "title": "The Histories",
+        "authorsText": "Herodotus",
+        "year": 2003,
+        "publisher": "Penguin Classics",
+        "edition": null,
+        "isbn": "9780140449082",
+        "doi": null,
+        "url": null,
+        "accessedOn": null,
+        "licence": "unknown",
+        "rightsHolder": null
+      }
+    }
+  ]
+}

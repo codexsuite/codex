@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Codex.Contracts\Codex.Contracts.csproj" />
+    <!-- Shared pure helpers (DisplayDate labels) used by queries that build DTOs. -->
+    <ProjectReference Include="..\Codex.Core\Codex.Core.csproj" />
+  </ItemGroup>
+
+  <!-- db/** ships inside the assembly, so the app and the test fixtures find the schema from any working directory. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\db\schema\*.sql" LogicalName="db/schema/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\db\migrations\*.sql" LogicalName="db/migrations/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\db\seed\*.sql" LogicalName="db/seed/%(Filename)%(Extension)" />
+  </ItemGroup>
+  <!-- prompts/** (prompt templates and models.json) ships inside the assembly too, for GET /api/prompts. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\prompts\**\*" Exclude="..\..\prompts\**\.gitkeep" LogicalName="prompts/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Agoda.IoC.NetCore" Version="1.1.144" />
+    <PackageReference Include="Anthropic" Version="12.58.0" />
+    <PackageReference Include="Dapper" Version="2.1.89" />
+    <PackageReference Include="dbup-postgresql" Version="7.0.1" />
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.5.1" />
+    <PackageReference Include="Markdig" Version="1.4.1" />
+    <PackageReference Include="ModelContextProtocol" Version="2.2.0" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.2.0" />
+    <PackageReference Include="Npgsql" Version="10.0.3" />
+    <PackageReference Include="SkiaSharp" Version="4.153.1" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.153.1" />
+    <PackageReference Include="YDotNet" Version="0.6.0" />
+  </ItemGroup>
+
+</Project>

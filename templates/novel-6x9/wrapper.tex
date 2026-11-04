@@ -1,0 +1,33 @@
+% Novel (6 x 9): a trade paperback book block on the memoir class, as a pandoc template. Trim and margins come from
+% the template's manifest through the assembler's metadata.
+\documentclass[11pt,twoside,openright]{memoir}
+\setstocksize{$page-height$in}{$page-width$in}
+\settrimmedsize{\stockheight}{\stockwidth}{*}
+\setlrmarginsandblock{$margin-inner$in}{$margin-outer$in}{*}
+\setulmarginsandblock{$margin-top$in}{$margin-bottom$in}{*}
+\checkandfixthelayout
+\usepackage{graphicx}
+\usepackage{lettrine}
+\usepackage{array,longtable,booktabs}
+% pandoc writes struck text as \st{...}; ulem's \sout, unlike soul's \st, can hold links, ^ and the other specials.
+\usepackage[normalem]{ulem}
+\newcommand{\st}[1]{\sout{#1}}
+\usepackage[hidelinks]{hyperref}
+\chapterstyle{bianchi}
+\pagestyle{ruled}
+\providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\makeatletter
+\newsavebox\pandoc@box
+\newcommand*\pandocbounded[1]{\sbox\pandoc@box{#1}%
+  \ifdim\wd\pandoc@box>\linewidth\resizebox{\linewidth}{!}{\usebox\pandoc@box}\else\usebox\pandoc@box\fi}
+\makeatother
+\newcommand{\CodexMissingFigure}[1]{\par\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{\centering\textit{Image not available}\\#1}}\par}
+\newcommand{\CodexBox}[2]{\par\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{\textbf{#1}\par #2}}\par}
+$if(title)$\title{$title$}$endif$
+$if(author)$\author{$for(author)$$author$$sep$ \and $endfor$}$endif$
+\date{}
+\begin{document}
+$if(title-page)$\maketitle$endif$
+$if(toc)$\tableofcontents*$endif$
+$body$
+\end{document}

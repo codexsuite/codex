@@ -1,0 +1,13 @@
+.git
+**/bin
+**/obj
+**/node_modules
+**/.pnpm-store
+**/TestResults
+artifacts
+design
+# Always built fresh by the frontend stage; a stale local build must not leak in.
+src/Codex.WebApi/wwwroot
+src/Codex.Client/playwright-report
+src/Codex.Client/test-results
+*:Zone.Identifier

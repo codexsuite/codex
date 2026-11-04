@@ -1,0 +1,22 @@
+{
+  "id": "0199a000-0000-7000-8000-000000000011",
+  "title": "Hollow Throne",
+  "authorName": "Joel Dickson",
+  "status": "revising",
+  "targetWords": 120000,
+  "wordCount": 3540,
+  "progressPercent": 3,
+  "seriesId": "0199a000-0000-7000-8000-000000000001",
+  "seriesName": "The Ashen Crown",
+  "seriesNumber": 3,
+  "seriesOptions": [{ "id": "0199a000-0000-7000-8000-000000000001", "name": "The Ashen Crown", "bookCount": 4 }],
+  "seriesOrder": [
+    { "id": "0199a000-0000-7000-8000-000000000010", "title": "Iron Litany", "number": 2, "status": "published" },
+    { "id": "0199a000-0000-7000-8000-000000000011", "title": "Hollow Throne", "number": 3, "status": "revising" }
+  ],
+  "styleGuide": "Close third person, past tense.",
+  "seriesGuide": null,
+  "archived": false,
+  "subtitle": "A novel of the iron age",
+  "description": null
+}

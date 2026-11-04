@@ -1,0 +1,64 @@
+{
+  "bookId": "0199a000-0000-7000-8000-000000000012",
+  "acts": [
+    {
+      "id": "0199a000-0000-7000-8000-0000000000a1",
+      "title": "",
+      "position": "a0",
+      "chapters": [
+        {
+          "id": "0199a000-0000-7000-8000-0000000000c0",
+          "number": null,
+          "title": "Preface",
+          "slug": "preface",
+          "position": "a0",
+          "archived": false,
+          "archivedSceneCount": 0,
+          "scenes": [],
+          "opener": null
+        },
+        {
+          "id": "0199a000-0000-7000-8000-0000000000c1",
+          "number": 1,
+          "title": "First",
+          "slug": "first",
+          "position": "a1",
+          "archived": false,
+          "archivedSceneCount": 1,
+          "scenes": [
+            {
+              "id": "0199a000-0000-7000-8000-0000000000e1",
+              "number": "1.1",
+              "title": "Opening",
+              "summary": "The **hook**.",
+              "status": "draft",
+              "position": "a0",
+              "words": 420,
+              "hasPendingDraft": true,
+              "labels": [
+                { "id": "0199a000-0000-7000-8000-0000000000b1", "name": "Flashback", "color": "category-amber" }
+              ],
+              "linkedEntries": [
+                { "id": "0199a000-0000-7000-8000-0000000000d1", "name": "Guyon" }
+              ]
+            },
+            {
+              "id": "0199a000-0000-7000-8000-0000000000e2",
+              "number": "1.2",
+              "title": null,
+              "summary": null,
+              "status": "outline",
+              "position": "a1",
+              "words": 0,
+              "hasPendingDraft": false,
+              "labels": [],
+              "linkedEntries": []
+            }
+          ],
+          "opener": null
+        }
+      ],
+      "opener": null
+    }
+  ]
+}

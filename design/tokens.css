@@ -1,0 +1,169 @@
+/*
+ * Codex design tokens: "Nord Frost" palette (deepened), compact density.
+ * Source of truth for colour, type, spacing and density. Mirrored in tokens.json.
+ * See design/README.md for usage rules.
+ *
+ * Theming:
+ *   - Light is the default.
+ *   - Follows the OS (prefers-color-scheme) unless overridden.
+ *   - Force a theme with <html data-theme="light"> or <html data-theme="dark">.
+ * Density:
+ *   - Compact is the default. <html data-density="comfortable"> loosens it.
+ *   - <html data-density="touch"> is the mobile app's (#35): larger type, 44px rows.
+ */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+:root {
+  color-scheme: light;
+
+  /* Colour: light */
+  --color-bg: #e8eef7;          /* page background */
+  --color-surface: #f7f9fd;     /* bars, cards, tables, inputs */
+  --color-surface-2: #dfe7f3;   /* table headers, hover, progress track */
+  --color-border: #cdd9ea;
+  --color-text: #1c2638;
+  --color-muted: #52627c;       /* secondary text, meta, icons */
+  --color-accent: #2563c9;      /* primary actions, focus, selection, progress */
+  --color-accent-fg: #ffffff;   /* text on accent */
+  --color-accent-soft: #dae6fb; /* selected/pressed backgrounds, row hover */
+  --color-ok: #3f8a3a;
+  --color-warn: #b7701b;
+  --color-info: #1d7fb8;
+  --color-danger: #c2353b;
+  --shadow-raised: 0 1px 2px rgb(16 24 40 / .08), 0 4px 12px -6px rgb(16 24 40 / .12);
+
+  /* Typography: Inter everywhere (sans titles) */
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace;
+  --text-2xs: 10.5px;  /* overlines, status labels */
+  --text-xs: 11px;     /* meta, table headers */
+  --text-sm: 12px;     /* controls, table cells */
+  --text-base: 13px;   /* body */
+  --text-md: 14px;     /* section headings */
+  --text-lg: 18px;     /* page / screen titles */
+  --leading: 1.45;
+  --leading-prose: 1.7;  /* manuscript text in Write */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* Shape & space (4px grid) */
+  --radius-xs: 3px;    /* book covers */
+  --radius-sm: 6px;    /* buttons, inputs */
+  --radius-md: 8px;    /* tables, panels */
+  --radius-lg: 10px;   /* app frame, modals */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+
+  /* Density: compact (default) */
+  --bar-height: 38px;      /* top app bar */
+  --control-height: 28px;  /* buttons, inputs, selects */
+  --row-height: 34px;      /* table / list rows */
+  --cover-width: 96px;     /* grid book cover width; height = 1.5x */
+  --shelf-gap: 14px;
+  --column-width: 244px;   /* Plan board chapter column */
+  --sidebar-width: 252px;  /* book workspace left sidebar */
+  --prose-width: 680px;    /* Write manuscript text column */
+  --gutter-width: 248px;   /* Write scene gutter (summary, labels, Codex) */
+  --minimap-width: 28px;   /* Write minimap */
+  --panel-width: 420px;    /* References detail panel */
+  --overlay-width: 920px;  /* Knowledge base entry window */
+
+  /* Codex category colours (#3): a separate palette from the UI colours above */
+  --category-blog: #a86200;
+  --category-law: #3b5bdb;
+  --category-story: #2f8a4c;
+  --category-research: #7c4dce;
+  --category-person: #c2416b;
+}
+
+:root[data-density="comfortable"] {
+  --bar-height: 44px;
+  --control-height: 32px;
+  --row-height: 40px;
+  --cover-width: 128px;
+  --shelf-gap: 18px;
+  --column-width: 288px;
+  --sidebar-width: 280px;
+  --prose-width: 720px;
+  --gutter-width: 280px;
+  --minimap-width: 32px;
+  --panel-width: 460px;
+  --overlay-width: 1000px;
+}
+
+/* Touch: the mobile app (#35). Larger type and 44px tap targets; layout widths are desktop-only */
+:root[data-density="touch"] {
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-md: 16px;
+  --text-lg: 22px;
+  --bar-height: 44px;
+  --control-height: 36px;  /* visual size; the hit area pads out to 44px */
+  --row-height: 44px;
+  --tab-height: 52px;      /* bottom tab bar, plus the home-indicator inset */
+  --cover-width: 30px;     /* list-row cover; height = 1.5x */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --color-bg: #171e2d;
+    --color-surface: #1f2839;
+    --color-surface-2: #29344a;
+    --color-border: #334058;
+    --color-text: #eef2f8;
+    --color-muted: #a0aec6;
+    --color-accent: #5cc8f0;
+    --color-accent-fg: #06192a;
+    --color-accent-soft: #163a57;
+    --color-ok: #9fdc8a;
+    --color-warn: #f4cf72;
+    --color-info: #7aa7f5;
+    --color-danger: #f08a8f;
+    --shadow-raised: 0 1px 2px rgb(0 0 0 / .4), 0 6px 16px -8px rgb(0 0 0 / .6);
+    --category-blog: #f2c063;
+    --category-law: #93a8ff;
+    --category-story: #8fd6a0;
+    --category-research: #c3a6ff;
+    --category-person: #f49ab8;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-bg: #171e2d;
+  --color-surface: #1f2839;
+  --color-surface-2: #29344a;
+  --color-border: #334058;
+  --color-text: #eef2f8;
+  --color-muted: #a0aec6;
+  --color-accent: #5cc8f0;
+  --color-accent-fg: #06192a;
+  --color-accent-soft: #163a57;
+  --color-ok: #9fdc8a;
+  --color-warn: #f4cf72;
+  --color-info: #7aa7f5;
+  --color-danger: #f08a8f;
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / .4), 0 6px 16px -8px rgb(0 0 0 / .6);
+  --category-blog: #f2c063;
+  --category-law: #93a8ff;
+  --category-story: #8fd6a0;
+  --category-research: #c3a6ff;
+  --category-person: #f49ab8;
+}
+
+/* Book status → colour. Use these, never pick a status colour ad hoc. */
+:root {
+  --status-planning: var(--color-info);
+  --status-draft: var(--color-muted);
+  --status-writing: var(--color-accent);
+  --status-revising: var(--color-warn);
+  --status-published: var(--color-ok);
+}

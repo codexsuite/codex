@@ -1,0 +1,482 @@
+{
+  "_comment": "Shared by the two prose readers: src/Codex.Client/src/prose/prose.readers.test.ts and src/Codex.UnitTest/Prose/ProseReaderCaseTests.cs. Rules in docs/prose-format.md, 'Reader rules'. blocks are top-level blocks (a known container is container, its blocks, container); embeds are kind:id in document order.",
+  "cases": [
+    {
+      "name": "ids-link-not-uuid",
+      "rule": "ids",
+      "markdown": "See [Goodhart](kb:goodhart), [Ch 5](chapter:5) and [a quote](ref:abc).\n",
+      "blocks": [
+        "paragraph"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "ids-directive-not-uuid",
+      "rule": "ids",
+      "markdown": "::beat{id=\"beat-1\"}\n\n::spell{kb=\"fireball\"}\n",
+      "blocks": [
+        "opaque",
+        "opaque"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "ids-uppercase-uuid",
+      "rule": "ids",
+      "markdown": "[Goodhart](kb:0199C0DE-0000-7000-8000-000B00000005) and ::not a directive\n",
+      "blocks": [
+        "paragraph"
+      ],
+      "embeds": [
+        "mention:0199c0de-0000-7000-8000-000b00000005"
+      ]
+    },
+    {
+      "name": "unknown-directive-ends-paragraph",
+      "rule": "unknown-directive",
+      "markdown": "First line\n::future{x=\"1\"} [Goodhart](kb:0199c0de-0000-7000-8000-000b00000005)\nlast line [Goodhart](kb:0199c0de-0000-7000-8000-000b00000005)\n",
+      "blocks": [
+        "paragraph",
+        "opaque",
+        "paragraph"
+      ],
+      "embeds": [
+        "mention:0199c0de-0000-7000-8000-000b00000005"
+      ]
+    },
+    {
+      "name": "known-directive-ends-paragraph",
+      "rule": "unknown-directive",
+      "markdown": "Text line\n::beat{id=\"0199c0de-0000-7000-8000-000700000003\"}\nMore text\n",
+      "blocks": [
+        "paragraph",
+        "directive",
+        "paragraph"
+      ],
+      "embeds": [
+        "beat:0199c0de-0000-7000-8000-000700000003"
+      ]
+    },
+    {
+      "name": "directive-with-trailing-space",
+      "rule": "unknown-directive",
+      "markdown": "::beat{id=\"0199c0de-0000-7000-8000-000700000003\"} \n",
+      "blocks": [
+        "opaque"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "fence-closes-on-bare-backticks-only",
+      "rule": "fence",
+      "markdown": "```js\ncode\n```js\n[Goodhart](kb:0199c0de-0000-7000-8000-000b00000005)\n```\n\nAfter [Goodhart](kb:0199c0de-0000-7000-8000-000b00000005).\n",
+      "blocks": [
+        "fence",
+        "paragraph"
+      ],
+      "embeds": [
+        "mention:0199c0de-0000-7000-8000-000b00000005"
+      ]
+    },
+    {
+      "name": "fence-unclosed-runs-to-end",
+      "rule": "fence",
+      "markdown": "Before.\n\n```\n[Goodhart](kb:0199c0de-0000-7000-8000-000b00000005)\n",
+      "blocks": [
+        "paragraph",
+        "fence"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "heading-needs-space",
+      "rule": "heading",
+      "markdown": "#tag [Goodhart](kb:0199c0de-0000-7000-8000-000b00000005)\n\n## Heading\nnext line\n\n####### seven\n",
+      "blocks": [
+        "paragraph",
+        "heading",
+        "paragraph",
+        "paragraph"
+      ],
+      "embeds": [
+        "mention:0199c0de-0000-7000-8000-000b00000005"
+      ]
+    },
+    {
+      "name": "quote-ends-at-unquoted-line",
+      "rule": "heading",
+      "markdown": "> quoted\nplain\n",
+      "blocks": [
+        "quote",
+        "paragraph"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "list-kinds-and-lazy-lines",
+      "rule": "heading",
+      "markdown": "- a\n  indented\n1. b\nlazy\n",
+      "blocks": [
+        "list",
+        "list",
+        "paragraph"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "paragraph-absorbs-block-starts",
+      "rule": "heading",
+      "markdown": "Text\n# not a heading\n> not a quote\n- not a list\n",
+      "blocks": [
+        "paragraph"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "known-container",
+      "rule": "container",
+      "markdown": ":::aside\n[Goodhart](kb:0199c0de-0000-7000-8000-000b00000005)\n:::\n",
+      "blocks": [
+        "container",
+        "paragraph",
+        "container"
+      ],
+      "embeds": [
+        "mention:0199c0de-0000-7000-8000-000b00000005"
+      ]
+    },
+    {
+      "name": "unknown-container-is-opaque",
+      "rule": "container",
+      "markdown": ":::mystery\n[Goodhart](kb:0199c0de-0000-7000-8000-000b00000005)\n:::\n",
+      "blocks": [
+        "opaque"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "title-only-on-sidebar",
+      "rule": "container",
+      "markdown": ":::aside{title=\"x\"}\n[Goodhart](kb:0199c0de-0000-7000-8000-000b00000005)\n:::\n",
+      "blocks": [
+        "opaque"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "unclosed-container-is-opaque",
+      "rule": "container",
+      "markdown": ":::aside\n[Goodhart](kb:0199c0de-0000-7000-8000-000b00000005)\n\n",
+      "blocks": [
+        "opaque"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "stray-container-close",
+      "rule": "container",
+      "markdown": "Text\n\n:::\n",
+      "blocks": [
+        "paragraph",
+        "opaque"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "link-text-with-unescaped-bracket",
+      "rule": "link-text",
+      "markdown": "[a [b] c](kb:0199c0de-0000-7000-8000-000b00000005) and [a \\[b\\] c](kb:0199c0de-0000-7000-8000-000b00000005)\n",
+      "blocks": [
+        "paragraph"
+      ],
+      "embeds": [
+        "mention:0199c0de-0000-7000-8000-000b00000005"
+      ]
+    },
+    {
+      "name": "link-in-code-span",
+      "rule": "link-text",
+      "markdown": "`[Goodhart](kb:0199c0de-0000-7000-8000-000b00000005)` and [Goodhart](kb:0199c0de-0000-7000-8000-000b00000005)\n",
+      "blocks": [
+        "paragraph"
+      ],
+      "embeds": [
+        "mention:0199c0de-0000-7000-8000-000b00000005"
+      ]
+    },
+    {
+      "name": "table-pipe",
+      "rule": "table",
+      "markdown": "Before.\n\n| A | B |\n|:---|---:|\n| [Goodhart](kb:0199c0de-0000-7000-8000-000b00000005) | [quote](ref:0199c0de-0000-7000-8000-000e00000001) |\n\nAfter.\n",
+      "blocks": [
+        "paragraph",
+        "table",
+        "paragraph"
+      ],
+      "embeds": [
+        "mention:0199c0de-0000-7000-8000-000b00000005",
+        "ref:0199c0de-0000-7000-8000-000e00000001"
+      ]
+    },
+    {
+      "name": "table-needs-delimiter-row",
+      "rule": "table",
+      "markdown": "| not | a table |\n| still | text |\n",
+      "blocks": [
+        "paragraph"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "table-starts-a-block-only",
+      "rule": "table",
+      "markdown": "A line of text\n| A | B |\n|---|---|\n",
+      "blocks": [
+        "paragraph"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "rule-own-block",
+      "rule": "rule",
+      "markdown": "One.\n\n---\n\nTwo.\n\n***\n",
+      "blocks": [
+        "paragraph",
+        "rule",
+        "paragraph",
+        "rule"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "rule-under-text-is-text",
+      "rule": "rule",
+      "markdown": "One.\n---\n",
+      "blocks": [
+        "paragraph"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "html-comment-opaque",
+      "rule": "html-comment",
+      "markdown": "<!-- note [Goodhart](kb:0199c0de-0000-7000-8000-000b00000005)\nsecond line -->\n\nText.\n",
+      "blocks": [
+        "opaque",
+        "paragraph"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "inline-latex-in-paragraph",
+      "rule": "inline-latex",
+      "markdown": "`\\DndDropCapLine{F}`{=latex}ighters and `code`.\n",
+      "blocks": [
+        "paragraph"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "rule-exact-line-only",
+      "rule": "rule",
+      "markdown": "One.\n\n----\n\n___\n",
+      "blocks": [
+        "paragraph",
+        "paragraph",
+        "rule"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "html-comment-unclosed-runs-to-end",
+      "rule": "html-comment",
+      "markdown": "<!-- never closed\n\n[Goodhart](kb:0199c0de-0000-7000-8000-000b00000005)\n",
+      "blocks": [
+        "opaque"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "table-escaped-backslash-then-pipe",
+      "rule": "table",
+      "markdown": "| `\\\\|v` | b |\n| --- | --- |\n",
+      "blocks": [
+        "table"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "list-item-holds-table-after-blank",
+      "rule": "table",
+      "markdown": "- a\n\n  | x |\n  | --- |\n\nAfter.\n",
+      "blocks": [
+        "list",
+        "paragraph"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "list-item-holds-rule-after-blank",
+      "rule": "rule",
+      "markdown": "- a\n\n  ---\n",
+      "blocks": [
+        "list"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "list-item-holds-second-nested-list-after-blank",
+      "rule": "list",
+      "markdown": "- a\n  1. b\n\n  - c\n",
+      "blocks": [
+        "list"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "list-unindented-after-blank-ends-list",
+      "rule": "list",
+      "markdown": "- a\n\nb\n",
+      "blocks": [
+        "list",
+        "paragraph"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "html-comment-in-quote-is-opaque",
+      "rule": "html-comment",
+      "markdown": "> <!-- [x](kb:0199c0de-0000-7000-8000-000b00000005) -->\n",
+      "blocks": [
+        "quote"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "html-comment-in-list-item-is-opaque",
+      "rule": "html-comment",
+      "markdown": "- a\n\n  <!-- [x](ref:0199c0de-0000-7000-8000-000e00000001) -->\n",
+      "blocks": [
+        "list"
+      ],
+      "embeds": []
+    },
+    {
+      "name": "html-comment-mid-paragraph-is-text",
+      "rule": "html-comment",
+      "markdown": "> a <!-- [x](kb:0199c0de-0000-7000-8000-000b00000005) -->\n",
+      "blocks": [
+        "quote"
+      ],
+      "embeds": [
+        "mention:0199c0de-0000-7000-8000-000b00000005"
+      ]
+    }
+  ],
+  "corpus": [
+    {
+      "file": "01-paragraphs-and-marks.md",
+      "embeds": []
+    },
+    {
+      "file": "02-beats.md",
+      "embeds": [
+        "beat:0199c0de-0000-7000-8000-000700000001",
+        "beat:0199c0de-0000-7000-8000-000700000003",
+        "beat:0199c0de-0000-7000-8000-000700000006"
+      ]
+    },
+    {
+      "file": "03-kb-addition.md",
+      "embeds": [
+        "kb-addition:0199c0de-0000-7000-8000-000800000001",
+        "mention:0199c0de-0000-7000-8000-000b00000005"
+      ]
+    },
+    {
+      "file": "04-mentions-and-links.md",
+      "embeds": [
+        "mention:0199c0de-0000-7000-8000-000b0000000b",
+        "mention:0199c0de-0000-7000-8000-000b0000000b",
+        "mention:0199c0de-0000-7000-8000-000b00000004",
+        "mention:0199c0de-0000-7000-8000-000b00000002",
+        "mention:0199c0de-0000-7000-8000-000b00000005",
+        "mention:0199c0de-0000-7000-8000-000b00000004",
+        "mention:0199c0de-0000-7000-8000-000b00000004",
+        "mention:0199c0de-0000-7000-8000-000b00000005",
+        "chapter:0199c0de-0000-7000-8000-000500000005",
+        "chapter:0199c0de-0000-7000-8000-000500000007",
+        "chapter:0199c0de-0000-7000-8000-000500000002"
+      ]
+    },
+    {
+      "file": "05-ref-marks.md",
+      "embeds": [
+        "ref:0199c0de-0000-7000-8000-000e00000001",
+        "ref:0199c0de-0000-7000-8000-000e00000002",
+        "ref:0199c0de-0000-7000-8000-000e0000000c",
+        "ref:0199c0de-0000-7000-8000-000e00000007",
+        "ref:0199c0de-0000-7000-8000-000e00000007",
+        "ref:0199c0de-0000-7000-8000-000e0000000b",
+        "ref:0199c0de-0000-7000-8000-000e0000000f"
+      ]
+    },
+    {
+      "file": "06-quotes-lists-headings.md",
+      "embeds": [
+        "mention:0199c0de-0000-7000-8000-000b00000004"
+      ]
+    },
+    {
+      "file": "07-print-directives.md",
+      "embeds": [
+        "figure:0199c0de-0000-7000-8000-001200000001",
+        "spell:0199c0de-0000-7000-8000-000b0000000d",
+        "statblock:0199c0de-0000-7000-8000-000b0000000f",
+        "spell:0199c0de-0000-7000-8000-000b0000000d"
+      ]
+    },
+    {
+      "file": "08-containers.md",
+      "embeds": [
+        "mention:0199c0de-0000-7000-8000-000b0000000d"
+      ]
+    },
+    {
+      "file": "09-raw-latex.md",
+      "embeds": []
+    },
+    {
+      "file": "10-unicode.md",
+      "embeds": [
+        "mention:0199c0de-0000-7000-8000-000b0000000f"
+      ]
+    },
+    {
+      "file": "11-edge-cases.md",
+      "embeds": [
+        "beat:0199c0de-0000-7000-8000-000700000001",
+        "kb-addition:0199c0de-0000-7000-8000-000800000001"
+      ]
+    },
+    {
+      "file": "12-empty.md",
+      "embeds": []
+    },
+    {
+      "file": "13-tables.md",
+      "embeds": [
+        "mention:0199c0de-0000-7000-8000-000b00000005",
+        "ref:0199c0de-0000-7000-8000-000e00000001"
+      ]
+    },
+    {
+      "file": "14-more-markdown.md",
+      "embeds": []
+    },
+    {
+      "file": "15-inline-latex.md",
+      "embeds": []
+    }
+  ]
+}

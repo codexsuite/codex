@@ -1,0 +1,77 @@
+# Code style, the minimal set matching .claude/skills/csharp-code-style: _camelCase
+# private fields, UPPER_CASE constants, file-scoped namespaces, one type per file.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+
+[*.{csproj,props,targets,slnx,xml,json,jsonl,yml,yaml}]
+indent_size = 2
+
+# The client. Prettier reads this file, so these must agree with .prettierrc.
+[*.{ts,tsx,js,jsx,mjs,cjs,css,html}]
+indent_size = 2
+
+[.prettierrc]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.cs]
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_style_var_for_built_in_types = true:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = true:suggestion
+csharp_new_line_before_open_brace = all
+csharp_prefer_braces = true:suggestion
+dotnet_sort_system_directives_first = true
+
+dotnet_naming_rule.private_fields_underscore.symbols = private_fields
+dotnet_naming_rule.private_fields_underscore.style = underscore_camel
+dotnet_naming_rule.private_fields_underscore.severity = suggestion
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_style.underscore_camel.required_prefix = _
+dotnet_naming_style.underscore_camel.capitalization = camel_case
+
+dotnet_naming_rule.constants_upper.symbols = constants
+dotnet_naming_rule.constants_upper.style = upper_case
+dotnet_naming_rule.constants_upper.severity = suggestion
+dotnet_naming_symbols.constants.applicable_kinds = field
+dotnet_naming_symbols.constants.required_modifiers = const
+dotnet_naming_style.upper_case.capitalization = all_upper
+dotnet_naming_style.upper_case.word_separator = _
+
+# Analyzer tuning (SonarAnalyzer.CSharp + Agoda.Analyzers). Keep this list short; justify each line.
+# AG0051: fixed dates on FakeTimeProvider are the required pattern; its advice (DateTime.UtcNow) is banned by RS0030.
+dotnet_diagnostic.AG0051.severity = none
+# S1135: a plain `TODO:` comment is how temporary behaviour is marked (and listed in the slice report); the rule would fail the build on each.
+dotnet_diagnostic.S1135.severity = none
+
+[src/Codex.WebApi.Tests/**.cs]
+# AG0010: fixtures inherit ApiFixture on purpose. It owns the cloned database, the running app and the
+# HTTP client, so each fixture states only what it tests.
+dotnet_diagnostic.AG0010.severity = none
+
+[src/Codex.AcceptanceTests/**.cs]
+# AG0010: fixtures inherit AcceptanceFixture on purpose. It owns the cloned database, the running app and the
+# browser context, so each fixture states only the journey it tests.
+dotnet_diagnostic.AG0010.severity = none
+# AG0012: the assertions are Playwright's Expect(...), which retries until the page settles; the rule
+# only recognises NUnit/Shouldly asserts and would push these onto non-retrying ones.
+dotnet_diagnostic.AG0012.severity = none
+
+[src/Codex.UnitTest/Contracts/**.cs]
+# AG0010: a contract test is a base class in Codex.TestSupport/Contracts that every implementation's fixture
+# inherits, so one set of tests pins every implementation of the interface.
+dotnet_diagnostic.AG0010.severity = none
+
+[src/Codex.TestSupport/**.cs]
+# AG0047: the rule enforces Agoda's internal Docker Hub mirror prefix; this repo pulls postgres:18 from Docker Hub directly.
+dotnet_diagnostic.AG0047.severity = none

@@ -1,0 +1,64 @@
+# The background worker image: the app plus the print toolchain (pandoc, Tectonic, codex-sandbox) for render jobs.
+# Build context is the repository root:  docker build -f src/Dockerfile.worker -t codex-worker .
+# It runs the same app as the web image (its hosted job workers claim queued rows with FOR UPDATE SKIP LOCKED), so
+# compose starts it with CODEX_DB_MIGRATE=false and lets the web service own migrations. Versions match
+# scripts/install-print-tools.sh, which CI uses.
+
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG SOURCE_COMMIT=unknown
+WORKDIR /source
+# Project files first: the restore layer only changes when they do.
+COPY src/Codex.slnx src/Directory.Build.props src/
+COPY src/Codex.WebApi/Codex.WebApi.csproj src/Codex.WebApi/
+COPY src/Codex.Application/Codex.Application.csproj src/Codex.Application/
+COPY src/Codex.Core/Codex.Core.csproj src/Codex.Core/
+COPY src/Codex.Contracts/Codex.Contracts.csproj src/Codex.Contracts/
+# The packages stay in this layer, not a cache mount: CI's layer cache keeps layers but not mounts, so a cached restore
+# would leave the publish below with no packages.
+RUN dotnet restore src/Codex.WebApi -r linux-x64
+COPY src/ ./src/
+COPY db/ ./db/
+COPY prompts/ ./prompts/
+RUN dotnet publish src/Codex.WebApi -c Release -r linux-x64 --self-contained false --no-restore -o /app -p:SourceRevisionId=$SOURCE_COMMIT -p:RunAnalyzers=false
+
+# codex-sandbox (src/sandbox/codex-sandbox.c): Landlock and rlimits around every pandoc and Tectonic run.
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS sandbox
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev && rm -rf /var/lib/apt/lists/*
+COPY src/sandbox/codex-sandbox.c /src/codex-sandbox.c
+RUN gcc -O2 -static -Wall -Wextra -o /codex-sandbox /src/codex-sandbox.c
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
+# TECTONIC_VERSION: a release of https://github.com/tectonic-typesetting/tectonic (x86_64 musl build).
+# PANDOC_VERSION: a release of https://github.com/jgm/pandoc (static linux-amd64 build), not Debian's older package.
+ARG TECTONIC_VERSION=0.15.0
+ARG TECTONIC_SHA256=dfb82876f2986862996e564fa507a9e576e0c1e3bee63c2c1bd677c2543e6407
+ARG PANDOC_VERSION=3.12
+ARG PANDOC_SHA256=67d7d011fed8c8543306022b985b9b2499ab9b74818df91d8727c7e9ebc5ba06
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl fontconfig \
+    && curl -fsSL -o /tmp/tectonic.tgz "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40${TECTONIC_VERSION}/tectonic-${TECTONIC_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+    && echo "${TECTONIC_SHA256}  /tmp/tectonic.tgz" | sha256sum -c - \
+    && tar -xzf /tmp/tectonic.tgz -C /usr/local/bin tectonic \
+    && curl -fsSL -o /tmp/pandoc.tgz "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-linux-amd64.tar.gz" \
+    && echo "${PANDOC_SHA256}  /tmp/pandoc.tgz" | sha256sum -c - \
+    && tar -xzf /tmp/pandoc.tgz -C /tmp \
+    && install -m 0755 "/tmp/pandoc-${PANDOC_VERSION}/bin/pandoc" /usr/local/bin/pandoc \
+    && rm -rf /tmp/tectonic.tgz /tmp/pandoc.tgz "/tmp/pandoc-${PANDOC_VERSION}" /var/lib/apt/lists/*
+COPY --from=sandbox /codex-sandbox /usr/local/bin/codex-sandbox
+
+WORKDIR /app
+COPY --from=build /app .
+# Built-in layout template packages; CODEX_TEMPLATES_ROOT defaults to ../../templates from /app, i.e. /templates.
+COPY templates/ /templates/
+# Tectonic's bundle cache, filled at build time with everything the built-in templates use (outside the sandbox, from
+# this repo's own samples). Render jobs mount it read-only with --only-cached, so a compile has no network.
+COPY scripts/warm-tectonic-cache.sh /scripts/warm-tectonic-cache.sh
+ENV CODEX_TECTONIC_CACHE=/var/cache/tectonic
+RUN /scripts/warm-tectonic-cache.sh /var/cache/tectonic && chmod -R a+rX /var/cache/tectonic
+# CODEX_BLOB_ROOT and CODEX_DATA_PROTECTION_DIR in compose: owned by the app user, so the named volumes mounted here start writable.
+RUN mkdir -p /data/blobs /data/keys && chown $APP_UID /data/blobs /data/keys
+
+USER $APP_UID
+# UTC everywhere (.claude/skills/utc-everywhere): the process's local zone, and every Postgres session's TimeZone.
+ENV TZ=UTC PGTZ=UTC
+ENTRYPOINT ["dotnet", "Codex.WebApi.dll"]

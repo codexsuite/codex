@@ -1,0 +1,27 @@
+[
+  {
+    "type": "proseSaved",
+    "bookId": "0199a000-0000-7000-8000-000000000012",
+    "sceneId": "0199a000-0000-7000-8000-0000000000a1",
+    "version": 4,
+    "origin": "editor",
+    "clientId": "tab-0199a000"
+  },
+  { "type": "structureChanged", "bookId": "0199a000-0000-7000-8000-000000000012", "kind": "chapter" },
+  {
+    "type": "jobProgress",
+    "bookId": "0199a000-0000-7000-8000-000000000012",
+    "jobId": "0199a000-0000-7000-8000-0000000000b1",
+    "kind": "export",
+    "percent": 40,
+    "state": "running",
+    "message": null
+  },
+  { "type": "bookMetaChanged", "bookId": "0199a000-0000-7000-8000-000000000012", "fields": ["title", "status"] },
+  {
+    "type": "accessChanged",
+    "bookId": "0199a000-0000-7000-8000-000000000012",
+    "userId": "0199a000-0000-7000-8000-0000000000c1",
+    "role": null
+  }
+]

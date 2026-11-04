@@ -1,0 +1,33 @@
+{
+  "slug": "novel-6x9",
+  "name": "Novel (6 x 9)",
+  "version": "1.0.0",
+  "engine": "tectonic",
+  "trims": ["6x9", "5.5x8.5"],
+  "page": {
+    "columns": 1,
+    "columnGap": 0,
+    "margins": { "top": 0.75, "bottom": 0.75, "inner": 0.875, "outer": 0.625 }
+  },
+  "citations": "footnote",
+  "rawLatex": true,
+  "filters": ["filters/codex.lua"],
+  "options": {
+    "drop-caps": { "type": "boolean", "default": false, "label": "Drop cap on each chapter's first paragraph" },
+    "toc": { "type": "boolean", "default": false, "label": "Table of contents" }
+  },
+  "directives": {
+    "readaloud": "indented quotation",
+    "sidebar": "framed box with its title",
+    "aside": "framed box",
+    "pagebreak": "\\clearpage",
+    "scene-break": "centred asterism",
+    "figure": "text-width figure"
+  },
+  "files": {
+    "wrapper.tex": { "description": "memoir trade paperback wrapper (pandoc template)" },
+    "filters/codex.lua": { "description": "Codex directives for the novel layout" },
+    "preview.css": { "description": "Preview styles" },
+    "sample.md": { "description": "Picker thumbnail source" }
+  }
+}

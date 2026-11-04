@@ -1,0 +1,32 @@
+// The recording sheet's test ids (prefix mobile-record-).
+const sheet = 'mobile-record';
+
+export const recordTestIds = {
+  sheet: `${sheet}-sheet`,
+  target: `${sheet}-target`,
+  timer: `${sheet}-timer`,
+  noModel: `${sheet}-no-model`,
+  noModelAction: `${sheet}-no-model-action`,
+  micDenied: `${sheet}-mic-denied`,
+  recordFailure: `${sheet}-failure`,
+  record: `${sheet}-record`,
+  pause: `${sheet}-pause`,
+  resume: `${sheet}-resume`,
+  stop: `${sheet}-stop`,
+  discard: `${sheet}-discard`,
+  transcribing: `${sheet}-transcribing`,
+  transcribeError: `${sheet}-transcribe-error`,
+  retry: `${sheet}-retry`,
+  transcript: `${sheet}-transcript`,
+  modeNewEntry: `${sheet}-mode-new-entry`,
+  modeAddToAnEntry: `${sheet}-mode-add-to-an-entry`,
+  modeAddToEntry: `${sheet}-mode-add-to-entry`,
+  modeKeepAsNote: `${sheet}-mode-keep-as-note`,
+  entryName: `${sheet}-entry-name`,
+  category: (id: string) => `${sheet}-category-${id}`,
+  pickEntry: (id: string) => `${sheet}-pick-entry-${id}`,
+  kbLoading: `${sheet}-kb-loading`,
+  kbError: `${sheet}-kb-error`,
+  save: `${sheet}-save`,
+  saveError: `${sheet}-save-error`,
+} as const;

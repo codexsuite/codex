@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="en" data-density="touch">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Codex · Mobile (reference)</title>
+<!--
+  Reference implementation of the mobile app screens (#35 slice M2, recording from #33): Library, Plan (outline),
+  Write, Knowledge base and Book settings, with the bottom tab bar, plus the drill-ins and sheets they open.
+  Open directly in a browser. Uses ../tokens.css only, at data-density="touch"; no build step.
+  Every phone is a working prototype: tabs, books, scenes, entries, the book switcher and Record all respond.
+  Device chrome (status bar, home indicator, the system keyboard) is drawn for context, not part of the design.
+  The theme switch in the header is a review aid.
+-->
+<link rel="stylesheet" href="../tokens.css">
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--color-bg); color: var(--color-text); font: var(--weight-regular) var(--text-base)/var(--leading) var(--font-sans); -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* ---------- Page (review surface, desktop tokens) ---------- */
+.page { max-width: 1440px; margin: 0 auto; padding: 24px 16px 64px; }
+.top { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end; justify-content: space-between; margin-bottom: 20px; }
+.top h1 { font-size: 22px; font-weight: var(--weight-semibold); margin: 0 0 4px; letter-spacing: -.01em; }
+.top p { margin: 0; color: var(--color-muted); max-width: 760px; }
+.top a { color: var(--color-accent); }
+.ctrls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.ctrls b { font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: .06em; color: var(--color-muted); font-weight: var(--weight-semibold); }
+.seg { display: inline-flex; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 2px; }
+.seg button { height: 24px; padding: 0 10px; border-radius: 4px; font-size: var(--text-sm); color: var(--color-muted); }
+.seg button[aria-pressed="true"] { background: var(--color-accent-soft); color: var(--color-text); font-weight: var(--weight-medium); }
+h2.sec { font-size: var(--text-md); font-weight: var(--weight-semibold); margin: 36px 0 4px; }
+p.sec-d { margin: 0 0 14px; color: var(--color-muted); max-width: 820px; }
+.card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.scope { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 12px; }
+.scope .card { padding: 12px 14px; }
+.scope h3 { margin: 0 0 8px; font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 11px; background: var(--color-surface-2); font-size: var(--text-xs); color: var(--color-text); }
+.chip.in { background: var(--color-accent-soft); }
+.chip small { color: var(--color-muted); font-size: var(--text-2xs); }
+
+
+/* Phone grid */
+.phones { display: flex; flex-wrap: wrap; gap: 28px 24px; }
+.ph-wrap { display: flex; flex-direction: column; gap: 8px; width: 390px; max-width: 100%; }
+.ph-cap { display: flex; gap: 8px; align-items: baseline; }
+.ph-cap b { font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.ph-cap span { font-size: var(--text-xs); color: var(--color-muted); }
+.ph-note { font-size: var(--text-xs); color: var(--color-muted); margin: 0; }
+
+
+
+/* ================= Phone ================= */
+.phone {
+  width: 390px; max-width: 100%; height: 800px; border-radius: 46px; padding: 10px; background: #0b0f17;
+  box-shadow: 0 0 0 1px #2a3346, 0 20px 50px -24px rgb(0 0 0 / .45); flex: none;
+}
+.scr { position: relative; height: 100%; border-radius: 36px; overflow: hidden; background: var(--color-bg); display: flex; flex-direction: column; font-size: var(--text-base); }
+.sb { height: 44px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 26px 0 30px; font-size: 14px; font-weight: var(--weight-semibold); background: var(--color-surface); position: relative; }
+.sb .isl { position: absolute; left: 50%; top: 9px; transform: translateX(-50%); width: 104px; height: 28px; border-radius: 14px; background: #000; }
+.sb .ind { display: flex; gap: 5px; align-items: center; }
+.sb .ind i { display: block; background: currentColor; border-radius: 1px; }
+.home { height: 22px; flex: none; display: flex; align-items: center; justify-content: center; background: var(--color-surface); }
+.home::after { content: ""; width: 128px; height: 5px; border-radius: 3px; background: var(--color-text); opacity: .85; }
+.home.bare { background: var(--color-bg); }
+
+/* Top bar */
+.tb { height: var(--bar-height); flex: none; display: flex; align-items: center; gap: 6px; padding: 0 8px; background: var(--color-surface); border-bottom: 1px solid var(--color-border); }
+.ib { width: 36px; height: 36px; display: grid; place-items: center; border-radius: var(--radius-sm); color: var(--color-muted); flex: none; }
+.ib:active { background: var(--color-accent-soft); }
+.ib svg.i { width: 20px; height: 20px; }
+.ib.acc { color: var(--color-accent); }
+.bk { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; text-align: left; }
+.bk .mc { width: 22px; height: 33px; border-radius: var(--radius-xs); flex: none; }
+.bk .t { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.bk .t b { font-size: var(--text-md); font-weight: var(--weight-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bk .t span { font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bk .cv { color: var(--color-muted); }
+.tb .ttl { flex: 1; text-align: center; font-weight: var(--weight-semibold); font-size: var(--text-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.back { display: flex; align-items: center; gap: 0; color: var(--color-accent); font-size: var(--text-base); height: 36px; padding-right: 6px; flex: none; }
+.back svg.i { width: 22px; height: 22px; }
+.save { width: 8px; height: 8px; border-radius: 50%; background: var(--color-ok); margin: 0 6px; flex: none; }
+
+/* Sub bar (screen toolbar under the top bar) */
+.sub { flex: none; display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: var(--color-surface); border-bottom: 1px solid var(--color-border); font-size: var(--text-sm); }
+.pill { display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 10px; border-radius: 15px; background: var(--color-surface-2); font-size: var(--text-sm); font-weight: var(--weight-medium); white-space: nowrap; }
+.pill svg.i { width: 14px; height: 14px; color: var(--color-muted); }
+.pill.on { background: var(--color-accent-soft); color: var(--color-text); }
+.sub .meta { color: var(--color-muted); font-size: var(--text-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+.search { flex: 1; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: 18px; background: var(--color-surface-2); color: var(--color-muted); font-size: var(--text-base); min-width: 0; }
+.search svg.i { width: 16px; height: 16px; }
+.hscroll { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 8px 12px; background: var(--color-surface); border-bottom: 1px solid var(--color-border); flex: none; }
+.hscroll::-webkit-scrollbar { display: none; }
+
+/* Content */
+.ct { flex: 1; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
+.lt { padding: 14px 16px 6px; display: flex; align-items: center; gap: 8px; }
+.lt h1 { margin: 0; font-size: 28px; font-weight: var(--weight-semibold); letter-spacing: -.02em; flex: 1; }
+.grp-h { display: flex; align-items: center; gap: 8px; padding: 14px 16px 6px; font-size: var(--text-2xs); font-weight: var(--weight-semibold); letter-spacing: .06em; text-transform: uppercase; color: var(--color-muted); }
+.grp-h .sp { flex: 1; }
+.grp-h .cnt { text-transform: none; letter-spacing: 0; font-weight: var(--weight-regular); }
+.list { background: var(--color-surface); border-top: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
+.list.inset { margin: 0 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
+.row { display: flex; align-items: center; gap: 12px; min-height: var(--row-height); padding: 8px 12px 8px 16px; width: 100%; text-align: left; position: relative; }
+.row + .row::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; border-top: 1px solid var(--color-border); }
+.row.ind + .row.ind::before { left: 58px; }
+.row:active { background: var(--color-accent-soft); }
+.row .bd { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.row .bd .ov { font-size: var(--text-2xs); color: var(--color-muted); font-weight: var(--weight-medium); letter-spacing: .02em; }
+.row .bd .tt { font-weight: var(--weight-medium); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .bd .mt { font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .bd .sm2 { font-size: var(--text-sm); color: var(--color-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.row .end { display: flex; align-items: center; gap: 6px; color: var(--color-muted); font-size: var(--text-sm); flex: none; }
+.row .end svg.i { width: 16px; height: 16px; }
+.row .val { color: var(--color-muted); font-size: var(--text-base); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
+.cover { width: var(--cover-width); height: calc(var(--cover-width) * 1.5); border-radius: var(--radius-xs); flex: none; box-shadow: 0 1px 2px rgb(0 0 0 / .2); }
+.prog { height: 3px; border-radius: 2px; background: var(--color-surface-2); overflow: hidden; margin-top: 3px; }
+.prog i { display: block; height: 100%; background: var(--color-accent); border-radius: 2px; }
+.st { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; }
+.st i { width: 6px; height: 6px; border-radius: 50%; display: block; }
+.stack { position: relative; width: 44px; height: 50px; flex: none; }
+.stack .cover { position: absolute; width: 28px; height: 42px; }
+.stack .n { position: absolute; right: -2px; bottom: -2px; font-size: 10px; font-weight: var(--weight-semibold); background: var(--color-text); color: var(--color-surface); border-radius: 8px; padding: 0 5px; line-height: 15px; }
+
+/* Continue card (Library) */
+.cont { margin: 6px 12px 0; padding: 12px; display: flex; gap: 12px; align-items: center; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); width: calc(100% - 24px); text-align: left; }
+.cont .cover { width: 44px; height: 66px; }
+.cont .bd { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.cont .ov { font-size: var(--text-2xs); color: var(--color-accent); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .06em; }
+.cont .tt { font-weight: var(--weight-semibold); font-size: var(--text-md); }
+.cont .mt { font-size: var(--text-xs); color: var(--color-muted); }
+.go { width: 36px; height: 36px; border-radius: 50%; background: var(--color-accent); color: var(--color-accent-fg); display: grid; place-items: center; flex: none; }
+.go svg.i { width: 18px; height: 18px; }
+
+/* Plan outline */
+.act { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; height: 40px; background: var(--color-surface-2); border-bottom: 1px solid var(--color-border); width: 100%; text-align: left; }
+.act .cv { color: var(--color-muted); }
+.act .cv svg.i { width: 16px; height: 16px; transition: transform .15s; }
+.act.closed .cv svg.i { transform: rotate(-90deg); }
+.act b { font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.act .ov { font-size: var(--text-2xs); font-weight: var(--weight-semibold); color: var(--color-muted); letter-spacing: .06em; text-transform: uppercase; }
+.act .mt { margin-left: auto; font-size: var(--text-xs); color: var(--color-muted); }
+.chap { display: flex; align-items: baseline; gap: 8px; padding: 12px 16px 4px; }
+.chap .no { font-size: var(--text-2xs); font-weight: var(--weight-semibold); color: var(--color-muted); letter-spacing: .06em; text-transform: uppercase; flex: none; }
+.chap b { font-weight: var(--weight-semibold); font-size: var(--text-md); flex: 1; min-width: 0; }
+.chap .mt { font-size: var(--text-xs); color: var(--color-muted); flex: none; }
+.scene { display: flex; gap: 10px; margin: 6px 12px; padding: 10px 12px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); width: calc(100% - 24px); text-align: left; }
+.scene:active, .scene.sel { border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent-soft) 50%, var(--color-surface)); }
+.scene .no { font-size: var(--text-xs); color: var(--color-muted); font-variant-numeric: tabular-nums; font-weight: var(--weight-semibold); width: 22px; flex: none; padding-top: 1px; }
+.scene .bd { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.scene .tt { font-weight: var(--weight-medium); }
+.scene .tt.un { color: var(--color-muted); font-style: italic; font-weight: var(--weight-regular); }
+.scene .sm { font-size: var(--text-sm); color: var(--color-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.scene .ft { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: var(--text-xs); color: var(--color-muted); }
+.lbl { display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-xs); color: var(--color-muted); }
+.lbl i { width: 6px; height: 6px; border-radius: 50%; display: block; }
+.kchip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 7px; border-radius: 4px; font-size: var(--text-xs); color: var(--color-text); background: color-mix(in srgb, var(--cat) 14%, transparent); }
+.kchip i, .sq { width: 7px; height: 7px; border-radius: 1.5px; display: block; background: var(--cat); flex: none; }
+.addscene { margin: 2px 12px 8px; height: 34px; border: 1px dashed var(--color-border); border-radius: var(--radius-md); color: var(--color-muted); font-size: var(--text-sm); width: calc(100% - 24px); }
+
+/* Write */
+.wr { padding: 4px 0 24px; }
+.wchap { padding: 18px 20px 4px; }
+.wchap .ov { font-size: var(--text-2xs); font-weight: var(--weight-semibold); letter-spacing: .08em; text-transform: uppercase; color: var(--color-muted); }
+.wchap h2 { margin: 4px 0 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); letter-spacing: -.01em; }
+.wchap .mt { font-size: var(--text-xs); color: var(--color-muted); margin-top: 4px; }
+.gut { margin: 14px 12px 0; padding: 8px 10px; border-radius: var(--radius-md); background: var(--color-surface); border: 1px solid var(--color-border); display: flex; flex-direction: column; gap: 6px; width: calc(100% - 24px); text-align: left; }
+.gut .h { display: flex; align-items: center; gap: 8px; font-size: var(--text-xs); color: var(--color-muted); }
+.gut .h b { color: var(--color-text); font-weight: var(--weight-semibold); }
+.gut .h .sp { flex: 1; }
+.gut .sm { font-size: var(--text-sm); color: var(--color-muted); }
+.gut.min .sm, .gut.min .chips { display: none; }
+.prose { padding: 4px 20px 0; font-size: var(--text-md); line-height: var(--leading-prose); }
+.prose p { margin: 12px 0 0; }
+.men { border-bottom: 2px solid var(--cat); background: color-mix(in srgb, var(--cat) 10%, transparent); border-radius: 2px; padding: 0 1px; }
+.dot { text-decoration: underline dotted var(--cat); text-underline-offset: 3px; text-decoration-thickness: 2px; }
+.div { text-align: center; color: var(--color-muted); padding: 14px 0 0; font-size: 12px; letter-spacing: .4em; }
+.beat { margin: 14px 20px 0; padding: 8px 10px; border: 1px dashed var(--color-border); border-radius: var(--radius-md); display: flex; gap: 8px; align-items: flex-start; font-size: var(--text-sm); color: var(--color-muted); }
+.beat b { color: var(--color-accent); font-weight: var(--weight-semibold); font-size: var(--text-xs); white-space: nowrap; }
+.beat span { flex: 1; min-width: 0; }
+
+/* Write editing */
+.caret { display: inline-block; width: 2px; height: 1.15em; background: var(--color-accent); vertical-align: text-bottom; margin-left: 1px; animation: blink 1s steps(1) infinite; }
+.beatx { margin: 12px 16px 0; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); display: flex; flex-direction: column; gap: 8px; }
+.beatx .h { display: flex; align-items: center; gap: 8px; font-size: var(--text-xs); }
+.beatx .h b { color: var(--color-accent); font-weight: var(--weight-semibold); }
+.beatx .h .sp { flex: 1; }
+.beatx .h button { color: var(--color-muted); }
+.beatx .ins { font-size: var(--text-sm); }
+.beatx .ctl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.seg2 { display: inline-flex; border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; }
+.seg2 span { padding: 0 9px; line-height: 28px; font-size: var(--text-xs); color: var(--color-muted); }
+.seg2 span.on { background: var(--color-accent-soft); color: var(--color-text); font-weight: var(--weight-medium); }
+.gen { display: flex; height: 36px; border-radius: var(--radius-sm); overflow: hidden; background: var(--color-accent); color: var(--color-accent-fg); font-size: var(--text-sm); font-weight: var(--weight-medium); }
+.gen span { display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; }
+.gen span + span { border-left: 1px solid color-mix(in srgb, var(--color-accent-fg) 30%, transparent); font-weight: var(--weight-regular); font-size: var(--text-xs); }
+.gen svg.i { width: 15px; height: 15px; }
+.acc { flex: none; display: flex; align-items: center; gap: 2px; padding: 4px 6px; background: var(--color-surface); border-top: 1px solid var(--color-border); }
+.acc button { min-width: 38px; height: 36px; border-radius: var(--radius-sm); display: grid; place-items: center; font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--color-text); padding: 0 6px; }
+.acc button.lb { font-weight: var(--weight-medium); color: var(--color-accent); }
+.acc .sp { flex: 1; }
+.acc svg.i { width: 18px; height: 18px; }
+/* System keyboard: device chrome, fixed colours like covers */
+.kbd { flex: none; background: #d1d4db; padding: 8px 3px 4px; display: flex; flex-direction: column; gap: 10px; }
+.kbd .r { display: flex; justify-content: center; gap: 6px; }
+.kbd i { display: grid; place-items: center; height: 42px; flex: 0 0 31px; border-radius: 5px; background: #fff; box-shadow: 0 1px 0 #8a8d93; font: 400 20px/1 var(--font-sans); font-style: normal; color: #111; }
+.kbd i.w { flex-basis: 44px; background: #abafb8; font-size: 14px; }
+.kbd i.sp { flex: 1 1 auto; max-width: 190px; font-size: 14px; }
+.home.k { background: #d1d4db; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .kbd, :root:not([data-theme="light"]) .home.k { background: #2b2c30; } :root:not([data-theme="light"]) .kbd i { background: #6b6c70; color: #fff; box-shadow: none; } :root:not([data-theme="light"]) .kbd i.w { background: #46474b; } }
+:root[data-theme="dark"] .kbd, :root[data-theme="dark"] .home.k { background: #2b2c30; }
+:root[data-theme="dark"] .kbd i { background: #6b6c70; color: #fff; box-shadow: none; }
+:root[data-theme="dark"] .kbd i.w { background: #46474b; }
+
+/* KB */
+.note { margin: 8px 12px 0; padding: 8px 10px; border-radius: var(--radius-md); background: var(--color-accent-soft); font-size: var(--text-xs); display: flex; gap: 8px; align-items: center; }
+.note svg.i { width: 14px; height: 14px; color: var(--color-accent); }
+.alw { font-size: var(--text-2xs); font-weight: var(--weight-semibold); color: var(--color-accent); background: var(--color-accent-soft); border-radius: 4px; padding: 1px 5px; text-transform: uppercase; letter-spacing: .04em; }
+.uses { display: inline-flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; }
+.ehead { padding: 16px 16px 4px; display: flex; flex-direction: column; gap: 6px; }
+.ehead h1 { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); }
+.para { padding: 0 16px; margin: 6px 0 0; font-size: var(--text-base); }
+.tgl { width: 44px; height: 26px; border-radius: 13px; background: var(--color-accent); position: relative; flex: none; }
+.tgl::after { content: ""; position: absolute; right: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .3); }
+.tgl.off { background: var(--color-surface-2); }
+.tgl.off::after { right: auto; left: 3px; }
+.addn { margin: 0 12px 8px; padding: 8px 10px; border-left: 3px solid var(--cat); background: var(--color-surface); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; font-size: var(--text-sm); }
+.addn .ov { font-size: var(--text-2xs); color: var(--color-muted); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px; }
+.voice { width: 30px; height: 30px; border-radius: 50%; background: var(--color-accent-soft); color: var(--color-accent); display: grid; place-items: center; flex: none; }
+.voice svg.i { width: 15px; height: 15px; }
+.dock { flex: none; padding: 8px 12px; background: var(--color-surface); border-top: 1px solid var(--color-border); display: flex; gap: 8px; }
+.tbtn { flex: 1; height: 40px; border-radius: var(--radius-md); display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-weight: var(--weight-medium); background: var(--color-surface-2); font-size: var(--text-base); }
+.tbtn.primary { background: var(--color-accent); color: var(--color-accent-fg); }
+.tbtn svg.i { width: 17px; height: 17px; }
+
+/* Settings */
+.desk { display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-xs); color: var(--color-muted); }
+.desk svg.i { width: 13px; height: 13px; }
+.inh { font-size: var(--text-2xs); font-weight: var(--weight-semibold); color: var(--color-info); background: color-mix(in srgb, var(--color-info) 14%, transparent); padding: 1px 5px; border-radius: 4px; margin-left: 6px; }
+.row.danger .tt { color: var(--color-danger); }
+.foot { padding: 6px 16px 0; font-size: var(--text-xs); color: var(--color-muted); }
+.sg { margin: 12px; padding: 12px; min-height: 380px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); font-size: var(--text-base); line-height: 1.55; }
+.sg p { margin: 0 0 10px; }
+
+/* Tab bar */
+.tabs { flex: none; display: flex; align-items: stretch; height: var(--tab-height); background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 0 4px; }
+.tab { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 10.5px; font-weight: var(--weight-medium); color: var(--color-muted); min-width: 0; }
+.tab .ic { width: 52px; height: 26px; border-radius: 13px; display: grid; place-items: center; transition: background .15s; }
+.tab svg.i { width: 20px; height: 20px; }
+.tab[aria-current="page"] { color: var(--color-text); }
+.tab[aria-current="page"] .ic { background: var(--color-accent-soft); color: var(--color-accent); }
+.tab[disabled] { opacity: .4; }
+.tab.mic .ic { width: 48px; height: 48px; border-radius: 50%; background: var(--color-accent); color: var(--color-accent-fg); margin-top: -18px; box-shadow: var(--shadow-raised), 0 0 0 4px var(--color-surface); }
+.tab.mic .ic svg.i { width: 22px; height: 22px; }
+
+/* Sheets */
+.scrim { position: absolute; inset: 0; background: rgb(8 12 20 / .42); z-index: 10; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 11; background: var(--color-surface); border-radius: 16px 16px 0 0; box-shadow: 0 -10px 30px -12px rgb(0 0 0 / .35); display: flex; flex-direction: column; max-height: 82%; }
+.sheet .grab { width: 36px; height: 5px; border-radius: 3px; background: var(--color-border); margin: 8px auto 4px; flex: none; }
+.sheet .sh { display: flex; align-items: center; gap: 8px; padding: 4px 8px 8px 16px; }
+.sheet .sh .ov { font-size: var(--text-2xs); font-weight: var(--weight-semibold); color: var(--color-muted); text-transform: uppercase; letter-spacing: .06em; flex: 1; }
+.sheet .sb2 { overflow-y: auto; padding: 0 16px 12px; display: flex; flex-direction: column; gap: 12px; }
+.sheet h3 { margin: 0; font-size: var(--text-md); font-weight: var(--weight-semibold); }
+.field { border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 8px 10px; font-size: var(--text-base); background: var(--color-bg); }
+.flabel { font-size: var(--text-2xs); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .06em; color: var(--color-muted); margin-bottom: 4px; }
+.sheet .home { background: var(--color-surface); }
+.wave { display: flex; align-items: center; gap: 3px; height: 56px; justify-content: center; }
+.wave i { display: block; width: 3px; border-radius: 2px; background: var(--color-accent); }
+.timer { text-align: center; font-size: 30px; font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.recdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--color-danger); margin-right: 6px; vertical-align: middle; animation: blink 1.2s infinite; }
+@keyframes blink { 50% { opacity: .25; } }
+.live { font-size: var(--text-sm); color: var(--color-muted); background: var(--color-bg); border-radius: var(--radius-md); padding: 8px 10px; border: 1px solid var(--color-border); }
+.live em { color: var(--color-text); font-style: normal; }
+.radio2 { display: flex; gap: 6px; }
+.radio2 button { flex: 1; height: 34px; border-radius: var(--radius-sm); border: 1px solid var(--color-border); font-size: var(--text-sm); }
+.radio2 button.on { border-color: var(--color-accent); background: var(--color-accent-soft); font-weight: var(--weight-medium); }
+.stop { width: 64px; height: 64px; border-radius: 50%; background: var(--color-danger); display: grid; place-items: center; margin: 0 auto; box-shadow: 0 0 0 5px color-mix(in srgb, var(--color-danger) 20%, transparent); }
+.stop i { width: 22px; height: 22px; border-radius: 4px; background: #fff; display: block; }
+.recrow { display: flex; align-items: center; justify-content: space-around; }
+.recrow .ib { width: 44px; height: 44px; background: var(--color-surface-2); border-radius: 50%; color: var(--color-text); }
+.chlist .row { min-height: 40px; }
+.chlist .row.cur .tt { color: var(--color-accent); }
+
+/* Sign in */
+.signin { background: var(--color-bg); }
+.lg-head { padding: 48px 24px 20px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.mark { width: 56px; height: 56px; border-radius: 15px; background: linear-gradient(135deg, var(--color-accent), color-mix(in srgb, var(--color-accent) 70%, var(--color-info))); display: flex; flex-direction: column; justify-content: center; gap: 9px; padding: 0 15px; }
+.mark i { display: block; height: 4px; border-radius: 2px; background: var(--color-accent-fg); width: 100%; }
+.mark i + i { width: 66%; }
+.lg-head h1 { margin: 6px 0 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); letter-spacing: -.01em; }
+.lg-head p { margin: 0; font-size: var(--text-sm); color: var(--color-muted); max-width: 280px; }
+.lg-form { padding: 0 20px 20px; display: flex; flex-direction: column; gap: 14px; }
+.inp { display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); font-size: var(--text-base); }
+.inp svg.i { width: 18px; height: 18px; color: var(--color-muted); }
+.inp .v { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.inp .v.ph { color: var(--color-muted); }
+.inp .v .sch { color: var(--color-muted); }
+.inp.focus { border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
+.inp.ok .st-ic { color: var(--color-ok); }
+.inp.bad { border-color: var(--color-danger); }
+.inp.bad .st-ic { color: var(--color-danger); }
+.hint { font-size: var(--text-xs); color: var(--color-muted); margin-top: 5px; }
+.hint.ok { color: var(--color-ok); }
+.hint.bad { color: var(--color-danger); }
+.lg-err { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: var(--radius-md); font-size: var(--text-sm); background: color-mix(in srgb, var(--color-danger) 12%, transparent); color: var(--color-text); }
+.lg-err svg.i { width: 16px; height: 16px; color: var(--color-danger); margin-top: 2px; }
+.tbtn.primary[disabled] { opacity: .45; }
+.tbtn.lg { flex: none; height: 48px; margin-top: 4px; }
+.lg-foot { text-align: center; font-size: var(--text-xs); color: var(--color-muted); margin: 0; }
+.acct { display: flex; align-items: center; gap: 12px; padding: 4px 16px 12px; }
+.avatar { width: 44px; height: 44px; border-radius: 50%; background: var(--color-accent-soft); color: var(--color-accent); display: grid; place-items: center; font-size: 15px; font-weight: var(--weight-semibold); flex: none; }
+.acct .bd { display: flex; flex-direction: column; min-width: 0; }
+.acct .bd b { font-weight: var(--weight-semibold); }
+.acct .bd span { font-size: var(--text-sm); color: var(--color-muted); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="top">
+    <div>
+      <h1>Codex mobile</h1>
+      <p>The mobile app's screens: Sign in (M1), then slice M2: Library, Plan, Write, Knowledge base and Book settings, with recording. Each phone is a working prototype: tap the tabs, a book, a scene or an entry. Tokens at <code>data-density="touch"</code>.</p>
+    </div>
+    <div class="ctrls">
+      <b>Preview</b>
+      <div class="seg" id="themeSeg"><button data-theme-set="system">System</button><button data-theme-set="light">Light</button><button data-theme-set="dark">Dark</button></div>
+    </div>
+  </div>
+
+  <div class="scope">
+    <div class="card"><h3>On mobile</h3><div class="chips">
+      <span class="chip in">Library <small>list, grouped by series</small></span><span class="chip in">Plan <small>outline, no board</small></span><span class="chip in">Write <small>read and edit</small></span><span class="chip in">Knowledge base <small>list + entry</small></span><span class="chip in">Book settings</span><span class="chip in">Record <small>#33, from a scene or entry</small></span>
+    </div></div>
+    <div class="card"><h3>Desktop only</h3><div class="chips">
+      <span class="chip">Chat</span><span class="chip">Review</span><span class="chip">References</span><span class="chip">Layout &amp; print</span><span class="chip">Plan board + drag</span><span class="chip">Import</span><span class="chip">Series settings</span><span class="chip">⌘K palette</span>
+    </div></div>
+  </div>
+
+  <h2 class="sec">Bottom menu</h2>
+  <p class="sec-d">Inside a book: <b>Plan · Write · Knowledge · Settings</b>, every tab acting on the open book. Library is the root screen with no tab bar; ‹ in the top bar returns to it, and tapping the book title opens the book switcher (recent books, then All books in Library). Pushed screens keep their parent tab selected. The tab bar hides while the keyboard is up. Record has no tab: it starts from a scene or an entry, so its target is always known.</p>
+
+  <h2 class="sec">Sign in</h2>
+  <p class="sec-d">The first screen on a fresh install, and after Sign out. Codex is self-hosted, so the app asks for the <b>server address</b> as well as email and password. The server is checked as soon as you leave the field (<code>GET /api/health</code>, anonymous), so a typo shows up before the password does. No tab bar, no book bar. After signing in the app opens Library and keeps the token in the device keychain, so the screen is not seen again until Sign out.</p>
+  <div class="phones" id="signin"></div>
+
+  <h2 class="sec">Screens</h2>
+  <p class="sec-d">Real size (390 × 844 pt class, iPhone 15/16). Phones scroll. Sample book: <b>Hollow Throne</b>, Book 3 of The Ashen Crown, so the Knowledge base shows the series-shared case.</p>
+  <div class="phones" id="main"></div>
+
+  <h2 class="sec">Drill-ins and sheets</h2>
+  <p class="sec-d">Detail views open as pushed screens (entry, style guide) or bottom sheets (scene, record, chapter jump, book switcher), so the tab bar stays put and Back always means one level up.</p>
+  <div class="phones" id="drill"></div>
+
+</div>
+
+<script>
+// ---------- Icons (Lucide paths) ----------
+const P = {
+  back: '<path d="m15 18-6-6 6-6"/>', right: '<path d="m9 18 6-6-6-6"/>', down: '<path d="m6 9 6 6 6-6"/>',
+  plus: '<path d="M5 12h14M12 5v14"/>', search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+  more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+  mic: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/>',
+  plan: '<path d="M21 12h-8M21 6H8M21 18h-8M3 6v4c0 1.1.9 2 2 2h3M3 10v6c0 1.1.9 2 2 2h3"/>',
+  write: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  kb: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+  settings: '<path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>',
+  library: '<path d="m16 6 4 14M12 6v14M8 8v12M4 4v16"/>',
+  filter: '<path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/>', sort: '<path d="m3 16 4 4 4-4M7 20V4M21 8l-4-4-4 4M17 4v16"/>',
+  desk: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+  scene: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/>', link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  text: '<path d="M4 7V4h16v3M9 20h6M12 4v16"/>', pause: '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>', share: '<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/>', info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+  play: '<path d="m6 3 14 9-14 9V3z"/>', up: '<path d="m18 15-6-6-6 6"/>',
+  undo: '<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/>', redo: '<path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 15-6.7l3 2.7"/>',
+  server: '<rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><path d="M6 6h.01M6 18h.01"/>',
+  mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>', lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  eye: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>', check: '<circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/>',
+  alert: '<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>', logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
+};
+const I = n => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${P[n]}</svg>`;
+
+// ---------- Sample data (from design/screens/library.html and plan.html) ----------
+const COV = { pe: ['#05070d','#0d1a2b'], sand: ['#d9cfc0','#b9ab97'], brush: ['#3a3a3a','#555'], fg2: ['#2a1d12','#5c3b1e'], fg3: ['#1b2320','#3d4f45'],
+  ac1: ['#2b0b0b','#7a1d14'], ac2: ['#1d1d2b','#45306b'], ac3: ['#141414','#3b3b3b'], ac4: ['#3a1406','#a3410f'], td1: ['#08263a','#155e75'], td2: ['#0b3b3a','#14706b'],
+  sl: ['#e8e2d6','#cbbfa9'], qa: ['#0e0f1a','#283a7a'], nb: ['#f1f5f9','#94a3b8'], hm: ['#3b0d1f','#9d174d'] };
+const SERIES = [
+  { name: 'The Ashen Crown', books: [
+    { n: 1, t: 'Ember Oath', c: 'ac1', w: 112300, g: 110000, s: 'published', e: 'Mar 2, 2025' },
+    { n: 2, t: 'Iron Litany', c: 'ac2', w: 124870, g: 120000, s: 'published', e: 'Jan 11' },
+    { n: 3, t: 'Hollow Throne', c: 'ac3', w: 98450, g: 120000, s: 'revising', e: 'Oct 14' },
+    { n: 4, t: 'Last Cinder', c: 'ac4', w: 3100, g: 120000, s: 'planning', e: 'Oct 2' }] },
+  { name: 'Forsaken Gods', books: [
+    { n: 1, t: 'Players Guide', c: 'brush', w: 48210, g: 60000, s: 'revising', e: '2h ago' },
+    { n: 2, t: "Gamemaster's Codex", c: 'fg2', w: 61900, g: 90000, s: 'writing', e: 'Yesterday' },
+    { n: 3, t: 'Bestiary of the Fallen', c: 'fg3', w: 12400, g: 50000, s: 'planning', e: 'Sep 30' }] },
+  { name: 'Tidewater Chronicles', books: [
+    { n: 1, t: 'Saltmarsh', c: 'td1', w: 81200, g: 85000, s: 'published', e: 'Jun 4' },
+    { n: 2, t: 'Undertow', c: 'td2', w: 22950, g: 85000, s: 'writing', e: 'Aug 30' }] },
+];
+const SOLO = [
+  { t: 'Product Engineering', c: 'pe', w: 72340, g: 80000, s: 'writing', e: 'Today, 2:42 PM' },
+  { t: 'The Quiet Algorithm', c: 'qa', w: 54610, g: 70000, s: 'writing', e: 'Oct 9' },
+  { t: 'Hymns for Machines', c: 'hm', w: 27300, g: 40000, s: 'draft', e: 'Jul 18' },
+  { t: 'Northbound', c: 'nb', w: 8800, g: 60000, s: 'planning', e: 'Sep 3' },
+  { t: 'Saltwater Ledger', c: 'sl', w: 91000, g: 90000, s: 'published', e: 'May 21' },
+  { t: 'Product Engineering (v1)', c: 'sand', w: 38020, g: 80000, s: 'draft', e: 'Aug 12, 2025' },
+];
+const STATUS = { planning: 'Planning', draft: 'Draft', writing: 'Writing', revising: 'Revising', published: 'Published' };
+const CATS = { person: 'Characters', story: 'Places' };
+const KB = [
+  { id: 'maren', cat: 'person', name: 'Maren Vell', al: ['the Queen', 'Maren'], sum: 'Exiled queen of the Ashen Crown. Swore the ember oath at her father\'s pyre.', always: true, uses: 9, voice: 2 },
+  { id: 'tobin', cat: 'person', name: 'Tobin Hale', al: ['Tobin'], sum: 'Her sworn sword. Counts everything: guards, exits, debts.', uses: 6, voice: 0 },
+  { id: 'abbot', cat: 'person', name: 'The Grey Abbot', al: ['the Abbot'], sum: 'Keeper of the Iron Litany. Never lies; never tells the whole truth.', uses: 4, voice: 1 },
+  { id: 'hollow', cat: 'story', name: 'The Hollow Court', al: ['the Court'], sum: 'The capital\'s throne hall, emptied by the war and filled again by the wrong people.', uses: 5, voice: 0 },
+  { id: 'cinder', cat: 'story', name: 'Cinderhold', al: [], sum: 'The Vell seat in the north, built over a fire that has not gone out in three hundred years.', uses: 3, voice: 0 },
+  { id: 'emberfall', cat: 'story', name: 'Emberfall Pass', al: ['Emberfall'], sum: 'The only road south through the mountains. Held for a winter in Iron Litany.', uses: 1, voice: 0 },
+];
+const kbE = id => KB.find(e => e.id === id);
+const LBL = { drafting: ['Drafting', 'info'], research: ['Needs research', 'warn'], cut: ['Maybe cut', 'danger'], ready: ['Ready to write', 'ok'] };
+const ACTS = [
+  { t: 'The Court', no: 'Act I', open: true, meta: '3 ch · 4 scenes · 7.7k', chs: [
+    { n: 1, t: 'An Empty Seat', meta: '6.0k', sc: [
+      { id: '1.1', t: 'The throne is warm', sum: 'Maren returns to the Hollow Court to find the throne already claimed.', l: ['drafting'], k: ['maren', 'hollow'], w: 3860 },
+      { id: '1.2', t: 'Eleven, then twelve', sum: 'Tobin counts the guards and does not like the number.', l: [], k: ['tobin'], w: 2140 }] },
+    { n: 2, t: 'The Grey Council', meta: '1.7k', sc: [
+      { id: '2.1', t: 'A truce with a knife in it', sum: 'The Abbot offers a truce with a knife in it. He has already met the claimant.', l: ['research'], k: ['abbot', 'maren'], w: 1720, add: 1 }] },
+    { n: 3, t: 'Ash and Iron', meta: '0', sc: [
+      { id: '3.1', t: '', sum: 'Word comes from Cinderhold: the fire has gone out.', l: ['cut'], k: ['cinder'], w: 0 }] }] },
+  { t: 'The Litany Answered', no: 'Act II', open: false, meta: '5 ch · 14 scenes · 46.3k', chs: [] },
+  { t: 'Last Light', no: 'Act III', open: false, meta: '4 ch · 12 scenes · 44.4k', chs: [] },
+];
+const allScenes = () => ACTS.flatMap(a => a.chs.flatMap(c => c.sc.map(s => ({ ...s, ch: c }))));
+const BOOK = { t: 'Hollow Throne', c: 'ac3', sub: 'Book 3 · The Ashen Crown' };
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const kw = n => n >= 1000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1) + 'k' : String(n);
+const pct = b => Math.min(100, Math.round(b.w / b.g * 100));
+const cover = (c, cls = 'cover', st = '') => `<div class="${cls}" style="background:linear-gradient(160deg,${COV[c][0]},${COV[c][1]});${st}"></div>`;
+const status = s => `<span class="st"><i style="background:var(--status-${s})"></i>${STATUS[s]}</span>`;
+const lbl = k => `<span class="lbl"><i style="background:var(--color-${LBL[k][1]})"></i>${LBL[k][0]}</span>`;
+const kchip = id => { const e = kbE(id); return `<span class="kchip" style="--cat:var(--category-${e.cat})"><i></i>${esc(e.name)}</span>`; };
+const men = (id, text) => `<span class="men" style="--cat:var(--category-${kbE(id).cat})">${text}</span>`;
+const dotm = (id, text) => `<span class="dot" style="--cat:var(--category-${kbE(id).cat})">${text}</span>`;
+
+// ---------- Bottom tab bar ----------
+// Book screens only; Library is the root and has none. Hidden while the keyboard is up.
+const TABS = ['plan', 'write', 'kb', 'settings'];
+const TAB = { plan: ['Plan', 'plan'], write: ['Write', 'write'], kb: ['Knowledge', 'kb'], settings: ['Settings', 'settings'] };
+// pushed screens light up their parent tab
+const PARENT = { entry: 'kb', style: 'settings' };
+const NO_TABS = new Set(['login', 'library', 'writeEdit']);
+
+function tabbar(ph) {
+  if (NO_TABS.has(ph.screen)) return '';
+  const cur = PARENT[ph.screen] || ph.screen;
+  return `<nav class="tabs">${TABS.map(t => `<button class="tab" data-go="${t}" ${cur === t ? 'aria-current="page"' : ''}><span class="ic">${I(TAB[t][1])}</span>${TAB[t][0]}</button>`).join('')}</nav>`;
+}
+function bookBar(ph) {
+  return `<header class="tb">
+    <button class="ib acc" data-go="library" aria-label="Library">${I('back')}</button>
+    <button class="bk" data-sheet="books">${cover(BOOK.c, 'mc')}<span class="t"><b>${BOOK.t}</b><span>${BOOK.sub}</span></span><span class="cv">${I('down')}</span></button>
+    <span class="save" title="Saved"></span>
+    <button class="ib" aria-label="More">${I('more')}</button>
+  </header>`;
+}
+function pushBar(backTo, backLabel, title, end = '') {
+  return `<header class="tb"><button class="back" data-go="${backTo}">${I('back')}${backLabel}</button><span class="ttl">${title}</span>${end || '<span style="width:60px"></span>'}</header>`;
+}
+
+// ---------- Screens ----------
+// Sign in. ph.login picks the state: 'ok' (server checked, ready), 'unreachable' (server check failed),
+// 'refused' (the server answered 401). Sign in is enabled only once the server check has passed.
+const SERVER = 'codex.example.com';
+function loginScreen(ph) {
+  const st = ph.login || 'ok';
+  const typo = 'codex.exmaple.com';
+  const server = st === 'unreachable'
+    ? `<div class="inp bad">${I('server')}<span class="v"><span class="sch">https://</span>${typo}</span><span class="st-ic">${I('alert')}</span></div>
+       <div class="hint bad">Can't reach ${typo}. Check the address and that the server is running.</div>`
+    : `<div class="inp ok">${I('server')}<span class="v"><span class="sch">https://</span>${SERVER}</span><span class="st-ic">${I('check')}</span></div>
+       <div class="hint ok">Codex 1.0.0 · connected</div>`;
+  const filled = st !== 'unreachable';
+  return `<div class="ct signin">
+    <div class="lg-head"><span class="mark"><i></i><i></i></span><h1>Sign in to Codex</h1><p>Enter the address of your Codex server, then your account.</p></div>
+    <div class="lg-form">
+      <div><div class="flabel">Server</div>${server}</div>
+      <div><div class="flabel">Email</div><div class="inp">${I('mail')}<span class="v ${filled ? '' : 'ph'}">${filled ? 'joel@example.com' : 'you@example.com'}</span></div></div>
+      <div><div class="flabel">Password</div><div class="inp ${st === 'refused' ? 'focus' : ''}">${I('lock')}<span class="v ${filled ? '' : 'ph'}">${filled ? '••••••••••••' : 'Password'}</span><button class="ib" style="width:28px;height:28px" aria-label="Show password">${I('eye')}</button></div></div>
+      ${st === 'refused' ? `<div class="lg-err" role="alert">${I('alert')}<span>Incorrect email or password, or the account is locked for now.</span></div>` : ''}
+      <button class="tbtn primary lg" ${st === 'unreachable' ? 'disabled' : 'data-go="library"'}>Sign in</button>
+      <p class="lg-foot">No account? Ask your Codex admin.</p>
+    </div>
+  </div>`;
+}
+
+function libraryScreen() {
+  const bookRow = (b, series) => `<button class="row ind" data-go="plan">${cover(b.c)}
+      <span class="bd">${series ? `<span class="ov">Book ${String(b.n).padStart(3, '0')}</span>` : ''}<span class="tt">${esc(b.t)}</span>
+        <span class="mt">${kw(b.w)} / ${kw(b.g)} words · ${esc(b.e)}</span><span class="prog"><i style="width:${pct(b)}%"></i></span></span>
+      <span class="end">${status(b.s)}</span></button>`;
+  const ser = s => `<div class="grp-h"><span>${esc(s.name)}</span><span class="cnt">· ${s.books.length} books</span><span class="sp"></span>${I('down')}</div>
+    <div class="list">${s.books.map(b => bookRow(b, true)).join('')}</div>`;
+  return `<header class="tb" style="border-bottom:0"><span style="flex:1"></span><button class="ib" aria-label="Sort">${I('sort')}</button><button class="ib acc" aria-label="New book">${I('plus')}</button><button class="ib" data-sheet="account" aria-label="Account"><span style="width:28px;height:28px;border-radius:50%;background:var(--color-accent-soft);color:var(--color-accent);display:grid;place-items:center;font-size:12px;font-weight:600">JD</span></button></header>
+  <div class="ct" style="background:var(--color-bg)">
+    <div class="lt" style="background:var(--color-surface)"><h1>Library</h1></div>
+    <div style="padding:0 12px 10px;background:var(--color-surface);border-bottom:1px solid var(--color-border)"><div class="search">${I('search')}Search books and series</div></div>
+    <div class="grp-h"><span>Continue</span></div>
+    <button class="cont" data-go="write">${cover('ac3')}<span class="bd"><span class="ov">Write · Chapter 1 · Scene 2</span><span class="tt">Hollow Throne</span><span class="mt">98.4k / 120k words · edited Oct 14</span><span class="prog"><i style="width:82%"></i></span></span><span class="go">${I('right')}</span></button>
+    ${SERIES.map(ser).join('')}
+    <div class="grp-h"><span>Standalone</span><span class="cnt">· ${SOLO.length} books</span><span class="sp"></span>${I('down')}</div>
+    <div class="list">${SOLO.map(b => bookRow(b, false)).join('')}</div>
+    <p class="foot" style="padding-bottom:20px">Import and series settings are on desktop.</p>
+  </div>`;
+}
+
+function planScreen(ph) {
+  const sceneCard = s => `<button class="scene ${ph.sheet === 'scene' && ph.arg === s.id ? 'sel' : ''}" data-sheet="scene" data-arg="${s.id}">
+      <span class="no">${s.id.split('.')[1]}</span>
+      <span class="bd">${s.t ? `<span class="tt">${esc(s.t)}</span>` : '<span class="tt un">Untitled</span>'}<span class="sm">${esc(s.sum)}</span>
+        <span class="ft">${s.l.map(lbl).join('')}${s.k.map(kchip).join('')}${s.add ? `<span>+${s.add} addition</span>` : ''}<span style="margin-left:auto">${s.w ? s.w.toLocaleString() + ' words' : 'Not started'}</span></span></span></button>`;
+  const act = a => `<button class="act ${a.open ? '' : 'closed'}"><span class="cv">${I('down')}</span><span class="ov">${a.no}</span><b>${esc(a.t)}</b><span class="mt">${a.meta}</span></button>
+    ${a.open ? a.chs.map(c => `<div class="chap"><span class="no">Ch ${c.n}</span><b>${esc(c.t)}</b><span class="mt">${c.meta}</span></div>${c.sc.map(sceneCard).join('')}`).join('') + '<button class="addscene">+ New chapter</button>' : ''}`;
+  return `${bookBar(ph)}
+  <div class="sub"><button class="pill">Whole book ${I('down')}</button><span class="meta">98.4k words · 394 pp · 6h 34m</span><button class="ib" aria-label="Filter labels">${I('filter')}</button></div>
+  <div class="ct">${ACTS.map(act).join('')}<div style="height:16px"></div></div>`;
+}
+
+function writeScreen(ph) {
+  return `${bookBar(ph)}
+  <div class="sub"><button class="ib" aria-label="Previous chapter">${I('back')}</button><button class="pill" data-sheet="chapters" style="flex:1;justify-content:space-between;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis">1 · An Empty Seat</span>${I('down')}</button><button class="ib" aria-label="Next chapter">${I('right')}</button><button class="ib" aria-label="Text size">${I('text')}</button></div>
+  <div class="ct" style="background:var(--color-surface)"><div class="wr">
+    <div class="wchap"><div class="ov">Act I · The Court · Chapter 1</div><h2>An Empty Seat</h2><div class="mt">2 scenes · 6,000 words</div></div>
+    <button class="gut" data-sheet="scene" data-arg="1.1"><span class="h"><b>Scene 1</b>${lbl('drafting')}<span class="sp"></span>3,860 words ${I('down')}</span><span class="sm">Maren returns to the Hollow Court to find the throne already claimed.</span><span class="chips">${kchip('maren')}${kchip('hollow')}</span></button>
+    <div class="prose">
+      <p>The doors of ${men('hollow', 'the Hollow Court')} had been rehung since the war, and someone had chosen to hang them badly. They dragged on the flagstones as the guards hauled them open, and the sound went ahead of ${men('maren', 'Maren')} into the hall like a herald nobody had paid.</p>
+      <p>She had expected the dust. She had expected the cold, and the soot on the high windows, and the long scar in the floor where her father's banners had burned. She had not expected the throne to be warm.</p>
+      <p>"Someone sat here this morning," ${dotm('tobin', 'Tobin')} said, behind her. He did not say it loudly. He was already counting the doors.</p>
+    </div>
+    <div class="div">◇</div>
+    <button class="gut min" data-sheet="scene" data-arg="1.2"><span class="h"><b>Scene 2</b><span class="sp"></span>2,140 words ${I('down')}</span><span class="sm"></span></button>
+    <div class="beat"><b>Scene beat</b><span>Tobin walks the gallery and counts the guards: eleven, then twelve. End on the Abbot's bell. · 400 words</span></div>
+    <div class="prose" data-go="writeEdit">
+      <p>Twelve. There had been eleven when they came in.</p>
+      <p>He walked the gallery the long way, past the alcoves where the old kings stood in stone with their faces chiselled off, and counted again. The twelfth man wore the grey of ${men('abbot', 'the Abbot')}'s house under a borrowed cloak, and he was not looking at the queen. He was looking at the doors, the same as Tobin.</p>
+    </div>
+  </div></div>`;
+}
+
+function writeEditScreen(ph) {
+  const keys = r => r.split('').map(k => `<i>${k}</i>`).join('');
+  return `${bookBar(ph)}
+  <div class="sub"><button class="pill" data-sheet="chapters" style="flex:1;justify-content:space-between;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis">1 · An Empty Seat · Scene 2</span>${I('down')}</button><button class="ib" aria-label="Undo">${I('undo')}</button><button class="ib" aria-label="Redo">${I('redo')}</button><span class="save" style="background:var(--color-accent)" title="Saving…"></span></div>
+  <div class="ct" style="background:var(--color-surface)"><div class="wr" style="padding-top:0">
+    <button class="gut min" data-sheet="scene" data-arg="1.2"><span class="h"><b>Scene 2</b><span class="sp"></span>2,152 words ${I('down')}</span><span class="sm"></span></button>
+    <div class="beatx"><div class="h"><b>Scene beat</b><span class="sp"></span><button>Hide</button></div>
+      <div class="ins">Tobin walks the gallery and counts the guards: eleven, then twelve. End on ${men('abbot', 'the Abbot')}'s bell.</div>
+      <div class="ctl"><span class="seg2"><span>200</span><span class="on">400</span><span>600</span></span><span class="pill" style="height:28px">+ Context</span></div>
+      <div class="gen"><span>${I('write')}Generate prose</span><span>Scene · Sonnet</span></div></div>
+    <div class="prose"><p>Twelve. There had been eleven when they came in, and the twelfth wore grey<span class="caret"></span></p></div>
+  </div></div>
+  <div class="acc"><button aria-label="Commands">/</button><button aria-label="Mention entry">@</button><button class="lb">Beat</button><button aria-label="Scene break">◇</button><button><b>B</b></button><button><i>I</i></button><button aria-label="Block quote">❝</button><span class="sp"></span><button data-go="write" aria-label="Done">${I('down')}</button></div>
+  <div class="kbd"><div class="r">${keys('qwertyuiop')}</div><div class="r">${keys('asdfghjkl')}</div><div class="r"><i class="w">⇧</i>${keys('zxcvbnm')}<i class="w">⌫</i></div><div class="r"><i class="w">123</i><i class="w">☺</i><i class="sp">space</i><i class="w">return</i></div></div>`;
+}
+
+function kbScreen(ph) {
+  const row = e => `<button class="row" data-go="entry"><span class="sq" style="--cat:var(--category-${e.cat})"></span>
+      <span class="bd"><span class="tt">${esc(e.name)} ${e.always ? '<span class="alw">Always</span>' : ''}</span><span class="mt">${esc(e.sum)}</span></span>
+      <span class="end"><span class="uses">${I('scene')}${e.uses}</span>${e.voice ? `<span class="uses">${I('mic')}${e.voice}</span>` : ''}</span></button>`;
+  const grp = cat => { const es = KB.filter(e => e.cat === cat); return `<div class="grp-h"><span class="sq" style="--cat:var(--category-${cat})"></span><span>${CATS[cat]}</span><span class="cnt">· ${es.length}</span><span class="sp"></span><button class="ib" style="width:24px;height:24px" aria-label="New ${CATS[cat]} entry">${I('plus')}</button></div><div class="list">${es.map(row).join('')}</div>`; };
+  return `${bookBar(ph)}
+  <div class="sub" style="border-bottom:0"><div class="search">${I('search')}Search 6 entries</div><button class="ib acc" aria-label="New entry">${I('plus')}</button></div>
+  <div class="hscroll"><span class="pill on">All 6</span><span class="pill"><span class="sq" style="--cat:var(--category-person)"></span>Characters 3</span><span class="pill"><span class="sq" style="--cat:var(--category-story)"></span>Places 3</span><span class="pill">${I('mic')}Voice notes 3</span><span class="pill">Unused 0</span></div>
+  <div class="ct">
+    <div class="note">${I('link')}<span>From <b>The Ashen Crown</b>. Shared by all 4 books; edits change it everywhere.</span></div>
+    ${grp('person')}${grp('story')}<div style="height:16px"></div>
+  </div>`;
+}
+
+function entryScreen() {
+  const e = kbE('maren');
+  const use = s => `<button class="row" data-go="plan"><span class="bd"><span class="ov">Chapter ${s.ch.n} · Scene ${s.id.split('.')[1]}</span><span class="sm2">${esc(s.sum)}</span></span><span class="end">${I('right')}</span></button>`;
+  const used = allScenes().filter(s => s.k.includes('maren'));
+  return `${pushBar('kb', 'Knowledge', '', `<button class="ib" aria-label="More">${I('more')}</button>`)}
+  <div class="ct">
+    <div class="ehead"><span class="kchip" style="--cat:var(--category-person);align-self:flex-start"><i></i>Characters</span><h1>${e.name}</h1>
+      <div class="chips">${e.al.map(a => `<span class="chip">${esc(a)}</span>`).join('')}<span class="chip" style="color:var(--color-muted)">+ Alias</span></div></div>
+    <p class="para">${esc(e.sum)} Rules from the north; trusts Tobin with her life and nobody with her plans.</p>
+    <div class="grp-h"><span>Generation</span></div>
+    <div class="list"><div class="row"><span class="bd"><span class="tt">Always in context</span><span class="mt">Sent with every AI draft in the series</span></span><span class="tgl"></span></div></div>
+    <div class="grp-h"><span>Voice notes</span><span class="cnt">· 2</span></div>
+    <div class="list">
+      <div class="row"><span class="voice">${I('play')}</span><span class="bd"><span class="tt">Her voice when she lies</span><span class="mt">0:42 · Oct 21 · transcribed, added below</span></span></div>
+      <div class="row"><span class="voice">${I('play')}</span><span class="bd"><span class="tt">The pyre, from Tobin's side</span><span class="mt">2:15 · Oct 9 · transcribed</span></span></div>
+    </div>
+    <div class="grp-h"><span>Used in</span><span class="cnt">· ${e.uses} scenes, 2 in this book</span></div>
+    <div class="list">${used.map(use).join('')}</div>
+    <div class="grp-h"><span>Additions</span><span class="cnt">· 1</span></div>
+    <div class="addn" style="--cat:var(--category-person)"><div class="ov">Chapter 2 · Scene 1</div>Lies with a level voice and too much detail; Tobin can always tell.</div>
+    <div style="height:12px"></div>
+  </div>
+  <div class="dock"><button class="tbtn" data-go="plan">${I('scene')}Scenes</button><button class="tbtn primary" data-sheet="record" data-arg="entry">${I('mic')}Record to entry</button></div>`;
+}
+
+function settingsScreen(ph) {
+  const r = (t, v, o = {}) => `<${o.go ? `button data-go="${o.go}"` : 'div'} class="row ${o.cls || ''}"><span class="bd"><span class="tt">${t}${o.inh ? '<span class="inh">Series</span>' : ''}</span>${o.mt ? `<span class="mt">${o.mt}</span>` : ''}</span>${v ? `<span class="val">${v}</span>` : ''}${o.desk ? `<span class="desk">${I('desk')}Desktop</span>` : o.chev !== false ? `<span class="end">${I('right')}</span>` : ''}</${o.go ? 'button' : 'div'}>`;
+  return `${bookBar(ph)}
+  <div class="ct">
+    <div class="grp-h"><span>Book</span></div>
+    <div class="list">
+      ${r('Title', 'Hollow Throne')}${r('Author', 'J. Dickson')}${r('Status', status('revising'))}${r('Target words', '120,000')}
+      <div class="row"><span class="bd"><span class="tt">Cover</span></span>${cover('ac3', 'cover', 'width:24px;height:36px')}<span class="end">${I('right')}</span></div>
+    </div>
+    <div class="grp-h"><span>Series</span></div>
+    <div class="list">${r('Series', 'The Ashen Crown')}${r('Number', 'Book 3', { mt: 'Shares the series Knowledge base, labels, style guide and publication settings' })}</div>
+    <div class="grp-h"><span>Writing</span></div>
+    <div class="list">${r('Style guide', '', { go: 'style', mt: 'Third person limited, past tense. British spelling. No chapter ends on a question.', inh: true })}</div>
+    <div class="grp-h"><span>Citations &amp; permissions</span></div>
+    <div class="list">${r('Citation style', 'Chicago 17', { inh: true })}${r('Publisher rules', '300 words prose', { inh: true })}${r('Permission letters', 'Ashfall Press', { inh: true })}</div>
+    <div class="grp-h"><span>Layout &amp; print</span></div>
+    <div class="list">${r('Template', 'Novel 6×9', { desk: true })}</div>
+    <div class="grp-h"><span>Archive &amp; export</span></div>
+    <div class="list">${r('Duplicate book', '')}${r('Export source', '.zip', { mt: 'Markdown and Knowledge base, shared to Files' })}${r('Archive book', '', { cls: 'danger', chev: false, mt: 'Takes it off the shelf; restore from Library' })}</div>
+    <p class="foot" style="padding-bottom:20px">A value marked Series comes from The Ashen Crown; changing it here applies to this book only.</p>
+  </div>`;
+}
+
+function styleScreen() {
+  return `${pushBar('settings', 'Settings', 'Style guide', '<button class="back" style="padding:0 10px">Done</button>')}
+  <div class="ct">
+    <div class="note" style="margin-top:12px">${I('info')}<span>Inherited from <b>The Ashen Crown</b>. Editing makes a copy for this book.</span></div>
+    <div class="sg"><p>Third person limited, past tense. One point of view per scene; Maren or Tobin, never both.</p><p>British spelling. Dialogue tags: said, asked. No adverbs on tags.</p><p>No chapter ends on a question. Violence is quick and reported in its aftermath.</p><p>The Abbot never lies on the page. If he misleads, it is through what he leaves out.</p></div>
+    <p class="foot">Sent with every AI draft from this book, with the beat, its context and the scene so far.</p>
+  </div>`;
+}
+
+// ---------- Sheets ----------
+function sceneSheet(id) {
+  const s = allScenes().find(x => x.id === id) || allScenes()[1];
+  return `<div class="sh"><span class="ov">Chapter ${s.ch.n} · Scene ${s.id.split('.')[1]}</span><button class="ib" aria-label="More">${I('more')}</button><button class="ib" data-close aria-label="Close">${I('x')}</button></div>
+  <div class="sb2">
+    <div><div class="flabel">Title</div><div class="field">${s.t ? esc(s.t) : '<span style="color:var(--color-muted)">Untitled</span>'}</div></div>
+    <div><div class="flabel">Summary</div><div class="field" style="min-height:64px">${esc(s.sum)}</div></div>
+    <div><div class="flabel">Labels</div><div class="chips">${s.l.map(lbl).join('')}<span class="chip">+ Label</span></div></div>
+    <div><div class="flabel">Knowledge base</div><div class="chips">${s.k.map(kchip).join('')}<span class="chip">+ Entry</span></div></div>
+    <div style="font-size:var(--text-xs);color:var(--color-muted)">${s.w ? s.w.toLocaleString() + ' words written' : 'Not started'} · syncs 3s after you stop typing</div>
+  </div>
+  <div class="dock"><button class="tbtn" data-go="write">${I('write')}Open in Write</button><button class="tbtn primary" data-sheet="record" data-arg="${s.id}">${I('mic')}Record</button></div>`;
+}
+function recordSheet(arg) {
+  const toEntry = arg === 'entry';
+  const s = !toEntry && (allScenes().find(x => x.id === arg) || allScenes()[1]);
+  const bars = [8,14,22,30,18,40,26,12,34,48,28,16,38,22,10,30,44,20,14,26,36,18,8,12];
+  return `<div class="sh"><span class="ov"><span class="recdot"></span>Recording · ${toEntry ? 'to Maren Vell' : `Ch ${s.ch.n} · Scene ${s.id.split('.')[1]}`}</span><button class="ib" data-close aria-label="Close">${I('x')}</button></div>
+  <div class="sb2">
+    <div class="timer">01:14</div>
+    <div class="wave">${bars.map(h => `<i style="height:${h}px"></i>`).join('')}</div>
+    <div class="live"><div class="flabel">Live transcript</div><em>…and when she lies her voice goes level, very level, and she adds one detail too many. Tobin knows. He's always known.</em></div>
+    ${toEntry ? `<div><div class="flabel">When you stop</div><div class="radio2"><button class="on">Add to entry</button><button>Keep as note</button></div></div>`
+      : `<div><div class="flabel">When you stop</div><div class="radio2"><button class="on">New entry</button><button>Add to an entry</button></div></div>`}
+    <div style="font-size:var(--text-xs);color:var(--color-muted)">Transcribed on this phone · audio kept with the entry</div>
+    <div class="recrow"><button class="ib" aria-label="Pause">${I('pause')}</button><button class="stop" aria-label="Stop"><i></i></button><button class="ib" aria-label="Discard">${I('x')}</button></div>
+  </div>`;
+}
+function chaptersSheet() {
+  return `<div class="sh"><span class="ov">Jump to chapter</span><button class="ib" data-close aria-label="Close">${I('x')}</button></div>
+  <div class="sb2" style="padding:0"><div class="chlist">
+    <div class="grp-h" style="padding-top:4px"><span>Act I · The Court</span></div>
+    <div class="list">${ACTS[0].chs.map(c => `<button class="row ${c.n === 1 ? 'cur' : ''}" data-close><span class="bd"><span class="tt">${c.n} · ${esc(c.t)}</span></span><span class="end">${c.meta}</span></button>`).join('')}</div>
+    <div class="grp-h"><span>Act II · The Litany Answered</span><span class="sp"></span><span class="cnt">5 chapters</span></div>
+    <div class="list">${['The Bell at Matins', 'Grey Ink', 'What the Abbot Kept', 'Emberfall Again', 'Twelve Doors'].map((t, i) => `<button class="row" data-close><span class="bd"><span class="tt">${i + 4} · ${t}</span></span></button>`).join('')}</div>
+    <div class="grp-h"><span>Act III · Last Light</span><span class="sp"></span><span class="cnt">4 chapters</span></div>
+  </div></div>`;
+}
+function booksSheet() {
+  const recent = [SERIES[0].books[2], SOLO[0], SERIES[1].books[1], SERIES[0].books[3]];
+  return `<div class="sh"><span class="ov">Switch book</span><button class="ib" data-close aria-label="Close">${I('x')}</button></div>
+  <div class="sb2" style="padding:0"><div class="list">${recent.map((b, i) => `<button class="row ind" data-close>${cover(b.c)}<span class="bd"><span class="tt">${esc(b.t)}</span><span class="mt">${kw(b.w)} words · ${esc(b.e)}</span></span><span class="end">${i === 0 ? '<span class="st" style="color:var(--color-accent)">Open</span>' : ''}</span></button>`).join('')}</div>
+  <button class="row" data-go="library" style="margin:4px 0 8px"><span class="bd"><span class="tt" style="color:var(--color-accent)">All books in Library</span></span><span class="end">${I('right')}</span></button></div>`;
+}
+function accountSheet() {
+  return `<div class="sh"><span class="ov">Account</span><button class="ib" data-close aria-label="Close">${I('x')}</button></div>
+  <div class="acct"><span class="avatar">JD</span><span class="bd"><b>Joel Dickson</b><span>joel@example.com</span></span></div>
+  <div class="sb2" style="padding:0"><div class="list">
+    <div class="row">${I('server')}<span class="bd"><span class="tt">Server</span><span class="mt">https://${SERVER} · Codex 1.0.0</span></span></div>
+    <button class="row danger" data-go="login"><span style="display:flex;color:var(--color-danger)">${I('logout')}</span><span class="bd"><span class="tt">Sign out</span><span class="mt">Back to Sign in, with this server filled in</span></span></button>
+  </div><p class="foot" style="padding-bottom:12px">To use another server, sign out and change the address. Password and users are managed on desktop.</p></div>`;
+}
+const SHEETS = { scene: sceneSheet, record: recordSheet, chapters: chaptersSheet, books: booksSheet, account: accountSheet };
+
+// ---------- Phone ----------
+const SCREENS = { login: loginScreen, library: libraryScreen, plan: planScreen, write: writeScreen, writeEdit: writeEditScreen, kb: kbScreen, settings: settingsScreen, entry: entryScreen, style: styleScreen };
+const phones = [];
+function statusbar() { return `<div class="sb"><span>9:41</span><span class="isl"></span><span class="ind"><i style="width:3px;height:5px"></i><i style="width:3px;height:7px"></i><i style="width:3px;height:9px"></i><i style="width:3px;height:11px"></i><i style="width:22px;height:11px;border-radius:3px;margin-left:4px"></i></span></div>`; }
+function renderPhone(ph) {
+  const tb = tabbar(ph);
+  ph.el.innerHTML = `<div class="scr">${statusbar()}${SCREENS[ph.screen](ph)}${tb}<div class="home ${ph.screen === 'writeEdit' ? 'k' : tb ? '' : 'bare'}"></div>
+    ${ph.sheet ? `<div class="scrim" data-close></div><div class="sheet"><div class="grab"></div>${SHEETS[ph.sheet](ph.arg)}<div class="home"></div></div>` : ''}</div>`;
+}
+function phone(container, cap, note, state) {
+  const wrap = document.createElement('div'); wrap.className = 'ph-wrap';
+  wrap.innerHTML = `<div class="ph-cap"><b>${cap}</b></div><div class="phone"></div>${note ? `<p class="ph-note">${note}</p>` : ''}`;
+  container.appendChild(wrap);
+  const ph = { el: wrap.querySelector('.phone'), screen: 'plan', sheet: null, arg: null, ...state };
+  ph.el.addEventListener('click', ev => {
+    const t = ev.target.closest('[data-go],[data-sheet],[data-close]'); if (!t) return;
+    if (t.hasAttribute('data-close')) { ph.sheet = null; ph.arg = null; }
+    else if (t.dataset.sheet) { ph.sheet = t.dataset.sheet; ph.arg = t.dataset.arg || null; }
+    else { ph.screen = t.dataset.go; ph.sheet = null; ph.arg = null; }
+    renderPhone(ph);
+  });
+  phones.push(ph); renderPhone(ph);
+}
+const main = document.getElementById('main'), drill = document.getElementById('drill'), signin = document.getElementById('signin');
+phone(signin, 'Sign in', 'Server, email, password. https:// is added when no scheme is typed; the server field uses the URL keyboard with autocorrect and capitals off. Server is checked on leaving the field, then Sign in is enabled. Tap Sign in.', { screen: 'login', login: 'ok' });
+phone(signin, 'Sign in › server not reachable', 'The health check failed, so the error sits under the server field and Sign in stays disabled. Email and password are not asked about until the server answers.', { screen: 'login', login: 'unreachable' });
+phone(signin, 'Sign in › refused', 'The server answered but refused the account. Same message as desktop; the password field keeps focus and the server stays as typed.', { screen: 'login', login: 'refused' });
+phone(signin, 'Library › account', 'The avatar in Library opens the account sheet: who is signed in, to which server, and Sign out. Sign out deletes the token and returns to Sign in with the server filled in.', { screen: 'library', sheet: 'account' });
+phone(main, '1 · Library', 'Root screen, no tab bar. Continue card reopens the last screen used in a book (codex.last.&lt;id&gt;). Series are groups, not a separate screen.', { screen: 'library' });
+phone(main, '2 · Plan', 'Outline only: Act → Chapter → Scene cards, acts collapse and stick to the top. Scope pill narrows to an act or chapter. Tap a scene for its sheet.', { screen: 'plan' });
+phone(main, '3 · Write', 'One column; the scene gutter sits above its scene, as Write already does under 760px. Chapter jump replaces the minimap. Tap the prose to edit.', { screen: 'write' });
+phone(main, '4 · Knowledge base', 'The desktop sidebar as a full screen: search, category chips (the funnel filter), grouped rows with scene and voice-note counts.', { screen: 'kb' });
+phone(main, '5 · Book settings', 'Grouped rows, same sections and order as desktop. Values from the series carry a Series tag. Layout is marked Desktop.', { screen: 'settings' });
+phone(drill, 'Knowledge base › entry', 'Pushed screen. Record to entry is the primary action (#33); recordings land as voice notes and their transcript as an Addition or the summary.', { screen: 'entry' });
+phone(drill, 'Plan › scene sheet', 'Edit title, summary, labels and links in place. Record from here creates a new entry linked to the scene.', { screen: 'plan', sheet: 'scene', arg: '1.2' });
+phone(drill, 'Record (#33)', 'Live transcript while recording. On-device or server transcription is a setting, not a choice on every recording.', { screen: 'plan', sheet: 'record', arg: '1.2' });
+phone(drill, 'Write › editing', 'The existing TipTap editor in a WebView (#35). Tab bar hides for the keyboard; the accessory bar carries the / menu, @ mention, Scene beat, scene break and marks; ⌄ closes the keyboard. Beats generate as on desktop.', { screen: 'writeEdit' });
+phone(drill, 'Write › chapter jump', 'Chapters grouped by act; the current one in accent.', { screen: 'write', sheet: 'chapters' });
+phone(drill, 'Book switcher', 'Tap the book title in any book screen. Recent books, then All books in Library.', { screen: 'kb', sheet: 'books' });
+phone(drill, 'Settings › style guide', 'Long text fields push to their own editor with Done.', { screen: 'style' });
+
+// ---------- Controls ----------
+document.addEventListener('click', ev => {
+  const t = ev.target.closest('[data-theme-set]');
+  if (t) { const v = t.dataset.themeSet; if (v === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = v; syncTheme(); }
+});
+function syncTheme() { const cur = document.documentElement.dataset.theme || 'system'; document.querySelectorAll('[data-theme-set]').forEach(b => b.setAttribute('aria-pressed', b.dataset.themeSet === cur)); }
+syncTheme();
+
+</script>
+</body>
+</html>

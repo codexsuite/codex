@@ -1,0 +1,132 @@
+[
+  {
+    "name": "crlf-and-trailing-spaces",
+    "input": "One line.  \r\nTwo line.\r\n\r\n\r\nThree.\r\n",
+    "stored": "One line.\nTwo line.\n\nThree.\n"
+  },
+  {
+    "name": "empty",
+    "input": "\n\n  \n",
+    "stored": ""
+  },
+  {
+    "name": "bom",
+    "input": "﻿Hello.",
+    "stored": "Hello.\n"
+  },
+  {
+    "name": "underscore-emphasis",
+    "input": "A _soft_ and __hard__ word, my_var and _x.",
+    "stored": "A *soft* and **hard** word, my\\_var and \\_x.\n"
+  },
+  {
+    "name": "app-links-become-text",
+    "input": "See [Mara](kb:0199c0de-0000-7000-8000-000000000001), [quote](ref:0199c0de-0000-7000-8000-000000000002) and [Ch 1](chapter:abc).",
+    "stored": "See Mara, quote and Ch 1.\n"
+  },
+  {
+    "name": "directive-lines-escaped",
+    "input": "::beat{id=\"0199c0de-0000-7000-8000-000700000001\"}\n\n:::aside\nInside\n:::",
+    "stored": "\\::beat{id=\"0199c0de-0000-7000-8000-000700000001\"}\n\n\\:::aside\nInside\n\\:::\n"
+  },
+  {
+    "name": "heading-splits-block",
+    "input": "## Night\nThe road was dark.",
+    "stored": "## Night\n\nThe road was dark.\n"
+  },
+  {
+    "name": "star-bullets-and-renumbering",
+    "input": "* one\n+ two\n\n3. first\n3. second",
+    "stored": "- one\n- two\n\n3. first\n4. second\n"
+  },
+  {
+    "name": "code-span-kept",
+    "input": "Run `a_b [c]` now, but ` alone.",
+    "stored": "Run `a_b [c]` now, but \\` alone.\n"
+  },
+  {
+    "name": "fence-kept",
+    "input": "Before.\n```\nx_y  [z]\n\nmore\n```\nAfter.",
+    "stored": "Before.\n\n```\nx_y  [z]\n\nmore\n```\n\nAfter.\n"
+  },
+  {
+    "name": "backslashes",
+    "input": "A \\* star, a C:\\path and \\_.",
+    "stored": "A \\* star, a C:\\\\path and \\_.\n"
+  },
+  {
+    "name": "quote",
+    "input": "> Said *she*.\n>\n> Then [left].",
+    "stored": "> Said *she*.\n>\n> Then \\[left\\].\n"
+  },
+  {
+    "name": "directive-after-bullet",
+    "input": "- ::beat{id=\"0199c0de-0000-7000-8000-000700000001\"}",
+    "stored": "- \\::beat{id=\"0199c0de-0000-7000-8000-000700000001\"}\n"
+  },
+  {
+    "name": "directive-after-star-bullet",
+    "input": "* ::kb-addition{id=\"0199c0de-0000-7000-8000-000800000001\"}",
+    "stored": "- \\::kb-addition{id=\"0199c0de-0000-7000-8000-000800000001\"}\n"
+  },
+  {
+    "name": "directive-after-ordered",
+    "input": "1. ::pagebreak",
+    "stored": "1. \\::pagebreak\n"
+  },
+  {
+    "name": "directive-after-quote",
+    "input": "> ::beat{id=\"0199c0de-0000-7000-8000-000700000001\"}",
+    "stored": "> \\::beat{id=\"0199c0de-0000-7000-8000-000700000001\"}\n"
+  },
+  {
+    "name": "directive-after-tight-quote",
+    "input": ">::pagebreak",
+    "stored": "> \\::pagebreak\n"
+  },
+  {
+    "name": "scene-breaks",
+    "input": "One.\n\n* * *\n\n- - -\n\n***\n\nTwo.",
+    "stored": "One.\n\n\\* \\* \\*\n\n\\* \\* \\*\n\n\\* \\* \\*\n\nTwo.\n"
+  },
+  {
+    "name": "list-then-unindented-line",
+    "input": "- one\n- two\nnot in the list",
+    "stored": "- one\n- two\n\nnot in the list\n"
+  },
+  {
+    "name": "emphasis-across-blocks-escaped",
+    "input": "*a\n\nb*",
+    "stored": "\\*a\n\nb\\*\n"
+  },
+  {
+    "name": "tight-quote",
+    "input": ">text",
+    "stored": "> text\n"
+  },
+  {
+    "name": "bare-hashes",
+    "input": "##",
+    "stored": "\\##\n"
+  },
+  {
+    "name": "embeds-inside-code-broken",
+    "input": "Use `[q](ref:0199c0de-0000-7000-8000-000700000003)` here.\n\n```\n::beat{id=\"0199c0de-0000-7000-8000-000700000001\"}\n::spell{kb=\"0199c0de-0000-7000-8000-000700000002\"}\n[q](ref:0199c0de-0000-7000-8000-000700000003)\n```",
+    "stored": "Use `[q] (ref:0199c0de-0000-7000-8000-000700000003)` here.\n\n```\n ::beat{id=\"0199c0de-0000-7000-8000-000700000001\"}\n ::spell{kb=\"0199c0de-0000-7000-8000-000700000002\"}\n[q] (ref:0199c0de-0000-7000-8000-000700000003)\n```\n"
+  },
+  {
+    "name": "nul-stripped",
+    "input": "Nul\u0000 here.",
+    "stored": "Nul here.\n"
+  },
+  {
+    "name": "emphasis before a dash",
+    "input": "*Ship It Friday*—the book",
+    "stored": "*Ship It Friday*—the book\n"
+  },
+  {
+    "name": "emphasis inside a word",
+    "input": "un*believ*able and ok.**bold**",
+    "stored": "un*believ*able and ok.**bold**\n"
+  }
+]

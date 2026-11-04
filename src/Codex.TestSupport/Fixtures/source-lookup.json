@@ -1,0 +1,72 @@
+[
+  {
+    "kind": "isbn",
+    "value": "9781736426005",
+    "result": {
+      "outcome": "found",
+      "source": {
+        "title": "Shape Up",
+        "authors": ["Ryan Singer"],
+        "year": 2019,
+        "publisher": "Basecamp",
+        "url": null
+      },
+      "redirectTo": null
+    }
+  },
+  {
+    "kind": "isbn",
+    "value": "9780140449136",
+    "result": {
+      "outcome": "found",
+      "source": {
+        "title": "The Histories",
+        "authors": ["Herodotus"],
+        "year": 2003,
+        "publisher": "Penguin Classics",
+        "url": null
+      },
+      "redirectTo": null
+    }
+  },
+  {
+    "kind": "doi",
+    "value": "10.1000/xyz123",
+    "result": {
+      "outcome": "found",
+      "source": {
+        "title": "Sleep and Memory Consolidation",
+        "authors": ["Ada Lovelace", "Charles Babbage"],
+        "year": 2019,
+        "publisher": "Journal of Imaginary Studies",
+        "url": "https://doi.org/10.1000/xyz123"
+      },
+      "redirectTo": null
+    }
+  },
+  {
+    "kind": "url",
+    "value": "https://example.test/article",
+    "result": {
+      "outcome": "found",
+      "source": {
+        "title": "An Example Article",
+        "authors": [],
+        "year": null,
+        "publisher": null,
+        "url": "https://example.test/article"
+      },
+      "redirectTo": null
+    }
+  },
+  {
+    "kind": "url",
+    "value": "https://example.test/old-address",
+    "result": { "outcome": "redirect", "source": null, "redirectTo": "https://example.test/article" }
+  },
+  {
+    "kind": "url",
+    "value": "https://dora.dev/research/2024/",
+    "result": { "outcome": "redirect", "source": null, "redirectTo": "https://dora.dev/research/2024/dora-report/" }
+  }
+]

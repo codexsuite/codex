@@ -1,0 +1,41 @@
+/* Settings styles that Tailwind utilities do not cover. */
+@keyframes settings-flash {
+  0% {
+    box-shadow: 0 0 0 0 var(--color-accent, #2563c9);
+    background-color: var(--color-accent-soft, #dae6fb);
+  }
+  60% {
+    box-shadow: 0 0 0 4px var(--color-accent, #2563c9);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.settings-flash {
+  animation: settings-flash 1.4s ease-out 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-flash {
+    animation-duration: 0.01s;
+  }
+}
+
+/* Read-only settings (#80, view and comment roles): the values stay legible, the dashed border says they're fixed. */
+.settings-read-only :is(input, select, textarea):disabled {
+  opacity: 1;
+  color: var(--color-text);
+  -webkit-text-fill-color: var(--color-text);
+  background: var(--color-surface);
+  border-style: dashed;
+  cursor: default;
+}
+.settings-read-only :is(input, textarea):disabled::placeholder {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+.settings-read-only button:disabled {
+  cursor: default;
+}
+.settings-read-only [aria-pressed='true']:disabled {
+  opacity: 1;
+}

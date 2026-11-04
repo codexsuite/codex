@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.0" />
+    <PackageReference Include="NUnit" Version="4.3.2" />
+    <PackageReference Include="NUnit.Analyzers" Version="4.7.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="5.0.0" />
+    <PackageReference Include="Shouldly" Version="4.3.0" />
+    <PackageReference Include="Shouldly.FromAssert" Version="1.1.58" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.Playwright" />
+    <Using Include="NUnit.Framework" />
+    <Using Include="Shouldly" />
+  </ItemGroup>
+
+  <!-- Hosts the BFF (API plus the built SPA bundle in its wwwroot) on a real Kestrel port. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Codex.WebApi\Codex.WebApi.csproj" />
+    <ProjectReference Include="..\Codex.TestSupport\Codex.TestSupport.csproj" />
+  </ItemGroup>
+
+</Project>

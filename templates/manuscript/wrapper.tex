@@ -1,0 +1,39 @@
+% Manuscript: standard manuscript format (Shunn) for submissions: 12 pt monospaced or Times, double-spaced,
+% one-inch margins, surname / title / page in the header, each chapter on a new page a third of the way down.
+% Raw LaTeX is not kept (template.json "rawLatex": false): a submission carries no typesetting.
+\documentclass[12pt,$papersize$,oneside]{book}
+\usepackage[top=$margin-top$in,bottom=$margin-bottom$in,left=$margin-inner$in,right=$margin-outer$in]{geometry}
+$if(font)$\usepackage{$if(font-times)$mathptmx$else$courier$endif$}$endif$
+\renewcommand{\familydefault}{$if(font-times)$\rmdefault$else$\ttdefault$endif$}
+\usepackage{setspace}
+\doublespacing
+\usepackage{fancyhdr}
+\usepackage{graphicx}
+\usepackage{array,longtable,booktabs}
+% pandoc writes struck text as \st{...}; ulem's \sout, unlike soul's \st, can hold links, ^ and the other specials.
+\usepackage[normalem]{ulem}
+\newcommand{\st}[1]{\sout{#1}}
+\usepackage[hidelinks]{hyperref}
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\rhead{$for(author)$$author$$sep$, $endfor$ / $title$ / \thepage}
+\setlength{\parindent}{0.5in}
+\setlength{\parskip}{0pt}
+\makeatletter
+\renewcommand{\chapter}{\@ifstar{\codex@chapter}{\codex@chapter}}
+\newcommand{\codex@chapter}[2][]{\clearpage\vspace*{2.5in}\begin{center}#2\end{center}\par}
+\renewcommand{\part}{\@ifstar{\codex@part}{\codex@part}}
+\newcommand{\codex@part}[2][]{\clearpage\vspace*{2.5in}\begin{center}\MakeUppercase{#2}\end{center}\par}
+\makeatother
+\providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\begin{document}
+$if(title-page)$
+\thispagestyle{empty}
+\vspace*{3in}
+\begin{center}\MakeUppercase{$title$}\\[1em] by $for(author)$$author$$sep$, $endfor$\end{center}
+\clearpage
+$endif$
+$body$
+\begin{center}\# \# \#\end{center}
+\end{document}

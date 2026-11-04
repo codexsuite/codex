@@ -1,0 +1,14 @@
+[
+  { "error": "Book 7 was not found.", "code": "not_found" },
+  { "error": "Two scenes match \"Arrival\".", "code": "ambiguous" },
+  { "error": "Someone saved this scene since you read it.", "code": "conflict" },
+  { "error": "That entry is not in this book's scope.", "code": "out_of_scope" },
+  { "error": "This source is still a copyright risk.", "code": "blocked" },
+  { "error": "Archiving this chapter needs confirmation.", "code": "needs_confirmation" },
+  { "error": "Title is required.", "code": "validation" },
+  { "error": "AI drafting is not configured.", "code": "not_configured" },
+  { "error": "Sign in to continue.", "code": "unauthorized" },
+  { "error": "Only admins can manage users.", "code": "forbidden" },
+  { "error": "Too many lookups. Wait a minute and try again.", "code": "rate_limited" },
+  { "error": "Something went wrong on the server.", "code": "internal_error" }
+]

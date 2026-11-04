@@ -1,0 +1,27 @@
+% Fantasy RPG (5e style): the rpgtex dndbook class (tex/, MIT, v0.8.0) as a pandoc template. Codex passes the
+% book's metadata and the template options (template.json) as variables; filters/codex.lua draws the directives.
+\documentclass[$papersize$,$if(onecolumn)$onecolumn$else$twocolumn$endif$,openany,bg=$background$$if(justified)$,justified$endif$]{dndbook}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{array,longtable,booktabs}
+% pandoc writes struck text as \st{...}; ulem's \sout, unlike soul's \st, can hold links, ^ and the other specials.
+\usepackage[normalem]{ulem}
+\newcommand{\st}[1]{\sout{#1}}
+\usepackage{hyperref}
+\geometry{top=$margin-top$in,bottom=$margin-bottom$in,inner=$margin-inner$in,outer=$margin-outer$in,columnsep=$column-gap$in}
+\providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\makeatletter
+\newsavebox\pandoc@box
+\newcommand*\pandocbounded[1]{\sbox\pandoc@box{#1}%
+  \ifdim\wd\pandoc@box>\linewidth\resizebox{\linewidth}{!}{\usebox\pandoc@box}\else\usebox\pandoc@box\fi}
+\makeatother
+\newcommand{\CodexMissingFigure}[1]{\par\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{\centering\textit{Image not available}\\#1}}\par}
+\hypersetup{hidelinks}
+$if(title)$\title{$title$}$endif$
+$if(author)$\author{$for(author)$$author$$sep$ \and $endfor$}$endif$
+\date{}
+\begin{document}
+$if(title-page)$\maketitle$endif$
+$if(toc)$\tableofcontents$endif$
+$body$
+\end{document}

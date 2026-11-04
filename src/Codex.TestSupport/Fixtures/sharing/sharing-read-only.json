@@ -1,0 +1,11 @@
+{
+  "owner": { "id": "0199c0de-0000-7000-8000-000100000001", "displayName": "Joel Dickson", "email": null },
+  "role": "comment",
+  "book": [
+    {
+      "user": { "id": "0199c0de-0000-7000-8000-000100000002", "displayName": "Ana Kowalczyk", "email": null },
+      "role": "comment"
+    }
+  ],
+  "series": null
+}

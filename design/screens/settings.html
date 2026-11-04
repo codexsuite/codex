@@ -1,0 +1,1171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Codex · Book settings (reference)</title>
+<!--
+  Reference implementation of Book settings (⚙, gap G8 in #16, screen "Book Settings" in #8), inside the book
+  workspace chrome. Open directly in a browser. Uses ../tokens.css only; no build step.
+  Any book in the Library catalogue opens with ?book=<id> (default Product Engineering), including the books shared
+  with you (glass-orchard, paper-saints, lamplighter, wick-and-ember, moth-hour, salt-king). ?role=owner|write|comment|view
+  previews the page as someone with that access (#80). Sections deep link with #book, #series, #writing, #citations,
+  #rules, #letters, #layout, #sharing and #archive.
+  Working: autosave, series membership and number with the copy-down confirm step (#10 decision 4), the style
+  guide with the series guide beside it, citation style with live examples, publisher rules with their effect on
+  References, permission letter details with a live letter, series-inherited publication settings (book values win),
+  the layout template, pinned version and trim, Duplicate, Export source and Archive, and Sharing (#80): the owner,
+  one row per person with a role menu and Remove, Add people by exact email with a debounced lookup (match, no
+  match, already has access, already covered by the series), This book and Whole series lists for a book in a
+  series, the read-only list for everyone else, who gains or loses the book in the move dialog, and the page
+  read-only (View only / Comment only chip) or owner-only actions disabled (Editor) by role.
+  The "Preview" panel bottom-left is a review aid, not part of the design: book, theme, density, View as
+  (Owner / Editor / Commenter / Viewer) and sample addresses for Add people.
+-->
+<link rel="stylesheet" href="../tokens.css">
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--color-bg); color: var(--color-text); font: var(--text-base)/var(--leading) var(--font-sans); -webkit-font-smoothing: antialiased; display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+button, input, select, textarea { font: inherit; color: inherit; }
+svg { flex: none; }
+a { color: inherit; }
+.spacer { flex: 1; }
+[hidden] { display: none !important; }
+.dim-t { color: var(--color-muted); }
+
+/* Shared controls (same as references.html and print.html) */
+.btn { display: inline-flex; align-items: center; gap: 5px; height: var(--control-height); padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: var(--color-surface); font-size: var(--text-sm); font-weight: var(--weight-medium); cursor: pointer; white-space: nowrap; text-decoration: none; }
+.btn:hover { background: var(--color-surface-2); }
+.btn.primary { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-accent-fg); }
+.btn.primary:hover { filter: brightness(1.07); }
+.btn.danger { color: var(--color-danger); border-color: color-mix(in srgb, var(--color-danger) 40%, var(--color-border)); }
+.btn.danger:hover { background: color-mix(in srgb, var(--color-danger) 8%, var(--color-surface)); }
+.btn.danger.solid { background: var(--color-danger); border-color: var(--color-danger); color: #fff; }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--color-surface-2); }
+.btn.sm { height: 24px; padding: 0 8px; font-size: var(--text-xs); }
+.btn svg, .seg svg, .ib svg, .mini svg { width: 13px; height: 13px; }
+.btn:focus-visible, .seg button:focus-visible, .ib:focus-visible, .mini:focus-visible, .tab:focus-visible, .nav a:focus-visible, .chipck:focus-within { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.seg { display: inline-flex; height: var(--control-height); border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; background: var(--color-surface); flex: none; max-width: 100%; }
+.seg button { display: inline-flex; align-items: center; gap: 5px; padding: 0 9px; border: 0; border-right: 1px solid var(--color-border); background: transparent; color: var(--color-muted); font-size: var(--text-sm); cursor: pointer; white-space: nowrap; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--color-accent-soft); color: var(--color-text); font-weight: var(--weight-semibold); }
+.seg button:disabled { opacity: .45; cursor: not-allowed; }
+.seg.sm { height: 24px; }
+.seg.sm button { padding: 0 8px; font-size: var(--text-xs); }
+.overline { font-size: var(--text-2xs); font-weight: var(--weight-medium); color: var(--color-muted); text-transform: uppercase; letter-spacing: .02em; }
+.ib { display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--color-muted); cursor: pointer; flex: none; text-decoration: none; }
+.ib:hover { background: var(--color-surface-2); color: var(--color-text); }
+.ib[aria-current="page"] { background: var(--color-accent-soft); color: var(--color-accent); }
+.mini { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 6px; border: 0; border-radius: var(--radius-xs); background: none; color: var(--color-muted); font-size: var(--text-xs); font-weight: var(--weight-medium); cursor: pointer; white-space: nowrap; text-decoration: none; }
+.mini:hover { background: var(--color-surface-2); color: var(--color-text); }
+.mini.go { color: var(--color-accent); }
+.mini svg { width: 11px; height: 11px; }
+.badge { display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: color-mix(in srgb, var(--tone) 16%, transparent); color: var(--tone); font-size: var(--text-2xs); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+.st { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-xs); font-weight: var(--weight-medium); white-space: nowrap; }
+.st i { width: 6px; height: 6px; border-radius: 50%; background: var(--tone); flex: none; }
+
+/* Book header (#6 shared chrome). On this screen no tab is selected and ⚙ shows as current. */
+.bookbar { height: var(--bar-height); flex: none; display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); background: var(--color-surface); border-bottom: 1px solid var(--color-border); min-width: 0; }
+.book-id { display: flex; align-items: center; gap: 7px; min-width: 0; padding-right: var(--space-2); border-right: 1px solid var(--color-border); height: 100%; }
+.book-id .t { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+.book-id b { font-size: var(--text-sm); font-weight: var(--weight-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+.book-id span { font-size: var(--text-2xs); color: var(--color-muted); white-space: nowrap; }
+.cover { border-radius: 2px; box-shadow: 0 0 0 1px rgb(0 0 0 / .15); flex: none; aspect-ratio: 2 / 3; background: linear-gradient(160deg, var(--c1), var(--c2) 70%); }
+.cover.thumb { width: 20px; }
+.tabs { display: flex; align-items: center; height: 100%; }
+.tab { position: relative; display: inline-flex; align-items: center; gap: 5px; height: 100%; padding: 0 10px; border: 0; background: none; color: var(--color-muted); font-size: var(--text-sm); font-weight: var(--weight-medium); cursor: pointer; text-decoration: none; white-space: nowrap; }
+.tab:hover { color: var(--color-text); }
+.tabs .vr { width: 1px; height: 16px; margin: 0 4px; background: var(--color-border); }
+.sync { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; }
+.sync i { width: 6px; height: 6px; border-radius: 50%; background: var(--color-ok); }
+.sync[data-s="unsaved"] i { background: var(--color-warn); }
+.sync[data-s="saving"] i { background: var(--color-accent); animation: pulse .7s ease-in-out infinite alternate; }
+@keyframes pulse { to { opacity: .25; } }
+.avatar { width: 22px; height: 22px; border-radius: 50%; background: var(--color-accent-soft); color: var(--color-accent); font-size: 10px; font-weight: 700; display: grid; place-items: center; flex: none; }
+
+/* Settings page: section nav + one column of section cards */
+.page { flex: 1; min-height: 0; overflow: auto; scroll-behavior: smooth; }
+.wrap { display: grid; grid-template-columns: 196px minmax(0, 760px); gap: var(--space-5); justify-content: center; padding: var(--space-4) var(--space-4) 120px; }
+.nav { position: sticky; top: var(--space-4); align-self: start; display: grid; gap: 1px; }
+.nav h1 { margin: 0 0 var(--space-2) 8px; font-size: var(--text-lg); font-weight: var(--weight-semibold); }
+.nav a { display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 8px; border-radius: var(--radius-sm); color: var(--color-muted); font-size: var(--text-sm); font-weight: var(--weight-medium); text-decoration: none; white-space: nowrap; }
+.nav a:hover { background: var(--color-surface-2); color: var(--color-text); }
+.nav a[aria-current="true"] { background: var(--color-accent-soft); color: var(--color-text); font-weight: var(--weight-semibold); }
+.nav a svg { width: 14px; height: 14px; }
+.nav a .badge { margin-left: auto; }
+.nav .foot { margin: var(--space-3) 8px 0; font-size: var(--text-xs); color: var(--color-muted); line-height: 1.45; }
+.col { display: grid; gap: var(--space-4); min-width: 0; }
+
+.card { scroll-margin-top: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); min-width: 0; }
+.card-h { display: flex; align-items: flex-start; gap: var(--space-2); padding: var(--space-3) var(--space-4) 0; }
+.card-h > div { flex: 1; min-width: 0; }
+.card-h h2 { margin: 0; font-size: var(--text-md); font-weight: var(--weight-semibold); }
+.card-h p { margin: 2px 0 0; font-size: var(--text-xs); color: var(--color-muted); }
+.card-b { padding: var(--space-2) var(--space-4) var(--space-4); }
+.sub { scroll-margin-top: var(--space-4); margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--color-border); }
+.sub-h { display: flex; align-items: center; gap: var(--space-2); margin-bottom: 6px; }
+.sub-h h3 { margin: 0; font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.sub-h .spacer + * { flex: none; }
+.flash { animation: flash 1.6s ease-out; }
+@keyframes flash { 0%, 30% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 45%, transparent); } 100% { box-shadow: 0 0 0 3px transparent; } }
+
+/* Field rows: label column, control, help under the control */
+.row { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 4px var(--space-3); align-items: start; padding: 7px 0; }
+.row + .row { border-top: 1px dashed var(--color-border); }
+.row > .lbl { display: flex; flex-wrap: wrap; align-items: center; align-content: center; gap: 2px 6px; min-height: var(--control-height); font-size: var(--text-sm); color: var(--color-muted); }
+.row > .ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--space-2); min-width: 0; min-height: var(--control-height); }
+.help { flex-basis: 100%; margin: 0; font-size: var(--text-xs); color: var(--color-muted); line-height: 1.45; }
+.help b { color: var(--color-text); font-weight: var(--weight-medium); }
+.input, .select { height: var(--control-height); min-width: 0; padding: 0 8px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg); font-size: var(--text-sm); }
+.input:focus, .select:focus, .area:focus { outline: 2px solid var(--color-accent); outline-offset: -1px; border-color: transparent; }
+.input.w-full { flex: 1 1 260px; }
+.input.num { width: 104px; text-align: right; font-variant-numeric: tabular-nums; }
+.input.yr { width: 80px; font-variant-numeric: tabular-nums; }
+.select { padding-right: 4px; cursor: pointer; }
+.area { width: 100%; min-height: 104px; padding: 7px 9px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg); font: var(--text-sm)/1.5 var(--font-sans); resize: vertical; }
+.unit { font-size: var(--text-xs); color: var(--color-muted); }
+
+/* Where a value comes from: the series (inherited) or this book (an override, with reset) */
+.inh { display: inline-flex; align-items: center; gap: 3px; height: 18px; padding: 0 6px; border-radius: 9px; font-size: var(--text-2xs); font-weight: var(--weight-medium); white-space: nowrap; background: var(--color-surface-2); color: var(--color-muted); border: 0; cursor: default; }
+.inh.own { background: var(--color-accent-soft); color: var(--color-accent); cursor: pointer; }
+.inh.own:hover { text-decoration: line-through; }
+.inh svg { width: 9px; height: 9px; }
+
+/* Progress (words ÷ target, the Library tile bar) */
+.prog { display: flex; align-items: center; gap: 8px; flex-basis: 100%; font-size: var(--text-xs); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.prog > span:last-child { white-space: nowrap; }
+.prog .bar { flex: 0 1 220px; height: 3px; border-radius: 2px; background: var(--color-surface-2); overflow: hidden; }
+.prog .bar i { display: block; height: 100%; background: var(--color-accent); }
+
+/* Status segmented control: dot + label */
+.seg.status button i { width: 6px; height: 6px; border-radius: 50%; background: var(--tone); }
+
+/* Cover */
+.cover-ed { display: flex; align-items: flex-end; gap: var(--space-3); }
+.cover.big { width: 64px; display: grid; place-items: end start; padding: 5px; color: rgb(255 255 255 / .85); font: 600 7px/1.2 var(--font-sans); }
+.cover-ed .acts { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* Notes, callouts and pending changes */
+.note { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid color-mix(in srgb, var(--tone) 35%, var(--color-border)); background: color-mix(in srgb, var(--tone) 7%, var(--color-surface)); font-size: var(--text-xs); }
+.note > svg { width: 14px; height: 14px; color: var(--tone); margin-top: 1px; }
+.note b { font-weight: var(--weight-semibold); }
+.note .acts { grid-column: 2; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.note ul { margin: 2px 0 0; padding-left: 16px; }
+
+/* Series: who is in it and the numbers that follow */
+.order { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; flex-basis: 100%; }
+.order li { display: grid; grid-template-columns: 66px 20px minmax(0, 1fr) auto; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-radius: var(--radius-sm); font-size: var(--text-sm); }
+.order li .no { white-space: nowrap; font-size: var(--text-2xs); color: var(--color-muted); font-variant-numeric: tabular-nums; text-transform: uppercase; letter-spacing: .02em; }
+.order li .cover { width: 14px; }
+.order li .t { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.order li.me { background: var(--color-accent-soft); font-weight: var(--weight-semibold); }
+.order li .chg { font-size: var(--text-2xs); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.order li .chg b { color: var(--tone); font-weight: var(--weight-semibold); }
+
+/* Read-only series guide beside the book's own */
+.inherited { margin-top: 8px; padding: 8px 10px; border-left: 2px solid var(--color-border); background: var(--color-bg); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; font-size: var(--text-sm); color: var(--color-muted); line-height: 1.5; white-space: pre-line; }
+.inherited .overline { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; white-space: normal; }
+
+/* Citation examples */
+.cites { flex-basis: 100%; display: grid; gap: 6px; padding: 9px 12px; border-radius: var(--radius-sm); background: var(--color-bg); }
+.cites .k { font-size: var(--text-2xs); color: var(--color-muted); text-transform: uppercase; letter-spacing: .02em; }
+.cites .c { font-size: var(--text-sm); line-height: 1.5; padding-left: 16px; text-indent: -16px; }
+.cites .intext { font-size: var(--text-sm); }
+.cites .intext sup { color: var(--color-ok); font-weight: var(--weight-semibold); font-size: .72em; }
+
+/* Publisher rules: the limit and what it does to References right now */
+.impact { flex-basis: 100%; display: grid; gap: 6px; padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid color-mix(in srgb, var(--tone) 35%, var(--color-border)); background: color-mix(in srgb, var(--tone) 6%, var(--color-surface)); font-size: var(--text-xs); }
+.impact > b { font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--tone); }
+.impact ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.impact li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.impact li .src { font-weight: var(--weight-medium); color: var(--color-text); }
+.impact li .why { color: var(--color-muted); }
+.impact li .arrow { color: var(--color-muted); }
+.wbar { position: relative; flex-basis: 100%; height: 30px; margin: 2px 10px 0; }
+.wbar .track { position: absolute; left: 0; right: 0; top: 9px; height: 4px; border-radius: 2px; background: var(--color-surface-2); }
+.wbar .lim { position: absolute; top: 2px; bottom: 2px; width: 2px; margin-left: -1px; background: var(--color-text); border-radius: 1px; }
+.wbar .dot { position: absolute; top: 6px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: var(--tone); box-shadow: 0 0 0 2px var(--color-surface); }
+.wbar .scale { position: absolute; top: 16px; font-size: var(--text-2xs); color: var(--color-muted); font-variant-numeric: tabular-nums; transform: translateX(-50%); }
+.fixed { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); font-weight: var(--weight-medium); }
+
+/* Permission letters: formats as check chips, then the letter as it will read */
+.chipck { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px 0 7px; border: 1px solid var(--color-border); border-radius: 13px; background: var(--color-surface); font-size: var(--text-sm); cursor: pointer; user-select: none; }
+.chipck input { margin: 0; accent-color: var(--color-accent); }
+.chipck:has(input:checked) { background: var(--color-accent-soft); border-color: color-mix(in srgb, var(--color-accent) 40%, var(--color-border)); }
+.letter { flex-basis: 100%; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--color-bg); border: 1px dashed var(--color-border); font-size: var(--text-sm); line-height: 1.55; }
+.letter mark { background: color-mix(in srgb, var(--color-accent) 16%, transparent); color: inherit; border-radius: 2px; padding: 0 2px; }
+.letter mark.miss { background: color-mix(in srgb, var(--color-warn) 18%, transparent); color: var(--color-warn); }
+
+/* Layout template */
+.tplcard { display: flex; align-items: center; gap: var(--space-3); flex-basis: 100%; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); }
+.tplcard > div { flex: 1; min-width: 0; }
+.tplcard b { display: block; font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.tplcard span { display: block; font-size: var(--text-xs); color: var(--color-muted); }
+.pin { display: inline-flex !important; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; }
+.pin svg { width: 10px; height: 10px; }
+.tth { position: relative; width: 34px; height: 44px; border-radius: 2px; box-shadow: 0 0 0 1px rgb(0 0 0 / .12), 0 1px 3px rgb(0 0 0 / .15); overflow: hidden; flex: none; }
+.tth.r { background: #f6efdd; }
+.tth.r::before { content: ""; position: absolute; left: 4px; right: 4px; top: 5px; height: 3px; background: #58180d; }
+.tth.r::after { content: ""; position: absolute; left: 4px; right: 4px; top: 10px; bottom: 5px; background: repeating-linear-gradient(#7a6a55 0 1px, transparent 1px 3px) left / 45% 100% no-repeat, repeating-linear-gradient(#7a6a55 0 1px, transparent 1px 3px) right / 45% 70% no-repeat; opacity: .8; }
+.tth.n { background: #fbf8f1; }
+.tth.n::before { content: ""; position: absolute; left: 10px; right: 10px; top: 11px; height: 2px; background: #3a3530; }
+.tth.n::after { content: ""; position: absolute; left: 6px; right: 6px; top: 17px; bottom: 5px; background: repeating-linear-gradient(#8d857a 0 1px, transparent 1px 3px); opacity: .8; }
+.tth.m { background: #fff; }
+.tth.m::after { content: ""; position: absolute; left: 5px; right: 5px; top: 8px; bottom: 5px; background: repeating-linear-gradient(#555 0 1px, transparent 1px 5px); opacity: .7; }
+
+/* Archive and other book-level actions */
+.act-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px var(--space-3); align-items: center; padding: 9px 0; }
+.act-row + .act-row { border-top: 1px dashed var(--color-border); }
+.act-row b { display: block; font-size: var(--text-sm); font-weight: var(--weight-medium); }
+.act-row span { display: block; font-size: var(--text-xs); color: var(--color-muted); }
+.card.danger { border-color: color-mix(in srgb, var(--color-danger) 35%, var(--color-border)); }
+.archived-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--space-3); padding: 7px var(--space-4); border-bottom: 1px solid color-mix(in srgb, var(--color-warn) 40%, var(--color-border)); background: color-mix(in srgb, var(--color-warn) 9%, var(--color-surface)); font-size: var(--text-xs); }
+.archived-bar svg { width: 14px; height: 14px; color: var(--color-warn); }
+.archived-bar .btn { margin-left: auto; }
+
+/* Sharing (#80): the owner, then one row per person, then the exact-email lookup */
+.people { list-style: none; margin: 0; padding: 0; display: grid; }
+.person { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto auto; align-items: center; gap: 4px 10px; min-height: 42px; padding: 6px 0; }
+.person + .person { border-top: 1px dashed var(--color-border); }
+.person .avatar { width: 26px; height: 26px; background: var(--color-surface-2); color: var(--color-text); }
+.person.me .avatar { background: var(--color-accent-soft); color: var(--color-accent); }
+.person .who { min-width: 0; }
+.person .who b { display: flex; align-items: center; gap: 6px; font-size: var(--text-sm); font-weight: var(--weight-medium); white-space: nowrap; }
+.person .who b > span { overflow: hidden; text-overflow: ellipsis; }
+.person .who b em { font-style: normal; font-weight: var(--weight-regular, 400); color: var(--color-muted); }
+.person .who > span { display: block; font-size: var(--text-xs); color: var(--color-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.person .select { height: 26px; font-size: var(--text-xs); }
+.person .role-t { font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; }
+.person .lockd { display: inline-grid; place-items: center; width: 22px; color: var(--color-muted); }
+.person .lockd svg { width: 12px; height: 12px; }
+.you { display: inline-flex; align-items: center; height: 16px; padding: 0 5px; border-radius: 8px; background: var(--color-accent-soft); color: var(--color-accent); font-size: var(--text-2xs); font-weight: var(--weight-semibold); flex: none; }
+.share-empty { margin: 2px 0 0; padding: 6px 0; font-size: var(--text-xs); color: var(--color-muted); }
+.share-add { display: grid; gap: 6px; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--color-border); }
+.share-add > label { font-size: var(--text-sm); color: var(--color-muted); }
+.share-add .input { width: 100%; }
+.share-add .help { margin-top: -2px; }
+.lookup:empty { display: none; }
+.lookup .found { padding: 0 10px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); }
+.lookup .found .person { grid-template-columns: 26px minmax(0, 1fr) auto auto; }
+.lookup .found .note { margin: 0 0 8px; }
+.lk-msg { display: flex; align-items: center; gap: 6px; margin: 0; font-size: var(--text-xs); color: var(--color-muted); }
+.lk-msg svg { width: 13px; height: 13px; }
+.lk-msg .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-accent); animation: pulse .7s ease-in-out infinite alternate; }
+.lk-msg b { color: var(--color-text); font-weight: var(--weight-medium); }
+.sub.first { margin-top: 2px; padding-top: 0; border-top: 0; }
+.sub-p { margin: -2px 0 4px; font-size: var(--text-xs); color: var(--color-muted); line-height: 1.45; }
+.roles-help { margin: 10px 0 0; font-size: var(--text-xs); color: var(--color-muted); line-height: 1.5; }
+.roles-help b { color: var(--color-text); font-weight: var(--weight-medium); }
+
+/* Your access (#80): the quiet bookbar chip (the #26 F-06 "Reviewer · comment only" style) and read-only settings */
+.role-chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border: 0; border-radius: 11px; background: var(--color-surface-2); color: var(--color-muted); font-size: var(--text-2xs); font-weight: var(--weight-medium); white-space: nowrap; cursor: help; flex: none; }
+.role-chip svg { width: 11px; height: 11px; }
+.role-chip:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.input:disabled, .select:disabled, .area:disabled { opacity: 1; color: var(--color-text); -webkit-text-fill-color: var(--color-text); background: var(--color-surface); border-style: dashed; cursor: default; }
+.input:disabled::placeholder, .area:disabled::placeholder { color: transparent; -webkit-text-fill-color: transparent; }
+.btn:disabled { opacity: .5; cursor: not-allowed; filter: none; }
+.btn:disabled:hover { background: var(--color-surface); }
+.inh.own:disabled { cursor: default; text-decoration: none; }
+.chipck:has(input:disabled) { cursor: default; }
+body[data-ro] .seg button:disabled { cursor: default; }
+body[data-ro] .seg button[aria-pressed="true"]:disabled { opacity: 1; }
+.owner-only { flex-basis: 100%; margin: 0; font-size: var(--text-xs); color: var(--color-muted); display: flex; align-items: center; gap: 5px; }
+.owner-only svg { width: 11px; height: 11px; }
+
+/* Dialog (the Library dialog pattern) */
+#dlg { position: fixed; inset: 0; z-index: 45; display: none; place-items: center; padding: var(--space-4); background: rgb(10 14 24 / .45); }
+#dlg.open { display: grid; }
+.dlg { width: min(520px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-raised), 0 24px 60px -20px rgb(0 0 0 / .5); overflow: hidden; }
+.dlg-h { display: flex; align-items: center; gap: 8px; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-border); }
+.dlg-h h2 { margin: 0; flex: 1; font-size: var(--text-md); font-weight: var(--weight-semibold); }
+.dlg-b { padding: var(--space-4); overflow: auto; display: grid; gap: var(--space-3); font-size: var(--text-sm); }
+.dlg-b > p { margin: 0; }
+.dlg-f { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: var(--space-3) var(--space-4); border-top: 1px solid var(--color-border); background: var(--color-bg); }
+.dlg-f .hint { margin-right: auto; font-size: var(--text-xs); color: var(--color-muted); }
+.move { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--space-2); }
+.move > div { padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg); min-width: 0; }
+.move .overline { display: block; }
+.move b { display: block; font-weight: var(--weight-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.move > svg { width: 16px; height: 16px; color: var(--color-muted); }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.steps li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 0 8px; }
+.steps li .ic { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: color-mix(in srgb, var(--tone) 15%, transparent); color: var(--tone); }
+.steps li .ic svg { width: 10px; height: 10px; }
+.steps li b { font-weight: var(--weight-medium); }
+.steps li span { display: block; font-size: var(--text-xs); color: var(--color-muted); }
+.ck-line { display: flex; align-items: flex-start; gap: 7px; font-size: var(--text-xs); color: var(--color-muted); cursor: pointer; }
+.ck-line input { margin: 2px 0 0; accent-color: var(--color-accent); }
+
+/* Toast */
+#toast { position: fixed; left: 50%; bottom: 16px; z-index: 50; transform: translateX(-50%) translateY(20px); opacity: 0; pointer-events: none; display: flex; align-items: center; gap: var(--space-3); max-width: calc(100vw - 32px); padding: 7px 8px 7px 12px; border-radius: var(--radius-md); background: var(--color-text); color: var(--color-bg); font-size: var(--text-sm); box-shadow: var(--shadow-raised); transition: .18s; }
+#toast.show { opacity: 1; transform: translateX(-50%); pointer-events: auto; }
+#toast button, #toast a { border: 0; background: none; color: inherit; font-weight: var(--weight-semibold); text-decoration: underline; cursor: pointer; font-size: var(--text-sm); }
+
+/* Review aid (not part of the design) */
+.preview { position: fixed; left: 12px; bottom: 12px; z-index: 20; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; max-width: calc(100vw - 24px); padding: 6px 8px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); box-shadow: var(--shadow-raised); font-size: var(--text-xs); }
+.preview > b { color: var(--color-muted); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .05em; }
+.preview .select { height: 24px; font-size: var(--text-xs); }
+
+/* Narrower screens: the section nav becomes a scrolling strip above the cards */
+@media (max-width: 1100px) {
+  .bookbar .hide-md { display: none !important; }
+}
+@media (max-width: 860px) {
+  .wrap { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); padding: 0 var(--space-3) 120px; }
+  .nav { position: sticky; top: 0; z-index: 5; display: flex; gap: 2px; overflow-x: auto; margin: 0 calc(-1 * var(--space-3)); padding: 6px var(--space-3); background: var(--color-bg); border-bottom: 1px solid var(--color-border); scrollbar-width: none; }
+  .nav h1, .nav .foot { display: none; }
+  .nav a { flex: none; }
+  .card { scroll-margin-top: 52px; }
+  .sub { scroll-margin-top: 52px; }
+  .sync .lbl-t, .book-id .t { display: none; }
+}
+@media (max-width: 640px) {
+  .bookbar .hide-sm { display: none !important; }
+  .row { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .row > .lbl { min-height: 0; }
+  .card-h, .card-b { padding-left: var(--space-3); padding-right: var(--space-3); }
+  .move { grid-template-columns: minmax(0, 1fr); }
+  .move > svg { transform: rotate(90deg); justify-self: center; }
+  .seg.status { overflow-x: auto; scrollbar-width: none; }
+  .seg.status button { padding: 0 6px; gap: 4px; }
+}
+</style>
+</head>
+<body>
+<header class="bookbar">
+  <a class="ib" id="back" href="library.html" aria-label="Back to Library" title="Back to Library"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3 5 8l5 5"/></svg></a>
+  <a class="ib" id="gear" aria-current="page" aria-label="Book settings" title="Book settings"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg></a>
+  <div class="book-id">
+    <div class="cover thumb" id="barCover"></div>
+    <div class="t"><b id="barTitle"></b><span id="barSub"></span></div>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="Mode">
+    <a class="tab" role="tab" aria-selected="false" data-to="plan.html">Plan</a>
+    <a class="tab" role="tab" aria-selected="false" data-to="write.html">Write</a>
+    <button class="tab hide-sm" role="tab" aria-selected="false">Chat</button>
+    <button class="tab hide-sm" role="tab" aria-selected="false">Review</button>
+    <span class="vr hide-sm" aria-hidden="true"></span>
+    <a class="tab hide-sm" role="tab" aria-selected="false" data-to="references.html">References <span id="refBadge"></span></a>
+    <a class="tab hide-md" role="tab" aria-selected="false" data-to="print.html">Layout</a>
+  </nav>
+  <span class="spacer"></span>
+  <button class="role-chip" id="roChip" hidden></button>
+  <span class="sync" id="sync" data-s="saved"><i></i><span class="lbl-t">Saved</span></span>
+  <span class="avatar" id="meAvatar">JD</span>
+</header>
+<div id="archivedBar"></div>
+
+<div class="page" id="page">
+  <div class="wrap">
+    <nav class="nav" id="nav" aria-label="Settings sections">
+      <h1>Book settings</h1>
+      <a href="#book" data-sec="book"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 2.5h8.5v11H3z"/><path d="M5.5 2.5v11"/></svg>Book</a>
+      <a href="#series" data-sec="series"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 3.5h3v10h-3zM6.5 3.5h3v10h-3z"/><path d="m10.5 4 2.6-.7 2.4 9.7-2.6.7z"/></svg>Series</a>
+      <a href="#writing" data-sec="writing"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10.5 2.5 13.5 5.5 6 13H3v-3z"/></svg>Writing</a>
+      <a href="#citations" data-sec="citations"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4.5h4v4H4.5L3 11zM9 4.5h4v4h-2.5L9 11z"/></svg>Citations &amp; permissions<span id="navRisk"></span></a>
+      <a href="#layout" data-sec="layout"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4.5 6V2.5h7V6M4.5 11.5h-2v-5h11v5h-2"/><path d="M4.5 9.5h7v4h-7z"/></svg>Layout &amp; print</a>
+      <a href="#sharing" data-sec="sharing"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="5.5" r="2.3"/><path d="M1.8 13.5c.4-2.3 2.1-3.6 4.2-3.6s3.8 1.3 4.2 3.6"/><path d="M10.5 3.4a2.3 2.3 0 0 1 0 4.3M12 9.9c1.2.4 2 1.6 2.2 3.6"/></svg>Sharing<span id="navShare"></span></a>
+      <a href="#archive" data-sec="archive"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 3h11v3h-11zM3.5 6v7.5h9V6M6.5 8.5h3"/></svg>Archive &amp; export</a>
+      <p class="foot" id="navFoot"></p>
+    </nav>
+    <div class="col" id="col"></div>
+  </div>
+</div>
+
+<div id="dlg" role="dialog" aria-modal="true" aria-labelledby="dlgTitle"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<div class="preview" aria-label="Preview controls (review aid)">
+  <b>Preview</b>
+  <select class="select" id="bookPick" aria-label="Book"></select>
+  <div class="seg sm"><button data-theme-set="system">System</button><button data-theme-set="light">Light</button><button data-theme-set="dark">Dark</button></div>
+  <div class="seg sm"><button data-density-set="compact">Compact</button><button data-density-set="comfortable">Comfortable</button></div>
+  <div class="seg sm" role="group" aria-label="View as" id="viewAs"></div>
+  <select class="select" id="tryEmail" aria-label="Try an email in Add people"></select>
+</div>
+
+<script>
+// ---------- Book (?book=<id>, default 'pe') ----------
+// Library catalogue (same ids, words, targets and statuses as library.html)
+const SERIES = {
+  fg: { name: 'Forsaken Gods', books: ['players-guide', 'gamemasters-codex', 'bestiary-of-the-fallen'],
+    guide: 'Second person for player-facing text ("you"), third person for lore.\nGods are "the Forsaken", never "the fallen gods".\nSpell names in title case; game terms follow the 5e SRD.',
+    kb: { cats: 1, entries: 3, labels: 1, links: 18, catNames: 'Spells', labelNames: 'Playtested' } },
+  ac: { name: 'The Ashen Crown', books: ['ember-oath', 'iron-litany', 'hollow-throne', 'last-cinder'],
+    guide: 'Close third person, past tense, one point of view per chapter.\nNo modern idiom. Titles are lower case unless used as a name ("the queen", "Queen Maren").',
+    kb: { cats: 2, entries: 6, labels: 0, links: 27, catNames: 'Characters and Places', labelNames: '' } },
+  td: { name: 'Tidewater Chronicles', books: ['saltmarsh', 'undertow'], guide: '', kb: { cats: 0, entries: 0, labels: 0, links: 0 } },
+  // Series other people own and share with you (#80). Books you can't see are in the order but never shown.
+  la: { name: 'The Lantern Archive', owner: 'mara', books: ['lamplighter', 'wick-and-ember', 'moth-hour'], guide: 'Close third, past tense. Lamps are "lit", never "turned on".', kb: { cats: 1, entries: 4, labels: 0, links: 9, catNames: 'Places' } },
+  nr: { name: 'Northern Rites', owner: 'kofi', books: ['nr-1', 'salt-king', 'nr-3', 'nr-4'], guide: '', kb: { cats: 0, entries: 0, labels: 0, links: 0 } },
+};
+const BOOKS = {
+  'pe': { title: 'Product Engineering', cover: ['#05070d', '#0d1a2b'], words: 72340, target: 80000, status: 'writing' },
+  'pe-v1': { title: 'Product Engineering (v1)', cover: ['#d9cfc0', '#b9ab97'], words: 38020, target: 80000, status: 'draft' },
+  'quiet-algorithm': { title: 'The Quiet Algorithm', cover: ['#0e0f1a', '#283a7a'], words: 54610, target: 70000, status: 'writing' },
+  'saltwater-ledger': { title: 'Saltwater Ledger', cover: ['#e8e2d6', '#cbbfa9'], words: 91000, target: 90000, status: 'published' },
+  'northbound': { title: 'Northbound', cover: ['#f1f5f9', '#94a3b8'], words: 8800, target: 60000, status: 'planning' },
+  'hymns-for-machines': { title: 'Hymns for Machines', cover: ['#3b0d1f', '#9d174d'], words: 27300, target: 40000, status: 'draft' },
+  'players-guide': { title: 'Players Guide', series: 'fg', cover: ['#3a3a3a', '#555'], words: 48210, target: 60000, status: 'revising' },
+  'gamemasters-codex': { title: "Gamemaster's Codex", series: 'fg', cover: ['#2a1d12', '#5c3b1e'], words: 61900, target: 90000, status: 'writing' },
+  'bestiary-of-the-fallen': { title: 'Bestiary of the Fallen', series: 'fg', cover: ['#1b2320', '#3d4f45'], words: 12400, target: 50000, status: 'planning' },
+  'ember-oath': { title: 'Ember Oath', series: 'ac', cover: ['#2b0b0b', '#7a1d14'], words: 112300, target: 110000, status: 'published' },
+  'iron-litany': { title: 'Iron Litany', series: 'ac', cover: ['#1d1d2b', '#45306b'], words: 124870, target: 120000, status: 'published' },
+  'hollow-throne': { title: 'Hollow Throne', series: 'ac', cover: ['#141414', '#3b3b3b'], words: 98450, target: 120000, status: 'revising' },
+  'last-cinder': { title: 'Last Cinder', series: 'ac', cover: ['#3a1406', '#a3410f'], words: 3100, target: 120000, status: 'planning' },
+  'saltmarsh': { title: 'Saltmarsh', series: 'td', cover: ['#08263a', '#155e75'], words: 81200, target: 85000, status: 'published' },
+  'undertow': { title: 'Undertow', series: 'td', cover: ['#0b3b3a', '#14706b'], words: 22950, target: 85000, status: 'writing' },
+  // Shared with you (#80; the same books as library.html's "Shared with me")
+  'glass-orchard': { title: 'Glass Orchard', owner: 'mara', cover: ['#1f3a2c', '#5f8f6a'], words: 41200, target: 75000, status: 'draft' },
+  'paper-saints': { title: 'Paper Saints', owner: 'sam', cover: ['#3d2a14', '#b7791f'], words: 66800, target: 80000, status: 'revising' },
+  'lamplighter': { title: "The Lamplighter's Debt", series: 'la', owner: 'mara', cover: ['#1a1408', '#8a6d1f'], words: 88400, target: 90000, status: 'published' },
+  'wick-and-ember': { title: 'Wick and Ember', series: 'la', owner: 'mara', cover: ['#24120b', '#a1461f'], words: 52300, target: 90000, status: 'writing' },
+  'moth-hour': { title: 'The Moth Hour', series: 'la', owner: 'mara', cover: ['#15131f', '#4c4470'], words: 6100, target: 90000, status: 'planning' },
+  'salt-king': { title: 'The Salt King', series: 'nr', owner: 'kofi', cover: ['#0f1c24', '#4a6b7d'], words: 70950, target: 95000, status: 'revising' },
+  'nr-1': { title: '', series: 'nr', owner: 'kofi', hidden: true, cover: ['#000', '#000'], status: 'published' },
+  'nr-3': { title: '', series: 'nr', owner: 'kofi', hidden: true, cover: ['#000', '#000'], status: 'draft' },
+  'nr-4': { title: '', series: 'nr', owner: 'kofi', hidden: true, cover: ['#000', '#000'], status: 'planning' },
+};
+const QS = new URLSearchParams(location.search);
+const BOOK_ID = BOOKS[QS.get('book')] && !BOOKS[QS.get('book')].hidden ? QS.get('book') : 'pe', BOOK = BOOKS[BOOK_ID];
+let BQ = `?book=${encodeURIComponent(BOOK_ID)}`;   // + &role= while previewing another role, so tab links keep it
+// Book settings is never the screen a book opens on, so it doesn't write codex.last.<book>.
+
+const STATUS = { planning: 'Planning', draft: 'Draft', writing: 'Writing', revising: 'Revising', published: 'Published' };
+const STYLES = { chicago: 'Chicago', apa: 'APA', harvard: 'Harvard' };
+const FORMATS = { print: 'Print', ebook: 'Ebook', audio: 'Audiobook', pdf: 'PDF' };
+const RIGHTS = ['World English', 'World, all languages', 'North America', 'UK and Commonwealth', 'Australia and New Zealand'];
+
+// Publication settings (publication_settings, book or series; the book's values win, #10).
+// A series sets them once for every book in it; a standalone book only has its own.
+const PUB_DEFAULT = { style: 'chicago', proseWords: 300, publisher: '', year: 2027, formats: ['print', 'ebook'], run: 3000, rights: 'World English' };
+const SERIES_PUB = {
+  fg: { style: 'chicago', proseWords: 300, publisher: '', year: 2027, formats: ['print', 'pdf'], run: 1500, rights: 'World English' },
+  ac: { style: 'chicago', proseWords: 250, publisher: 'Harrow & Vane', year: 2027, formats: ['print', 'ebook', 'audio'], run: 8000, rights: 'World English' },
+  td: { style: 'chicago', proseWords: 300, publisher: 'Harrow & Vane', year: 2027, formats: ['print', 'ebook'], run: 5000, rights: 'World English' },
+  la: { style: 'chicago', proseWords: 300, publisher: 'Lind & Hale', year: 2026, formats: ['print', 'ebook'], run: 4000, rights: 'World English' },
+  nr: { style: 'chicago', proseWords: 300, publisher: '', year: 2027, formats: ['print', 'ebook'], run: 2000, rights: 'World English' },
+};
+// Values this book sets itself (Players Guide overrides the print run for its Kickstarter edition)
+const BOOK_PUB = { 'players-guide': { run: 2500 } };
+
+// Layout templates (#13); the same set as print.html
+const TPL = {
+  novel: { name: 'Novel', ver: '2.1.0', th: 'n', trims: ['6×9', '5.5×8.5'], desc: 'Trade paperback on the memoir class.' },
+  rpg: { name: 'Fantasy RPG (5e style)', ver: '1.4.2', latest: '1.5.0', th: 'r', trims: ['Letter', 'A4'], desc: 'Two columns on parchment, spells and stat blocks.' },
+  ms: { name: 'Standard manuscript', ver: '1.0.3', th: 'm', trims: ['Letter', 'A4'], desc: 'Shunn format for submissions.' },
+  fork: { name: 'Forsaken RPG', ver: '0.3.0', th: 'r', trims: ['Letter', 'A4'], desc: 'Yours · forked from Fantasy RPG v1.4.0.', mine: true },
+};
+
+// Sources for the citation examples and the rule check. Only Product Engineering has References (#16 seed 1.6).
+const EX = {
+  brooks: { kind: 'book', authors: 'Frederick P. Brooks Jr.', title: 'The Mythical Man-Month: Essays on Software Engineering', year: '1995', publisher: 'Addison-Wesley', edition: 'Anniversary', page: '25' },
+  conway: { kind: 'paper', authors: 'Melvin E. Conway', title: 'How Do Committees Invent?', year: '1968', publisher: 'Datamation 14 (4): 28–31', page: '31' },
+};
+// What the publisher rule decides. Lyrics and figures always need permission, whatever the limit.
+const RISKS = [
+  { id: 'velocity', t: 'The Velocity Trap', words: 342, kind: 'quote' },
+  { id: 'topologies', t: 'Team Topologies', kind: 'figure', why: 'figure, permission asked 3 Oct' },
+  { id: 'friday', t: 'Ship It Friday', kind: 'lyric', why: 'lyric, no request' },
+];
+const QUOTED = [['velocity', 'The Velocity Trap', 342], ['goodhart', 'Problems of Monetary Management', 41], ['brooks', 'The Mythical Man-Month', 11], ['manifesto', 'Agile Manifesto', 7]];
+
+// ---------- Sharing (#80) ----------
+// Codex users. Add people looks one up by exact email only (case and surrounding spaces ignored); a disabled
+// account counts as no match. JD is the signed-in user.
+const USERS = {
+  jd: { name: 'Joel Dickson', email: 'joel@example.com' },
+  ana: { name: 'Ana Kowalczyk', email: 'ana@example.com' },
+  sam: { name: 'Sam Okafor', email: 'sam.okafor@example.com' },
+  tomas: { name: 'Tomás Ibarra', email: 'tomas@example.com' },
+  priya: { name: 'Priya Raman', email: 'priya@raman.studio' },
+  marcus: { name: 'Marcus Oyelaran', email: 'marcus@oyelaran.net' },
+  lee: { name: 'Lee Fischer', email: 'lee.fischer@example.com' },
+  noor: { name: 'Noor Haddad', email: 'noor.haddad@example.com' },
+  mara: { name: 'Mara Lind', email: 'mara@lindbooks.co' },
+  kofi: { name: 'Kofi Mensah', email: 'kofi@example.com' },
+  rhys: { name: 'Rhys Morgan', email: 'rhys@example.com', disabled: true },
+};
+const ROLES = { view: 'Can view', comment: 'Can comment', write: 'Can edit' };
+const RANK = { none: 0, view: 1, comment: 2, write: 3, owner: 4 };
+// book_grant rows, on a book id or a series id. The owner never has a row (book.owner_id is the only record).
+const GRANTS = {
+  'pe': [{ u: 'ana', role: 'comment' }, { u: 'sam', role: 'write' }, { u: 'tomas', role: 'view' }],
+  'players-guide': [{ u: 'ana', role: 'view' }],
+  fg: [{ u: 'priya', role: 'write' }, { u: 'marcus', role: 'comment' }, { u: 'lee', role: 'view' }],
+  // Shared with JD by other people
+  la: [{ u: 'jd', role: 'write' }, { u: 'ana', role: 'view' }],
+  'glass-orchard': [{ u: 'jd', role: 'view' }],
+  'paper-saints': [{ u: 'jd', role: 'write' }, { u: 'tomas', role: 'comment' }],
+  'salt-king': [{ u: 'jd', role: 'comment' }],
+};
+const OWNER_ID = BOOK.owner || 'jd', OWNER = USERS[OWNER_ID];
+const SH = { book: (GRANTS[BOOK_ID] || []).map(g => ({ ...g })), series: {} };   // series grants by series id, so a move can count them
+Object.keys(SERIES).forEach(k => { SH.series[k] = (GRANTS[k] || []).map(g => ({ ...g })); });
+const grantOf = (list, u) => list.find(g => g.u === u)?.role || 'none';
+// Effective role: the higher of the grant on the book and the grant on its series
+const roleOf = u => u === OWNER_ID ? 'owner' : [grantOf(SH.book, u), S.series ? grantOf(SH.series[S.series], u) : 'none'].sort((a, b) => RANK[b] - RANK[a])[0];
+const initials = n => n.split(/\s+/).map(w => w[0]).filter((_, i, a) => i === 0 || i === a.length - 1).join('').toUpperCase();
+
+// Who is looking. Your own books open as Owner; a book someone shared with you opens at your grant.
+// The Preview panel's "View as" swaps in a person who has that role on this book (review aid).
+let ROLE = 'owner', ME = 'jd';
+const STAND_IN = { write: 'sam', comment: 'ana', view: 'tomas' };
+let standIn = null;
+function setViewer(r) {
+  if (standIn) { SH.book.splice(SH.book.indexOf(standIn), 1); standIn = null; }
+  if (OWNER_ID !== 'jd') { ROLE = RANK[r] && r !== 'owner' ? r : roleOf('jd'); ME = 'jd'; return; }
+  ROLE = RANK[r] ? r : 'owner';
+  if (ROLE === 'owner') { ME = 'jd'; return; }
+  const all = [...SH.book, ...(S.series ? SH.series[S.series] : [])];
+  ME = all.find(g => roleOf(g.u) === ROLE)?.u;
+  if (!ME) { ME = STAND_IN[ROLE]; standIn = { u: ME, role: ROLE }; SH.book.push(standIn); }   // nobody has that role here yet: preview with a stand-in grant
+}
+const isOwner = () => ROLE === 'owner', canEdit = () => RANK[ROLE] >= RANK.write;
+
+// ---------- State ----------
+const sPub = () => BOOK.series ? SERIES_PUB[BOOK.series] : PUB_DEFAULT;
+const S = {
+  title: BOOK.title, author: OWNER.name, status: BOOK.status, target: BOOK.target, words: BOOK.words,
+  series: BOOK.series || null, n: BOOK.series ? SERIES[BOOK.series].books.indexOf(BOOK_ID) + 1 : null,
+  pending: null,            // { series, n } while a move waits for the confirm step
+  guide: BOOK_ID === 'pe' ? 'First person, conversational, British spelling.\nPrefer stories from real teams over abstractions; name the team, change the details.\nNo "simply" or "just". Every chapter ends with one thing to try on Monday.' : '',
+  // Publication settings: series values unless this book overrides them
+  own: BOOK.series ? { ...(BOOK_PUB[BOOK_ID] || {}) } : { ...PUB_DEFAULT },
+  tpl: BOOK.series === 'fg' ? 'rpg' : 'novel', trim: BOOK.series === 'fg' ? 'Letter' : '6×9',
+  archived: false,
+};
+const pub = k => k in S.own ? S.own[k] : sPub()[k];
+const inherits = k => !!S.series && !(k in S.own);
+
+// ---------- Helpers ----------
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const tone = t => `var(--color-${t})`;
+const fmt = n => Number(n).toLocaleString('en-GB');
+const bookNo = n => String(n).padStart(3, '0');
+const I = {
+  info: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v4M8 4.8v.3"/></svg>',
+  warn: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2.5 14 13H2z"/><path d="M8 6.5v3M8 11.2v.3"/></svg>',
+  check: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="m3.5 8.5 3 3 6-7"/></svg>',
+  x: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="m4.5 4.5 7 7M11.5 4.5l-7 7"/></svg>',
+  arrow: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8h10M9 4l4 4-4 4"/></svg>',
+  copy: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="5.5" width="8" height="8" rx="1"/><path d="M10.5 5.5v-3h-8v8h3"/></svg>',
+  link: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 9a3 3 0 0 0 4.2 0l2-2a3 3 0 0 0-4.2-4.2l-.8.8M9 7a3 3 0 0 0-4.2 0l-2 2A3 3 0 0 0 7 13.2l.8-.8"/></svg>',
+  pin: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>',
+  undo: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3.5 7.5A4.5 4.5 0 1 1 5 11.8"/><path d="M3.5 3.5v4h4"/></svg>',
+  down: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10"/></svg>',
+  dup: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="5.5" width="8" height="8" rx="1"/><path d="M10.5 5.5v-3h-8v8h3"/></svg>',
+  box: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 3h11v3h-11zM3.5 6v7.5h9V6M6.5 8.5h3"/></svg>',
+  ext: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 3h4v4M13 3 7.5 8.5M11.5 9.5v3.5h-8.5v-8.5h3.5"/></svg>',
+  people: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="5.5" r="2.3"/><path d="M1.8 13.5c.4-2.3 2.1-3.6 4.2-3.6s3.8 1.3 4.2 3.6"/><path d="M10.5 3.4a2.3 2.3 0 0 1 0 4.3M12 9.9c1.2.4 2 1.6 2.2 3.6"/></svg>',
+  eye: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg>',
+  comment: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/></svg>',
+};
+
+// ---------- Autosave (as on Plan: syncs 3s after the first edit, straight away on blur or a choice) ----------
+let saveT = null;
+function sync(s) { const e = $('#sync'); e.dataset.s = s; e.querySelector('.lbl-t').textContent = { unsaved: 'Unsaved', saving: 'Saving…', saved: 'Saved' }[s]; }
+function dirty() { sync('unsaved'); if (!saveT) saveT = setTimeout(save, 3000); }
+function save() { clearTimeout(saveT); saveT = null; sync('saving'); setTimeout(() => sync('saved'), 600); }
+
+// ---------- Chrome ----------
+function chrome() {
+  const sr = S.series && SERIES[S.series];
+  $('#barTitle').textContent = S.title || 'Untitled book';
+  $('#barSub').textContent = sr ? `${sr.name} · Book ${bookNo(S.n)}` : S.author;
+  const c = $('#barCover'); c.style.setProperty('--c1', BOOK.cover[0]); c.style.setProperty('--c2', BOOK.cover[1]);
+  const back = $('#back');
+  back.href = sr ? `library.html#series=${S.series}` : 'library.html';
+  back.title = back.ariaLabel = sr ? `Back to ${sr.name}` : 'Back to Library';
+  $('#gear').href = 'settings.html' + BQ;
+  $$('[data-to]').forEach(a => a.href = a.dataset.to + BQ);
+  const risks = riskCount();
+  $('#refBadge').innerHTML = BOOK_ID === 'pe' && risks ? `<span class="badge" style="--tone:${tone('danger')}" title="${risks} copyright risks">${risks}</span>` : '';
+  $('#navRisk').innerHTML = BOOK_ID === 'pe' && risks ? `<span class="badge" style="--tone:${tone('danger')}" title="${risks} sources at risk">${risks}</span>` : '';
+  $('#navFoot').innerHTML = isOwner() ? `Changes save as you go. Moving the book to another series asks first.`
+    : canEdit() ? `Changes save as you go. ${esc(OWNER.name)} owns this book, so sharing, moving and archiving are theirs.`
+    : `You can read these settings. ${esc(OWNER.name)} owns this book.`;
+  // Your access: the quiet chip beside the save status, which has nothing to show when you can't change anything
+  const chip = $('#roChip'), ro = !canEdit();
+  chip.hidden = !ro; $('#sync').hidden = ro;
+  if (ro) { chip.innerHTML = roleChip(ROLE).html; chip.title = roleChip(ROLE).why; chip.setAttribute('aria-label', `${roleChip(ROLE).label}: ${roleChip(ROLE).why}`); }
+  $('#meAvatar').textContent = initials(USERS[ME].name); $('#meAvatar').title = `Signed in as ${USERS[ME].name}`;
+  const n = SH.book.length + (S.series ? SH.series[S.series].filter(g => !SH.book.some(b => b.u === g.u)).length : 0);
+  $('#navShare').innerHTML = n ? `<span class="badge" style="--tone:var(--color-muted)" title="${n} ${n === 1 ? 'person' : 'people'} besides the owner">${n}</span>` : '';
+  $('#archivedBar').innerHTML = S.archived ? `<div class="archived-bar">${I.box}<span><b>${esc(S.title)} is archived.</b> It’s hidden from Library and ⌘K; nothing in it was deleted.</span><button class="btn sm" data-cmd="restore">Restore</button></div>` : '';
+  document.title = `Codex · ${S.title} · Book settings (reference)`;
+}
+
+// Where a publication value comes from. Clicking "This book" goes back to the series value.
+const inh = k => `<span data-inh="${k}">${inhInner(k)}</span>`;
+const inhInner = k => !S.series ? '' : inherits(k)
+  ? `<span class="inh" title="Set on ${esc(SERIES[S.series].name)} for every book in it. Change it here to override for this book.">Series</span>`
+  : `<button class="inh own" data-reset="${k}" title="Use the series value (${esc(fmtPub(k, sPub()[k]))})">This book ${I.x}</button>`;
+const fmtPub = (k, v) => k === 'formats' ? v.map(f => FORMATS[f]).join(', ') : k === 'style' ? STYLES[v] : k === 'run' ? fmt(v) + ' copies' : k === 'proseWords' ? v + ' words' : (v || 'none');
+
+// ---------- Sections ----------
+function render() {
+  const sr = S.series && SERIES[S.series];
+  const pct = Math.min(100, Math.round(S.words / Math.max(1, S.target) * 100));
+  $('#col').innerHTML = `${canEdit() ? '' : `<div class="note" style="--tone:${tone('info')}">${ROLE === 'view' ? I.eye : I.comment}<div><b>${roleChip(ROLE).label}.</b> ${esc(OWNER.name)} shared ${esc(S.title)} with you ${ROLE === 'view' ? 'to read' : 'to read and comment on'}. These are its settings as they are now; ask ${esc(OWNER.name)} for edit access to change them.</div></div>`}
+  <section class="card" id="book" data-sec="book">
+    <div class="card-h"><div><h2>Book</h2><p>How the book is named in Library and on its title page.</p></div></div>
+    <div class="card-b">
+      <div class="row"><label class="lbl" for="fTitle">Title</label><div class="ctl"><input class="input w-full" id="fTitle" data-f="title" value="${esc(S.title)}" autocomplete="off"></div></div>
+      <div class="row"><label class="lbl" for="fAuthor">Author</label><div class="ctl"><input class="input w-full" id="fAuthor" data-f="author" value="${esc(S.author)}" autocomplete="off"><p class="help">As printed on the cover, title page and permission letters. A pen name is fine; you stay the owner.</p></div></div>
+      <div class="row"><span class="lbl">Status</span><div class="ctl"><div class="seg status" role="group" aria-label="Status">${Object.entries(STATUS).map(([k, l]) => `<button data-status="${k}" aria-pressed="${S.status === k}" style="--tone:var(--status-${k})"${k === 'published' || S.status === 'published' ? ` data-owner="Only ${esc(OWNER.name)}, the owner, can publish this book or start a new edition"` : ''}><i></i>${l}</button>`).join('')}</div><p class="help">Shown on the Library tile and used to sort it. Published books keep their print settings pinned.${canEdit() && !isOwner() ? ` Only the owner can mark it Published.` : ''}</p></div></div>
+      <div class="row"><label class="lbl" for="fTarget">Target words</label><div class="ctl"><input class="input num" id="fTarget" data-f="target" type="number" min="0" step="1000" value="${S.target}"><span class="unit">words</span>
+        <div class="prog" id="prog"><span class="bar"><i style="width:${pct}%"></i></span><span>${fmt(S.words)} of ${fmt(S.target)} · ${pct}%</span></div></div></div>
+      <div class="row"><span class="lbl">Cover</span><div class="ctl"><div class="cover-ed"><div class="cover big" style="--c1:${BOOK.cover[0]};--c2:${BOOK.cover[1]}">${esc(S.title)}</div><div class="acts"><button class="btn sm" data-toast="The asset picker opens here: upload an image or pick one from the book’s assets (#5)">Replace…</button><button class="btn sm ghost" data-toast="Library falls back to a generated cover in the book’s colours">Remove</button></div></div><p class="help">Front cover for Library and the bookbar. The printed cover is set in Layout.</p></div></div>
+    </div>
+  </section>
+
+  <section class="card" id="series" data-sec="series">
+    <div class="card-h"><div><h2>Series</h2><p>A book in a series shares the series’ Knowledge base, labels, style guide and publication settings.</p></div>${sr ? `<a class="mini go" href="library.html#series=${S.series}">${I.ext}Series settings</a>` : ''}</div>
+    <div class="card-b">
+      <div class="row"><label class="lbl" for="fSeries">Series</label><div class="ctl">
+        <select class="select" id="fSeries" data-f="series" data-owner="Only the owner can move this book to another series"><option value="">None (standalone)</option>${Object.entries(SERIES).filter(([k, s]) => !s.owner || k === S.series).map(([k, s]) => `<option value="${k}" ${(S.pending ? S.pending.series : S.series) === k ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select>
+        ${(S.pending ? S.pending.series : S.series) ? `<label class="unit" for="fNum">Number</label><select class="select" id="fNum" data-f="n" data-owner="Only the owner can renumber the series">${numOptions()}</select>` : ''}
+        ${canEdit() && !isOwner() ? `<p class="owner-only">${I.pin}Only ${esc(OWNER.name)}, the owner, can move this book or change its number.</p>` : ''}
+      </div></div>
+      <div class="row"><span class="lbl">${(S.pending ? S.pending.series : S.series) ? 'Order' : ''}</span><div class="ctl" id="orderBox">${orderHTML()}</div></div>
+      <div id="pendingBox">${pendingHTML()}</div>
+    </div>
+  </section>
+
+  <section class="card" id="writing" data-sec="writing">
+    <div class="card-h"><div><h2>Writing</h2><p>Sent with every AI draft from this book, with the beat, its context and the scene so far.</p></div></div>
+    <div class="card-b">
+      <div class="row"><label class="lbl" for="fGuide">Style guide</label><div class="ctl">
+        <textarea class="area" id="fGuide" data-f="guide" placeholder="Voice, tense, point of view, spelling, words to avoid…">${esc(S.guide)}</textarea>
+        <p class="help" id="guideHelp">${guideHelp()}</p>
+        ${sr && sr.guide ? `<div class="inherited" style="flex-basis:100%"><span class="overline"><span class="inh">Series</span>${esc(sr.name)} style guide, also sent</span>${esc(sr.guide)}</div>` : ''}
+      </div></div>
+    </div>
+  </section>
+
+  <section class="card" id="citations" data-sec="citations">
+    <div class="card-h"><div><h2>Citations &amp; permissions</h2><p>How References cites sources, which quotes need permission, and what permission letters say.${S.series ? ` Set on <b>${esc(sr.name)}</b> for every book in it; a value you change here is for this book only.` : ''}</p></div>
+      <a class="mini go" href="references.html${BQ}">${I.ext}References</a></div>
+    <div class="card-b">
+      <div class="row"><span class="lbl">Citation style ${inh('style')}</span><div class="ctl">
+        <div class="seg" role="group" aria-label="Citation style">${Object.entries(STYLES).map(([k, l]) => `<button data-style="${k}" aria-pressed="${pub('style') === k}">${l}</button>`).join('')}</div>
+        <div class="cites" id="cites">${citesHTML()}</div>
+        <p class="help">Used by the bibliography, the citation in each source’s panel, and print (#13). Changing it updates every citation; the text of the book doesn’t change.</p>
+      </div></div>
+
+      <div class="sub" id="rules">
+        <div class="sub-h"><h3>Publisher rules</h3><span class="spacer"></span><span class="unit">A guide, not legal advice</span></div>
+        <div class="row"><label class="lbl" for="fWords">Quoted prose ${inh('proseWords')}</label><div class="ctl">
+          <span class="unit">Up to</span><input class="input num" id="fWords" data-f="proseWords" type="number" min="0" step="50" value="${pub('proseWords')}"><span class="unit">words from one source without permission</span>
+          <button class="mini" data-cmd="words-default" ${pub('proseWords') === 300 ? 'hidden' : ''}>Reset to 300</button>
+          <div id="impact" style="flex-basis:100%;display:grid;gap:6px">${impactHTML()}</div>
+        </div></div>
+        <div class="row"><span class="lbl">Lyrics and poetry</span><div class="ctl"><span class="fixed"><span class="st" style="--tone:${tone('danger')}"><i></i>Always ask</span></span><p class="help">Song lyrics and poems need permission for any length, unless the licence allows reuse or the work is in the public domain.</p></div></div>
+        <div class="row"><span class="lbl">Figures and images</span><div class="ctl"><span class="fixed"><span class="st" style="--tone:${tone('warn')}"><i></i>Ask unless licensed</span></span><p class="help">A reproduced figure, table or image needs permission unless its licence allows reuse (for example CC BY).</p></div></div>
+      </div>
+
+      <div class="sub" id="letters">
+        <div class="sub-h"><h3>Permission letters</h3><span class="spacer"></span><span class="unit">Filled into every request References drafts</span></div>
+        <div class="row"><label class="lbl" for="fPub">Publisher ${inh('publisher')}</label><div class="ctl"><input class="input w-full" id="fPub" data-f="publisher" value="${esc(pub('publisher'))}" placeholder="Leave blank if you publish it yourself"></div></div>
+        <div class="row"><label class="lbl" for="fYear">Publication year ${inh('year')}</label><div class="ctl"><input class="input yr" id="fYear" data-f="year" type="number" min="2000" max="2100" value="${pub('year')}"></div></div>
+        <div class="row"><span class="lbl">Formats ${inh('formats')}</span><div class="ctl">${Object.entries(FORMATS).map(([k, l]) => `<label class="chipck"><input type="checkbox" data-fmt="${k}" ${pub('formats').includes(k) ? 'checked' : ''}>${l}</label>`).join('')}</div></div>
+        <div class="row"><label class="lbl" for="fRun">First print run ${inh('run')}</label><div class="ctl"><input class="input num" id="fRun" data-f="run" type="number" min="0" step="500" value="${pub('run')}"><span class="unit">copies</span><p class="help">Rights holders often price permission by print run, so say if it may grow.</p></div></div>
+        <div class="row"><label class="lbl" for="fRights">Territory and language ${inh('rights')}</label><div class="ctl"><select class="select" id="fRights" data-f="rights">${RIGHTS.map(r => `<option ${pub('rights') === r ? 'selected' : ''}>${r}</option>`).join('')}</select></div></div>
+        <div class="row"><span class="lbl">Letters will say</span><div class="ctl"><div class="letter" id="letter">${letterHTML()}</div>
+          <p class="help">Requests already sent keep the wording they were sent with.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" id="layout" data-sec="layout">
+    <div class="card-h"><div><h2>Layout &amp; print</h2><p>The template the Layout view, proofs and Export for printer use. Options, preflight and exports are on Layout.</p></div><a class="mini go" href="print.html${BQ}">${I.ext}Layout</a></div>
+    <div class="card-b">
+      <div class="row"><label class="lbl" for="fTpl">Template</label><div class="ctl">
+        <select class="select" id="fTpl" data-f="tpl">${Object.entries(TPL).filter(([k, t]) => !t.mine || S.series === 'fg').map(([k, t]) => `<option value="${k}" ${S.tpl === k ? 'selected' : ''}>${esc(t.name)}${t.mine ? ' (yours)' : ''}</option>`).join('')}</select>
+        <div class="tplcard" id="tplcard">${tplHTML()}</div>
+      </div></div>
+      <div class="row"><span class="lbl">Trim size</span><div class="ctl" id="trimBox">${trimHTML()}</div></div>
+      <div class="row"><span class="lbl">Print export</span><div class="ctl" id="gate">${gateHTML()}</div></div>
+    </div>
+  </section>
+
+  <section class="card" id="sharing" data-sec="sharing" data-testid="settings-sharing">
+    <div class="card-h"><div><h2>Sharing</h2><p>${isOwner() ? 'Who else can open this book, and what they can do. Changes save straight away and reach open tabs at once.' : `Who can open this book. Only ${esc(OWNER.name)}, the owner, can change this.`}</p></div></div>
+    <div class="card-b" id="shareBox">${sharingHTML()}</div>
+  </section>
+
+  <section class="card danger" id="archive" data-sec="archive">
+    <div class="card-h"><div><h2>Archive &amp; export</h2><p>Copies and backups of the whole book, and taking it off the shelf.${isOwner() ? '' : ` Only ${esc(OWNER.name)}, the owner, can duplicate or archive it${canEdit() ? '' : ', and exporting needs edit access'}.`}</p></div></div>
+    <div class="card-b">
+      <div class="act-row"><div><b>Duplicate book</b><span>A new book with this one’s acts, chapters, scenes, prose, beats, Knowledge base and labels. References and their sign-offs aren’t copied, because clearance covers one book’s print run.${isOwner() ? ' People you shared this book with don’t get the copy.' : ''}</span></div><button class="btn" data-cmd="duplicate" data-owner="Only the owner can duplicate this book">${I.dup}Duplicate…</button></div>
+      <div class="act-row"><div><b>Export source</b><span>A .zip of Markdown, one file per scene with its beats as directives, plus the Knowledge base and References as JSON. Codex can import it again.</span></div><button class="btn" data-cmd="export-src">${I.down}Export .zip</button></div>
+      <div class="act-row"><div><b>${S.archived ? 'Restore book' : 'Archive book'}</b><span>${S.archived ? 'Puts it back on the shelf in Library, where it was.' : `Hides it from Library and ⌘K. Nothing is deleted${S.series ? `, and it keeps its place in ${esc(sr.name)} as an archived book` : ''}. Restore it from Library’s Archived list.${isOwner() && SH.book.length ? ` ${archiveLoss()}` : ''}`}</span></div>${S.archived ? `<button class="btn" data-cmd="restore" data-owner="Only the owner can restore this book">${I.undo}Restore</button>` : `<button class="btn danger" data-cmd="archive" data-owner="Only the owner can archive this book">${I.box}Archive…</button>`}</div>
+    </div>
+  </section>`;
+  applyRole();
+  chrome();
+  spy();
+}
+
+// ---------- Series ----------
+// Numbers follow the order; picking a number puts the book there and the others move along (as in Series settings)
+function orderFor(sid, n) {
+  const others = SERIES[sid].books.filter(id => id !== BOOK_ID);
+  const list = [...others]; list.splice(Math.min(n, list.length + 1) - 1, 0, BOOK_ID);
+  return list;
+}
+function numOptions() {
+  const sid = S.pending ? S.pending.series : S.series, cur = S.pending ? S.pending.n : S.n;
+  const others = SERIES[sid].books.filter(id => id !== BOOK_ID);
+  return Array.from({ length: others.length + 1 }, (_, i) => i + 1).map(n => {
+    const at = others[n - 1];
+    return `<option value="${n}" ${cur === n ? 'selected' : ''}>Book ${bookNo(n)}${n === others.length + 1 ? ' · last' : at && !BOOKS[at].hidden ? ` · before ${esc(BOOKS[at].title)}` : ''}</option>`;
+  }).join('');
+}
+function orderHTML() {
+  const sid = S.pending ? S.pending.series : S.series;
+  if (!sid) return `<p class="help" style="margin-top:6px">Standalone. Pick a series to share its Knowledge base and settings with its other books.</p>`;
+  const n = S.pending ? S.pending.n : S.n, list = orderFor(sid, n);
+  const was = id => SERIES[sid].books.indexOf(id) + 1;
+  // Books in someone else's series that aren't shared with you are left out (#80), but keep their numbers
+  return `<ol class="order">${list.map((id, i) => {
+    if (BOOKS[id].hidden) return '';
+    const me = id === BOOK_ID, b = BOOKS[id], old = me ? (S.series === sid ? S.n : 0) : was(id), moved = old && old !== i + 1;
+    const pubd = b.status === 'published' && !me;
+    return `<li class="${me ? 'me' : ''}"><span class="no">Book ${bookNo(i + 1)}</span><span class="cover" style="--c1:${b.cover[0]};--c2:${b.cover[1]}"></span><span class="t">${esc(me ? S.title : b.title)}</span><span class="chg" style="--tone:${tone(pubd && moved ? 'warn' : 'accent')}">${me && !old ? '<b>joins</b>' : moved ? `was ${bookNo(old)}${pubd ? ' · <b>published</b>' : ''}` : ''}</span></li>`;
+  }).join('')}</ol>`;
+}
+// Changing series is held until the confirm step, because it copies the Knowledge base down (#10)
+function pendingHTML() {
+  if (!S.pending) return '';
+  const from = S.series && SERIES[S.series], to = S.pending.series && SERIES[S.pending.series];
+  const what = !from ? `joins <b>${esc(to.name)}</b> as Book ${bookNo(S.pending.n)}` : !to ? `leaves <b>${esc(from.name)}</b> and becomes standalone` : `moves from <b>${esc(from.name)}</b> to <b>${esc(to.name)}</b>`;
+  return `<div class="note" style="--tone:${tone('accent')};margin-top:6px">${I.info}<div><b>Not moved yet.</b> ${esc(S.title)} ${what}.${from && from.kb.entries ? ` Its links to ${esc(from.name)}’s Knowledge base are copied onto the book first.` : ''}</div>
+    <div class="acts"><button class="btn sm primary" data-cmd="review-move">Review move…</button><button class="btn sm ghost" data-cmd="cancel-move">Cancel</button></div></div>`;
+}
+function moveDialog() {
+  const p = S.pending, from = S.series && SERIES[S.series], to = p.series && SERIES[p.series];
+  const fromPub = from ? SERIES_PUB[S.series] : null;
+  const pubKeys = Object.keys(PUB_DEFAULT).filter(k => !(k in S.own));
+  const shifts = to ? orderFor(p.series, p.n).map((id, i) => [id, SERIES[p.series].books.indexOf(id) + 1, i + 1]).filter(([id, a, b]) => id !== BOOK_ID && a !== b) : [];
+  const leaveShifts = from && S.series !== p.series ? SERIES[S.series].books.filter(id => id !== BOOK_ID).map((id, i) => [id, SERIES[S.series].books.indexOf(id) + 1, i + 1]).filter(([, a, b]) => a !== b) : [];
+  const allShifts = [...leaveShifts, ...shifts], pubShift = allShifts.some(([id]) => BOOKS[id].status === 'published');
+  const step = (t, title, body, icon) => `<li><span class="ic" style="--tone:${tone(t)}">${icon || (t === 'warn' ? I.warn : I.check)}</span><div><b>${title}</b><span>${body}</span></div></li>`;
+  const steps = [];
+  if (from && from.kb.entries) steps.push(step('accent', `Copy ${esc(from.name)}’s Knowledge base onto this book`, `${from.kb.cats} ${from.kb.cats === 1 ? 'category' : 'categories'} (${esc(from.kb.catNames)}), ${from.kb.entries} entries${from.kb.labels ? ` and the ${esc(from.kb.labelNames)} label` : ''}. The copies belong to this book from now on; edits to the series no longer reach them.`));
+  if (from && from.kb.links) steps.push(step('accent', `Repoint ${from.kb.links} links to the copies`, 'Mentions, scene links, beat context, timeline notes and labels in this book, plus sources in References linked to a series entry.'));
+  if (from && !to && pubKeys.length) steps.push(step('accent', 'Keep its publication settings', `${pubKeys.length} values it took from ${esc(from.name)} (${fmtPub('style', fromPub.style)}, ${fmtPub('proseWords', fromPub.proseWords)}…) are copied onto the book, so no source changes status.`));
+  const keep = to ? Object.keys(PUB_DEFAULT).filter(k => JSON.stringify(pub(k)) !== JSON.stringify(SERIES_PUB[p.series][k])) : [];
+  if (to && keep.length) steps.push(step('accent', `Keep ${keep.length} of its own publication settings`, `${keep.map(k => `${{ style: 'citation style', proseWords: 'quote limit', publisher: 'publisher', year: 'year', formats: 'formats', run: 'print run', rights: 'territory' }[k]} ${esc(fmtPub(k, pub(k)))}`).join(', ')} stay for this book only. The rest now come from ${esc(to.name)}.`));
+  if (to) steps.push(step('accent', `Join ${esc(to.name)} as Book ${bookNo(p.n)}`, to.kb.entries ? `Its ${esc(to.kb.catNames)} appear in the sidebar beside this book’s own entries. Same-named categories and labels are merged.` : `${esc(to.name)} has no series Knowledge base yet; this book keeps its own.`));
+  if (allShifts.length) steps.push(step(pubShift ? 'warn' : 'accent', 'Renumber the other books', allShifts.map(([id, a, b]) => `${esc(BOOKS[id].title)} ${bookNo(a)} → ${bookNo(b)}${BOOKS[id].status === 'published' ? ' (published)' : ''}`).join(' · ') + (pubShift ? '. A published book’s printed number won’t change; Codex shows the new one.' : '')));
+  // Sharing follows the series (#80): who will see this book after the move, and who won't any more
+  if (to) {
+    const gain = SH.series[p.series].filter(g => g.u !== OWNER_ID);
+    if (gain.length) steps.push(step('info', `${plural(gain.length, 'person', 'people')} with access to ${esc(to.name)} will be able to see this book`, `${nameList(gain.map(g => `${esc(USERS[g.u].name)} (${ROLES[g.role]})`))}. You can change this in Sharing.`, I.people));
+  }
+  if (from && S.series !== p.series) {
+    const lose = SH.series[S.series].filter(g => grantOf(SH.book, g.u) === 'none' && !(to && grantOf(SH.series[p.series], g.u) !== 'none'));
+    if (lose.length) steps.push(step('warn', `${plural(lose.length, 'person', 'people')} with access to ${esc(from.name)} will no longer see this book`, `${nameList(lose.map(g => esc(USERS[g.u].name)))}. People you shared this book with directly keep their access.`, I.people));
+  }
+  if (from) steps.push(step('ok', `${esc(from.name)} and its other books don’t change`, 'Series entries stay where they are. References stay with this book; they were never shared.'));
+  $('#dlg').innerHTML = `<div class="dlg"><div class="dlg-h"><h2 id="dlgTitle">Move ${esc(S.title)}</h2><button class="ib" data-cmd="dlg-close" aria-label="Close">${I.x}</button></div>
+    <div class="dlg-b">
+      <div class="move"><div><span class="overline">From</span><b>${from ? `${esc(from.name)} · ${bookNo(S.n)}` : 'Standalone'}</b></div>${I.arrow}<div><span class="overline">To</span><b>${to ? `${esc(to.name)} · ${bookNo(p.n)}` : 'Standalone'}</b></div></div>
+      <ul class="steps">${steps.join('')}</ul>
+      ${from && from.kb.entries ? `<div class="note" style="--tone:${tone('warn')}">${I.warn}<div>Moving it back later won’t merge the copies into the series again. You’d see this book’s copies beside the series entries until you delete them.</div></div>` : ''}
+    </div>
+    <div class="dlg-f"><span class="hint">Runs in one transaction</span><button class="btn" data-cmd="dlg-close">Cancel</button><button class="btn primary" data-cmd="confirm-move">${to ? `Move to ${esc(to.name)}` : 'Make standalone'}</button></div></div>`;
+  openDlg();
+}
+function confirmMove() {
+  const p = S.pending, from = S.series;
+  // Leaving a series keeps the values the book took from it (publication_settings copied to the book)
+  if (from) Object.keys(PUB_DEFAULT).forEach(k => { if (!(k in S.own)) S.own[k] = SERIES_PUB[from][k]; });
+  // Joining a series: values equal to the new series' become inherited again
+  if (p.series) Object.keys(S.own).forEach(k => { if (JSON.stringify(S.own[k]) === JSON.stringify(SERIES_PUB[p.series][k])) delete S.own[k]; });
+  S.series = p.series; S.n = p.n; S.pending = null;
+  closeDlg(); render(); save();
+  flashEl('#series');
+  toast(S.series ? `${esc(S.title)} is now Book ${bookNo(S.n)} in ${esc(SERIES[S.series].name)}` : `${esc(S.title)} is now a standalone book${from && SERIES[from].kb.entries ? ` with its own copy of ${esc(SERIES[from].kb.catNames)}` : ''}`);
+}
+
+// ---------- Sharing (#80) ----------
+// The quiet chip a viewer or commenter sees in the bookbar, with why typing does nothing
+function roleChip(r) {
+  return r === 'comment'
+    ? { label: 'Comment only', html: `${I.comment}Comment only`, why: `You can read ${S.title} and comment on it. Ask ${OWNER.name} for edit access to change it.` }
+    : { label: 'View only', html: `${I.eye}View only`, why: `${OWNER.name} shared ${S.title} with you to read. Every tab opens, but typing and changes are turned off.` };
+}
+const VERB = { view: 'view', comment: 'comment', write: 'edit' };
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const nameList = us => us.length > 1 ? us.slice(0, -1).join(', ') + ' and ' + us.at(-1) : us[0];
+function archiveLoss() { const n = SH.book.length; return `${plural(n, 'person', 'people')} you shared it with directly ${n === 1 ? 'loses' : 'lose'} access, and Restore doesn’t share it again.`; }
+
+function roleOptions(cur, floor = 'none') {
+  return Object.entries(ROLES).map(([k, l]) => `<option value="${k}" ${k === cur ? 'selected' : ''} ${RANK[k] <= RANK[floor] ? 'disabled' : ''}>${l}</option>`).join('');
+}
+function ownerRow() {
+  const you = OWNER_ID === ME;
+  return `<li class="person${you ? ' me' : ''}" data-testid="settings-sharing-owner"><span class="avatar" aria-hidden="true">${initials(OWNER.name)}</span>
+    <span class="who"><b><span>${you ? 'You' : esc(OWNER.name)}</span><em>· Owner</em></b>${isOwner() ? `<span>${esc(OWNER.email)}</span>` : ''}</span>
+    <span class="lockd" title="The owner can’t be removed or changed">${I.pin}</span><span></span></li>`;
+}
+// One row per grant. Owners get the role menu and Remove; everyone else reads it. Emails are shown to the owner only.
+function personRow(scope, g) {
+  const u = USERS[g.u], mine = g.u === ME, sr = S.series && SERIES[S.series];
+  const other = !sr ? 'none' : grantOf(scope === 'book' ? SH.series[S.series] : SH.book, g.u);
+  const extra = scope === 'book' && RANK[other] >= RANK[g.role] ? `${ROLES[other]} through the series`
+    : scope === 'series' && RANK[other] > RANK[g.role] ? `${ROLES[other]} on this book` : '';
+  const ctl = isOwner()
+    ? `<select class="select" data-grant="${scope}:${g.u}" aria-label="Access for ${esc(u.name)}" data-testid="settings-sharing-role">${roleOptions(g.role)}</select><button class="mini" data-cmd="unshare" data-g="${scope}:${g.u}" aria-label="Remove ${esc(u.name)}" data-testid="settings-sharing-remove">Remove</button>`
+    : `<span class="role-t">${ROLES[g.role]}</span><span></span>`;
+  return `<li class="person${mine ? ' me' : ''}" data-testid="settings-sharing-person" data-person="${g.u}"><span class="avatar" aria-hidden="true">${initials(u.name)}</span>
+    <span class="who"><b><span>${esc(u.name)}</span>${mine ? '<span class="you">You</span>' : ''}</b>${isOwner() || extra ? `<span>${isOwner() ? esc(u.email) : ''}${isOwner() && extra ? ' · ' : ''}${extra}</span>` : ''}</span>${ctl}</li>`;
+}
+function addHTML(scope) {
+  const sr = S.series && SERIES[S.series], id = `addEmail-${scope}`;
+  return `<div class="share-add"><label for="${id}">${scope === 'series' ? `Add people to every book in ${esc(sr.name)}` : sr ? `Add people to ${esc(S.title)} only` : 'Add people'}</label>
+    <input class="input" id="${id}" type="email" inputmode="email" autocomplete="off" spellcheck="false" placeholder="name@example.com" data-lookup="${scope}" value="${esc(LK[scope].q)}" data-testid="settings-sharing-email">
+    <p class="help">Type their whole email address. Codex only finds an exact match: there’s no search and no suggestions.</p>
+    <div class="lookup" id="lk-${scope}" aria-live="polite">${lookupHTML(scope)}</div></div>`;
+}
+const legend = () => `<p class="roles-help"><b>Can view</b> opens every tab read-only. <b>Can comment</b> also adds comments. <b>Can edit</b> changes the text, plan, Knowledge base, references and settings. Only the owner can share, move, duplicate, publish or archive the book.</p>`;
+function sharingHTML() {
+  const sr = S.series && SERIES[S.series], own = isOwner();
+  const rows = (scope, list) => list.map(g => personRow(scope, g)).join('');
+  if (!sr) return `<ul class="people">${ownerRow()}${rows('book', SH.book)}</ul>
+    ${SH.book.length ? '' : `<p class="share-empty" data-testid="settings-sharing-empty">Only you can open this book.</p>`}${own ? addHTML('book') : ''}${legend()}`;
+  const sl = SH.series[S.series];
+  return `<ul class="people">${ownerRow()}</ul>
+    <div class="sub" data-testid="settings-sharing-book-list"><div class="sub-h"><h3>This book</h3></div><p class="sub-p">People who see ${esc(S.title)} and nothing else in the series.</p>
+      ${SH.book.length ? `<ul class="people">${rows('book', SH.book)}</ul>` : `<p class="share-empty">No one has access to only this book.</p>`}${own ? addHTML('book') : ''}</div>
+    <div class="sub" data-testid="settings-sharing-series-list"><div class="sub-h"><h3>Whole series: ${esc(sr.name)}</h3></div><p class="sub-p">People who see every book in ${esc(sr.name)}, including books added later, plus the series’ Knowledge base, labels and style guide.${own ? ' You can change this from any book in the series.' : ''}</p>
+      ${sl.length ? `<ul class="people">${rows('series', sl)}</ul>` : `<p class="share-empty">No one has access to the whole series.</p>`}${own ? addHTML('series') : ''}</div>
+    ${legend()}`;
+}
+
+// Add people: one exact lookup per complete address, debounced (POST /api/books/{id}/sharing/lookup).
+// Nothing is looked up or shown while the field isn't a whole address.
+const LK = { book: { q: '', st: 'idle', u: null, role: 'view', seq: 0 }, series: { q: '', st: 'idle', u: null, role: 'view', seq: 0 } };
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@.]{2,}$/;
+const findUser = email => Object.keys(USERS).find(k => !USERS[k].disabled && USERS[k].email.toLowerCase() === email.trim().toLowerCase()) || null;
+function lookupInput(scope, v) {
+  const L = LK[scope], e = v.trim(), seq = ++L.seq;
+  L.q = v; L.st = 'idle'; L.u = null; clearTimeout(L.t);
+  if (EMAIL.test(e)) L.t = setTimeout(() => {
+    L.st = 'looking'; drawLookup(scope);
+    setTimeout(() => { if (seq !== L.seq) return; L.u = findUser(e); L.st = L.u ? 'found' : 'none'; L.role = 'view'; drawLookup(scope); }, 350);
+  }, 400);
+  drawLookup(scope);
+}
+function drawLookup(scope) { const el = $('#lk-' + scope); if (el) el.innerHTML = lookupHTML(scope); }
+function lookupHTML(scope) {
+  const L = LK[scope], sr = S.series && SERIES[S.series];
+  const msg = (html, id) => `<p class="lk-msg"${id ? ` data-testid="${id}"` : ''}>${I.info}<span>${html}</span></p>`;
+  if (L.st === 'looking') return `<p class="lk-msg"><span class="dot"></span>Looking up…</p>`;
+  if (L.st === 'none') return msg(`No Codex user has that email.`, 'settings-sharing-no-match');
+  if (L.st !== 'found') return '';
+  const u = USERS[L.u], name = `<b>${esc(u.name)}</b>`;
+  if (L.u === OWNER_ID) return msg('That’s you. You own this book.');
+  const here = grantOf(scope === 'book' ? SH.book : SH.series[S.series], L.u);
+  if (here !== 'none') return msg(`${name} already has ${ROLES[here]} on ${scope === 'series' ? `every book in ${esc(sr.name)}` : 'this book'}. Change it in the list above.`);
+  const floor = scope === 'book' && sr ? grantOf(SH.series[S.series], L.u) : 'none';
+  if (floor === 'write') return msg(`${name} can already edit every book in ${esc(sr.name)}. A grant on one book can only add access.`);
+  if (RANK[L.role] <= RANK[floor]) L.role = Object.keys(ROLES).find(k => RANK[k] > RANK[floor]);
+  return `<div class="found" data-testid="settings-sharing-match"><div class="person"><span class="avatar" aria-hidden="true">${initials(u.name)}</span>
+      <span class="who"><b><span>${esc(u.name)}</span></b><span>${esc(u.email)}</span></span>
+      <select class="select" data-lkrole="${scope}" aria-label="Access for ${esc(u.name)}">${roleOptions(L.role, floor)}</select>
+      <button class="btn sm primary" data-cmd="share-add" data-scope="${scope}" data-testid="settings-sharing-add">Add</button></div>
+    ${floor !== 'none' ? `<div class="note" style="--tone:${tone('info')}">${I.info}<div>${name} has ${ROLES[floor]} through ${esc(sr.name)} already. Pick a higher role for this book.</div></div>` : ''}</div>`;
+}
+function drawShare(focusScope) { $('#shareBox').innerHTML = sharingHTML(); chrome(); if (focusScope) $('#addEmail-' + focusScope)?.focus(); }
+// Every change saves straight away; Undo puts the list back
+let shareSnap = null;
+const snapShare = () => { shareSnap = JSON.stringify({ book: SH.book, series: SH.series }); };
+const undoBtn = '<button data-cmd="share-undo">Undo</button>';
+function listOf(scope) { return scope === 'book' ? SH.book : SH.series[S.series]; }
+function shareAdd(scope) {
+  const L = LK[scope], u = USERS[L.u], sr = S.series && SERIES[S.series];
+  snapShare(); listOf(scope).push({ u: L.u, role: L.role });
+  Object.assign(L, { q: '', st: 'idle', u: null, role: 'view' });
+  drawShare(scope); save();
+  toast(`Shared ${scope === 'series' ? `every book in <b>${esc(sr.name)}</b>` : `<b>${esc(S.title)}</b>`} with ${esc(u.name)} · ${ROLES[listOf(scope).at(-1).role]}`, undoBtn);
+}
+function shareRole(key, r) {
+  const [scope, u] = key.split(':'), g = listOf(scope).find(x => x.u === u), sr = S.series && SERIES[S.series];
+  snapShare(); g.role = r; drawShare(); save();
+  toast(`${esc(USERS[u].name)} can now ${VERB[r]} ${scope === 'series' ? `every book in ${esc(sr.name)}` : esc(S.title)}`, undoBtn);
+}
+function unshare(key) {
+  const [scope, u] = key.split(':'), list = listOf(scope), sr = S.series && SERIES[S.series];
+  snapShare(); list.splice(list.findIndex(x => x.u === u), 1); drawShare(); save();
+  const left = roleOf(u);
+  toast(`Removed ${esc(USERS[u].name)}${scope === 'series' ? ` from ${esc(sr.name)}` : ''}. ${left !== 'none' ? `They keep ${ROLES[left]} ${scope === 'series' ? 'on this book' : `through ${esc(sr.name)}`}.` : 'Their open tabs go back to Library.'}`, undoBtn);
+}
+
+// What the role allows on this page. Viewers and commenters read it; editors change it except for owner-only actions.
+function applyRole() {
+  const ro = !canEdit();
+  document.body.toggleAttribute('data-ro', ro);
+  $$('#col [data-owner]').forEach(e => { if (!isOwner()) { e.disabled = true; e.title = e.dataset.owner; } });
+  if (ro) $$('#col input, #col select, #col textarea, #col button').forEach(e => { e.disabled = true; });
+  const ex = $('[data-cmd="export-src"]'); if (ex && ro) ex.title = 'Exporting needs edit access';
+}
+
+// ---------- Writing ----------
+function guideHelp() {
+  const w = S.guide.trim() ? S.guide.trim().split(/\s+/).length : 0;
+  return `${w ? `${w} words · ` : ''}Keep it short: it’s sent with every generation and counts against the model’s context. It doesn’t change text already written.`;
+}
+
+// ---------- Citations ----------
+function cite(r, style) {
+  const n = r.authors.split(' '), last = n.at(-2) === 'Brooks' ? 'Brooks' : n.at(-1), first = n.slice(0, n.indexOf(last)).join(' ');
+  const t = esc(r.title), ed = r.edition ? `${r.edition} ed.` : '';
+  if (style === 'chicago') return r.kind === 'book' ? `${last}, ${first}${last === 'Brooks' ? ', Jr' : ''}. <i>${t}</i>. ${ed} ${esc(r.publisher)}, ${r.year}.` : `${last}, ${first.replace(/\.$/, '')}. “${t}${/[?!]$/.test(r.title) ? '' : '.'}” ${esc(r.publisher)} (${r.year}).`;
+  const ini = first.split(' ').map(x => x[0] + '.').join(' ');
+  if (style === 'apa') return r.kind === 'book' ? `${last}, ${ini}${last === 'Brooks' ? ', Jr.' : ''} (${r.year}). <i>${t}</i> (${ed}). ${esc(r.publisher)}.` : `${last}, ${ini} (${r.year}). ${t} <i>${esc(r.publisher)}</i>.`;
+  return r.kind === 'book' ? `${last}, ${ini.replace(/ /g, '')} (${r.year}) <i>${t}</i>. ${ed.replace('ed.', 'edn.')} ${esc(r.publisher)}.` : `${last}, ${ini.replace(/ /g, '')} (${r.year}) ‘${t}’, <i>${esc(r.publisher)}</i>.`;
+}
+function citesHTML() {
+  const s = pub('style');
+  const intext = s === 'chicago' ? `…makes it later.<sup>10</sup> <span class="dim-t">→ note: Brooks, <i>Mythical Man-Month</i>, 25.</span>` : `…makes it later (Brooks, 1995, p. 25).`;
+  return `<span class="k">In the text</span><span class="intext">${intext}</span><span class="k">Bibliography</span><span class="c">${cite(EX.brooks, s)}</span><span class="c">${cite(EX.conway, s)}</span>`;
+}
+
+// ---------- Publisher rules: the effect on References, worked out live ----------
+function riskCount() { if (BOOK_ID !== 'pe') return 0; const lim = pub('proseWords'); return RISKS.filter(r => r.kind !== 'quote' || r.words > lim).length; }
+function impactHTML() {
+  const lim = pub('proseWords');
+  if (BOOK_ID !== 'pe') return `<p class="help">${S.series === 'ac' ? `${esc(SERIES.ac.name)}’s publisher allows 250 words. ` : ''}Every source in this book is rechecked when this changes; nothing is written, so changing it back undoes it.</p>`;
+  const max = 400, pos = v => Math.min(100, v / max * 100);
+  const atRisk = RISKS.filter(r => r.kind !== 'quote' || r.words > lim);
+  const vel = RISKS[0], velRisk = vel.words > lim, base = pub('proseWords') === 300;
+  const bar = `<div class="wbar" aria-hidden="true"><span class="track"></span>${QUOTED.map(([, t, w]) => `<span class="dot" style="left:${pos(w)}%;--tone:${tone(w > lim ? 'danger' : 'ok')}" title="${esc(t)}: ${w} words"></span>`).join('')}<span class="lim" style="left:${pos(lim)}%" title="Limit: ${lim} words"></span>${[0, 100, 200, 300, 400].map(v => `<span class="scale" style="left:${pos(v)}%">${v}</span>`).join('')}</div>`;
+  return `<div class="impact" style="--tone:${tone(atRisk.length ? 'danger' : 'ok')}"><b>${atRisk.length ? `${atRisk.length} sources at copyright risk${atRisk.length ? ', blocking print export' : ''}` : 'No sources at risk'}</b>
+    ${bar}
+    <ul>
+      <li><span class="st" style="--tone:${tone(velRisk ? 'danger' : 'warn')}"><i></i>${velRisk ? 'Copyright risk' : 'Needs check'}</span><span class="src">The Velocity Trap</span><span class="why">${vel.words} of ${lim} words quoted${velRisk ? '' : ' · within the limit, ready to sign off'}</span></li>
+      ${RISKS.slice(1).map(r => `<li><span class="st" style="--tone:${tone('danger')}"><i></i>Copyright risk</span><span class="src">${r.t}</span><span class="why">${r.why}; not affected by the limit</span></li>`).join('')}
+    </ul>
+    <span class="dim-t">The longest quote from any other source is 41 words (Goodhart). ${base ? '' : 'Changing the limit back restores every status.'} <a class="mini go" style="margin-left:-6px" href="references.html${BQ}">Open References</a></span></div>`;
+}
+
+// ---------- Permission letters: the sentence References puts in every request ----------
+function letterHTML() {
+  const m = (v, miss) => v ? `<mark>${esc(v)}</mark>` : `<mark class="miss">${miss}</mark>`;
+  const f = pub('formats').map(k => FORMATS[k].toLowerCase()), fl = f.length > 1 ? f.slice(0, -1).join(', ') + ' and ' + f.at(-1) : f[0];
+  const by = pub('publisher') ? ` by ${m(pub('publisher'))}` : '';
+  return `I am writing to ask permission to reproduce material from “<i>The Velocity Trap</i>” (Dana Whitlock, 2021) in my book “${esc(S.title)}”, to be published${by} in ${m(fl, 'no format chosen')} in ${m(String(pub('year') || ''), 'year')} (first print run ${m(pub('run') ? fmt(pub('run')) + ' copies' : '', 'print run')}, ${m(pub('rights').replace(/^World /, 'world ').replace(/^World,/, 'world,'))} rights).`;
+}
+
+// ---------- Layout ----------
+function tplHTML() {
+  const t = TPL[S.tpl];
+  return `<span class="tth ${t.th}"></span><div><b>${esc(t.name)}</b><span>${esc(t.desc)}</span><span class="pin">${I.pin}Pinned to v${t.ver}${t.latest ? ` · v${t.latest} available, preview it in Layout` : ''}</span></div>`;
+}
+function trimHTML() {
+  const t = TPL[S.tpl];
+  if (!t.trims.includes(S.trim)) S.trim = t.trims[0];
+  return `<div class="seg" role="group" aria-label="Trim size">${t.trims.map(v => `<button data-trim="${v}" aria-pressed="${S.trim === v}">${v}</button>`).join('')}</div><p class="help">Sizes ${esc(t.name)} supports. Bleed, crop marks and image quality are chosen for each export.</p>`;
+}
+function gateHTML() {
+  const n = riskCount();
+  if (BOOK_ID !== 'pe') return `<span class="st" style="--tone:${tone('ok')}"><i></i>Nothing blocks export</span><p class="help">Copyright risks in References and preflight issues in Layout block print export.</p>`;
+  return n ? `<span class="st" style="--tone:${tone('danger')}"><i></i>${n} copyright risks block print export</span><a class="mini go" href="references.html${BQ}">Open References</a><p class="help">They come from References and the publisher rules above. Preflight in Layout checks the rest.</p>`
+    : `<span class="st" style="--tone:${tone('ok')}"><i></i>No copyright risks</span><p class="help">Preflight in Layout checks images, directives and raw LaTeX.</p>`;
+}
+
+// ---------- Live updates (no re-render while typing) ----------
+function refresh() {
+  $('#cites').innerHTML = citesHTML();
+  $('#impact').innerHTML = impactHTML();
+  $('#letter').innerHTML = letterHTML();
+  $('#gate').innerHTML = gateHTML();
+  $('#guideHelp').innerHTML = guideHelp();
+  const pct = Math.min(100, Math.round(S.words / Math.max(1, S.target) * 100));
+  $('#prog').innerHTML = `<span class="bar"><i style="width:${pct}%"></i></span><span>${fmt(S.words)} of ${fmt(S.target || 0)} · ${pct}%</span>`;
+  const wd = $('[data-cmd="words-default"]'); if (wd) wd.hidden = pub('proseWords') === 300;
+  chrome();
+}
+// Re-draw the Series / This book chips after a value changes source, keeping focus where it is
+function refreshInh() { $$('[data-inh]').forEach(w => w.innerHTML = inhInner(w.dataset.inh)); }
+function setPub(k, v) { if (S.series && JSON.stringify(v) === JSON.stringify(sPub()[k])) delete S.own[k]; else S.own[k] = v; refreshInh(); refresh(); }
+
+// ---------- Scroll spy and deep links ----------
+function spy() {
+  const page = $('#page'), top = page.getBoundingClientRect().top;
+  let cur = 'book';
+  $$('.card').forEach(c => { if (c.getBoundingClientRect().top - top < 140) cur = c.dataset.sec; });
+  // At the bottom the last card wins, unless the deep-linked card (e.g. #sharing, one above it) is in view
+  if (page.scrollTop + page.clientHeight >= page.scrollHeight - 4) {
+    const hc = location.hash.length > 1 && document.getElementById(location.hash.slice(1))?.closest('.card');
+    cur = hc && hc.getBoundingClientRect().bottom - top > 140 ? hc.dataset.sec : $$('.card').at(-1).dataset.sec;
+  }
+  $$('#nav a').forEach(a => a.setAttribute('aria-current', String(a.dataset.sec === cur)));
+}
+function flashEl(sel) { const e = $(sel); if (!e) return; e.classList.remove('flash'); void e.offsetWidth; e.classList.add('flash'); }
+function goHash(smooth) {
+  const id = location.hash.slice(1); if (!id || !document.getElementById(id)) return;
+  const e = document.getElementById(id);
+  $('#page').scrollTo({ top: e.offsetTop - ($('.nav').offsetHeight > 60 && innerWidth <= 860 ? 52 : 16), behavior: smooth ? 'smooth' : 'auto' });
+  flashEl('#' + id);
+  const f = e.querySelector('input, select'); if (id === 'rules' || id === 'letters') setTimeout(() => f?.focus({ preventScroll: true }), smooth ? 350 : 0);
+}
+
+// ---------- Dialog and toast ----------
+let lastFocus = null;
+function openDlg() { lastFocus = document.activeElement; $('#dlg').classList.add('open'); setTimeout(() => $('#dlg .btn.primary, #dlg .btn.danger.solid')?.focus(), 0); }
+function closeDlg() { $('#dlg').classList.remove('open'); lastFocus?.focus?.(); }
+let toastT;
+function toast(html, extra) {
+  const t = $('#toast');
+  t.innerHTML = `<span>${html}</span>${extra || ''}`;
+  t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 4800);
+}
+function archiveDialog() {
+  $('#dlg').innerHTML = `<div class="dlg"><div class="dlg-h"><h2 id="dlgTitle">Archive ${esc(S.title)}?</h2><button class="ib" data-cmd="dlg-close" aria-label="Close">${I.x}</button></div>
+    <div class="dlg-b"><p>It leaves Library and ⌘K. Its text, Knowledge base, References and exports are kept, and you can restore it from <b>Archived</b> in Library at any time.</p>
+      ${S.series ? `<p class="dim-t" style="font-size:var(--text-xs)">${esc(SERIES[S.series].name)} keeps its number for it, so the other books aren’t renumbered.</p>` : ''}
+      ${SH.book.length ? `<div class="note" style="--tone:${tone('warn')}">${I.people}<div>${nameList(SH.book.map(g => esc(USERS[g.u].name)))} ${SH.book.length === 1 ? 'loses' : 'lose'} access. Restoring the book doesn’t share it again.</div></div>` : ''}</div>
+    <div class="dlg-f"><button class="btn" data-cmd="dlg-close">Cancel</button><button class="btn danger solid" data-cmd="confirm-archive">Archive book</button></div></div>`;
+  openDlg();
+}
+function duplicateDialog() {
+  $('#dlg').innerHTML = `<div class="dlg"><div class="dlg-h"><h2 id="dlgTitle">Duplicate book</h2><button class="ib" data-cmd="dlg-close" aria-label="Close">${I.x}</button></div>
+    <div class="dlg-b"><div class="row" style="padding:0"><label class="lbl" for="dupT">Title</label><div class="ctl"><input class="input w-full" id="dupT" value="${esc(S.title)} (copy)"></div></div>
+      <p class="dim-t" style="font-size:var(--text-xs)">Copies the structure, prose, beats, this book’s Knowledge base and labels, and these settings${S.series ? `. It stays in ${esc(SERIES[S.series].name)} as the last book` : ''}. References start empty: permission and sign-off cover one book’s print run.</p></div>
+    <div class="dlg-f"><button class="btn" data-cmd="dlg-close">Cancel</button><button class="btn primary" data-cmd="confirm-dup">Duplicate</button></div></div>`;
+  openDlg();
+}
+
+// ---------- Events ----------
+document.addEventListener('click', e => {
+  const t = e.target;
+  if (t === $('#dlg')) return closeDlg();
+  const c = t.closest('[data-cmd]')?.dataset.cmd;
+  if (c === 'dlg-close') return closeDlg();
+  if (c === 'review-move') return moveDialog();
+  if (c === 'cancel-move') { S.pending = null; return render(); }
+  if (c === 'confirm-move') return confirmMove();
+  if (c === 'words-default') { setPub('proseWords', 300); $('#fWords').value = 300; save(); return; }
+  if (c === 'archive') return archiveDialog();
+  // Archiving removes the book's own grants (#80); Undo straight away puts them back, a later Restore doesn't
+  if (c === 'confirm-archive') { closeDlg(); snapShare(); S.archived = true; SH.book = []; render(); save(); return toast(`${esc(S.title)} archived`, '<button data-cmd="archive-undo">Undo</button>'); }
+  if (c === 'archive-undo') { S.archived = false; SH.book = JSON.parse(shareSnap).book; render(); save(); return $('#toast').classList.remove('show'); }
+  if (c === 'share-add') return shareAdd(t.closest('[data-scope]').dataset.scope);
+  if (c === 'unshare') return unshare(t.closest('[data-g]').dataset.g);
+  if (c === 'share-undo') { const s = JSON.parse(shareSnap); SH.book = s.book; SH.series = s.series; drawShare(); save(); return $('#toast').classList.remove('show'); }
+  if (t.closest('#roChip')) return toast(esc(roleChip(ROLE).why));
+  const va = t.closest('[data-view-as]'); if (va) return viewAs(va.dataset.viewAs);
+  if (c === 'restore') { S.archived = false; render(); save(); return toast(`${esc(S.title)} is back in Library`); }
+  if (c === 'duplicate') return duplicateDialog();
+  if (c === 'confirm-dup') { const tt = $('#dupT').value.trim() || S.title + ' (copy)'; closeDlg(); return toast(`Duplicating… <b>${esc(tt)}</b> opens on Plan when it’s ready`, `<a href="plan.html?book=new&title=${encodeURIComponent(tt)}">Open</a>`); }
+  if (c === 'export-src') return toast(`Preparing ${esc(S.title)}.zip · you’ll be notified when it’s ready to download`);
+  const st = t.closest('[data-status]'); if (st) { S.status = st.dataset.status; $$('[data-status]').forEach(b => b.setAttribute('aria-pressed', String(b === st))); save(); return; }
+  const sy = t.closest('[data-style]'); if (sy) { setPub('style', sy.dataset.style); $$('[data-style]').forEach(b => b.setAttribute('aria-pressed', String(b === sy))); save(); return toast(`Citations now in ${STYLES[sy.dataset.style]} across References, the bibliography and print`); }
+  const tr = t.closest('[data-trim]'); if (tr) { S.trim = tr.dataset.trim; $('#trimBox').innerHTML = trimHTML(); save(); return; }
+  const rs = t.closest('[data-reset]'); if (rs) { const k = rs.dataset.reset, old = S.own[k]; delete S.own[k]; render(); save(); return toast(`Back to ${esc(SERIES[S.series].name)}’s ${fmtPub(k, sPub()[k])}`, `<button data-undo-own="${k}" data-v='${esc(JSON.stringify(old))}'>Undo</button>`); }
+  const uo = t.closest('[data-undo-own]'); if (uo) { S.own[uo.dataset.undoOwn] = JSON.parse(uo.dataset.v); render(); save(); return $('#toast').classList.remove('show'); }
+  const ts = t.closest('[data-toast]'); if (ts) return toast(esc(ts.dataset.toast));
+  const nv = t.closest('#nav a'); if (nv) { e.preventDefault(); history.replaceState(null, '', '#' + nv.dataset.sec); return goHash(true); }
+  const thm = t.closest('[data-theme-set]'); if (thm) { const h = document.documentElement; thm.dataset.themeSet === 'system' ? delete h.dataset.theme : h.dataset.theme = thm.dataset.themeSet; return aid(); }
+  const den = t.closest('[data-density-set]'); if (den) { document.documentElement.dataset.density = den.dataset.densitySet; return aid(); }
+});
+// Typing: update the preview straight away, save 3s after the first edit and on blur
+document.addEventListener('input', e => {
+  const f = e.target.dataset?.f, v = e.target.value;
+  if (e.target.dataset?.lookup) return lookupInput(e.target.dataset.lookup, v);
+  if (e.target.dataset?.fmt) {
+    const fm = $$('[data-fmt]').filter(x => x.checked).map(x => x.dataset.fmt);
+    setPub('formats', fm); return save();
+  }
+  if (!f || ['series', 'n', 'tpl', 'rights'].includes(f)) return;
+  if (f === 'title') { S.title = v; }
+  else if (f === 'author') S.author = v;
+  else if (f === 'target') S.target = Math.max(0, +v || 0);
+  else if (f === 'guide') S.guide = v;
+  else if (f === 'proseWords') setPub('proseWords', Math.max(0, +v || 0));
+  else if (f === 'year') setPub('year', +v || '');
+  else if (f === 'run') setPub('run', Math.max(0, +v || 0));
+  else if (f === 'publisher') setPub('publisher', v);
+  refresh(); dirty();
+});
+document.addEventListener('focusout', e => { if (e.target.dataset?.f && saveT) save(); });
+document.addEventListener('change', e => {
+  const f = e.target.dataset?.f, v = e.target.value;
+  if (e.target.dataset?.grant) return shareRole(e.target.dataset.grant, v);
+  if (e.target.dataset?.lkrole) { LK[e.target.dataset.lkrole].role = v; return; }
+  if (f === 'series') {
+    const sid = v || null;
+    if (sid === S.series) S.pending = null;
+    else S.pending = { series: sid, n: sid ? SERIES[sid].books.length + 1 - (SERIES[sid].books.includes(BOOK_ID) ? 1 : 0) : null };
+    render(); return $('#fSeries').focus();
+  }
+  if (f === 'n') {
+    const n = +v;
+    if (S.pending) { S.pending.n = n; $('#orderBox').innerHTML = orderHTML(); $('#pendingBox').innerHTML = pendingHTML(); return; }
+    const old = S.n; S.n = n; $('#orderBox').innerHTML = orderHTML(); chrome(); save();
+    return toast(`${esc(S.title)} is now Book ${bookNo(n)} in ${esc(SERIES[S.series].name)}`, `<button data-undo-n="${old}">Undo</button>`);
+  }
+  if (f === 'tpl') { S.tpl = v; $('#tplcard').innerHTML = tplHTML(); $('#trimBox').innerHTML = trimHTML(); save(); return toast(`Layout set to ${esc(TPL[v].name)} v${TPL[v].ver} · ${S.trim}. Your text didn’t change.`); }
+  if (f === 'rights') { setPub('rights', v); return save(); }
+});
+document.addEventListener('click', e => { const u = e.target.closest('[data-undo-n]'); if (!u) return; S.n = +u.dataset.undoN; render(); save(); $('#toast').classList.remove('show'); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && $('#dlg').classList.contains('open')) return closeDlg();
+  // Keep Tab inside an open dialog
+  if (e.key === 'Tab' && $('#dlg').classList.contains('open')) {
+    const f = $$('#dlg button, #dlg input, #dlg select').filter(x => !x.disabled); if (!f.length) return;
+    if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f.at(-1).focus(); }
+    else if (!e.shiftKey && document.activeElement === f.at(-1)) { e.preventDefault(); f[0].focus(); }
+  }
+  if (e.key === 'Enter' && $('#dlg').classList.contains('open') && e.target.tagName === 'INPUT') { e.preventDefault(); $('#dlg .btn.primary')?.click(); }
+  // Enter in Add people adds the person found, once the lookup has shown them
+  if (e.key === 'Enter' && e.target.dataset?.lookup) { e.preventDefault(); $(`[data-cmd="share-add"][data-scope="${e.target.dataset.lookup}"]`)?.click(); }
+});
+$('#page').addEventListener('scroll', spy, { passive: true });
+addEventListener('hashchange', () => goHash(true));
+
+// ---------- Review aid ----------
+function aid() {
+  const h = document.documentElement;
+  $$('[data-theme-set]').forEach(b => b.setAttribute('aria-pressed', b.dataset.themeSet === (h.dataset.theme || 'system')));
+  $$('[data-density-set]').forEach(b => b.setAttribute('aria-pressed', b.dataset.densitySet === (h.dataset.density || 'compact')));
+  // View as (#80): your own book as its owner, or as someone it's shared with. A book shared with you has no Owner.
+  $('#viewAs').innerHTML = `<button disabled style="color:var(--color-muted)">View as</button>` + [['owner', 'Owner'], ['write', 'Editor'], ['comment', 'Commenter'], ['view', 'Viewer']]
+    .filter(([k]) => k !== 'owner' || OWNER_ID === 'jd').map(([k, l]) => `<button data-view-as="${k}" aria-pressed="${ROLE === k}">${l}</button>`).join('');
+  $('#tryEmail').hidden = !isOwner();
+}
+// A role other than the default goes in the URL (?role=owner|write|comment|view), so tab links keep it
+const defaultRole = () => OWNER_ID === 'jd' ? 'owner' : roleOf('jd');
+function viewAs(r) {
+  setViewer(r);
+  BQ = `?book=${encodeURIComponent(BOOK_ID)}${ROLE !== defaultRole() ? `&role=${ROLE}` : ''}`;
+  history.replaceState(null, '', location.pathname + BQ + location.hash);
+  render(); aid();
+}
+$('#bookPick').innerHTML = [['pe', 'Product Engineering (standalone, has References, shared with 3)'], ['players-guide', 'Players Guide (Forsaken Gods, one override, shared)'], ['hollow-throne', 'Hollow Throne (The Ashen Crown, not shared)'], ['northbound', 'Northbound (standalone)'], ['glass-orchard', 'Glass Orchard (Mara Lind’s, shared with you: view)'], ['wick-and-ember', 'Wick and Ember (Mara Lind’s series, shared with you: edit)'], ['salt-king', 'The Salt King (Kofi Mensah’s, one book of a series: comment)']].map(([k, l]) => `<option value="${k}" ${k === BOOK_ID ? 'selected' : ''}>${l}</option>`).join('');
+$('#bookPick').addEventListener('change', e => { location.search = '?book=' + e.target.value; });
+// Sample addresses for Add people: a match in any case, a near miss, a disabled account, someone on the series, you
+$('#tryEmail').innerHTML = [['', 'Try an email…'], ['ana@example.com', 'ana@example.com (match)'], ['  ANA@Example.COM ', '  ANA@Example.COM  (case, spaces)'], ['ana@example.co', 'ana@example.co (near miss)'], ['ana@exam', 'ana@exam (incomplete)'], ['rhys@example.com', 'rhys@example.com (disabled)'], ['noor.haddad@example.com', 'noor.haddad@example.com (new)'], ['priya@raman.studio', 'priya@raman.studio (series editor)'], ['lee.fischer@example.com', 'lee.fischer@example.com (series viewer)'], ['joel@example.com', 'joel@example.com (you)']].map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('');
+$('#tryEmail').addEventListener('change', e => {
+  const v = e.target.value; e.target.value = ''; if (!v) return;
+  const f = $('#addEmail-book'); if (!f) return;
+  f.value = v; lookupInput('book', v);
+  history.replaceState(null, '', location.pathname + location.search + '#sharing'); goHash(false);
+});
+
+// ---------- Boot ----------
+setViewer(QS.get('role'));
+BQ = `?book=${encodeURIComponent(BOOK_ID)}${ROLE !== defaultRole() ? `&role=${ROLE}` : ''}`;
+aid(); render();
+requestAnimationFrame(() => goHash(false));
+</script>
+</body>
+</html>

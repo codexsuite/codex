@@ -1,0 +1,41 @@
+// The shell's data-testid registry (server side: src/Codex.TestSupport/TestIds.cs, kept identical and pinned by
+// TestIdRegistryTests). Selectors are data-testid only. Lanes do NOT add ids here: each lane keeps its own in
+// features/<area>/testIds.ts with its prefix (library-, plan-, write-, kb-, refs-, settings-).
+// Shell ids are prefixed shell- (except app-shell). Builders take the row's id as a string.
+export const testIds = {
+  shell: {
+    appShell: 'app-shell',
+    libraryPage: 'shell-library-page',
+    shelf: 'shell-shelf',
+    listView: 'shell-list-view',
+    viewToggle: 'shell-view-toggle',
+    searchBox: 'shell-search-box',
+    sortControl: 'shell-sort-control',
+    groupControl: 'shell-group-control',
+    seriesScreen: 'shell-series-screen',
+    bookBar: 'shell-book-bar',
+    tabPlan: 'shell-tab-plan',
+    tabWrite: 'shell-tab-write',
+    tabReferences: 'shell-tab-references',
+    tabLayout: 'shell-tab-layout',
+    tabSettings: 'shell-tab-settings',
+    backLink: 'shell-back-link',
+    saveStatusSlot: 'shell-slot-save-status',
+    badgeSlot: 'shell-slot-badge',
+    scopeSlot: 'shell-slot-scope',
+    formatSlot: 'shell-slot-format',
+    focusSlot: 'shell-slot-focus',
+    paletteSlot: 'shell-slot-palette',
+    commandPalette: 'shell-command-palette',
+    kbSidebar: 'shell-kb-sidebar',
+    kbList: 'shell-kb-list',
+    errorUnknownBook: 'shell-error-unknown-book',
+    errorBadLink: 'shell-error-bad-link',
+    roleChip: 'shell-role-chip',
+    tile: (bookId: string) => `shell-tile-${bookId}`,
+    listRow: (bookId: string) => `shell-list-row-${bookId}`,
+    seriesStack: (seriesId: string) => `shell-series-stack-${seriesId}`,
+    kbItem: (entryId: string) => `shell-kb-item-${entryId}`,
+    lanePlaceholder: (lane: string) => `shell-lane-${lane}`,
+  },
+} as const;

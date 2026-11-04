@@ -1,0 +1,353 @@
+name: CI
+
+on:
+  # Pull requests only: a merge to main is the code its pull request already tested.
+  # main's images are built by docker-publish. Run it by hand on any branch with workflow_dispatch.
+  # No paths-ignore: main's ruleset requires these checks, and a workflow skipped by a path filter leaves them
+  # pending, so that pull request could never merge.
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # GitHub-hosted runners only: this repository is public, so a fork's pull request runs here and must
+  # never reach a self-hosted machine. Pinned to 24.04, not ubuntu-latest, so what the acceptance job's
+  # Chromium and the sandbox's Landlock need does not move under a runner upgrade.
+  build:
+    name: build, lint, typecheck
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The steps below diff against the pull request base. A default checkout is one commit deep
+          # and does not have that commit.
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      # One cache per job: each restores different projects, so a shared key would keep whichever job finished first.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ github.job }}-${{ hashFiles('src/**/*.csproj', 'src/Directory.Build.props') }}
+          restore-keys: nuget-${{ github.job }}-
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: src/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: src/pnpm-lock.yaml
+      - run: dotnet build src/Codex.slnx --configuration Release
+      - run: pnpm install --frozen-lockfile
+        working-directory: src/Codex.Client
+      # Vitest runs only the tests a pull request's changes reach. A hand run has no base, so it runs them all.
+      # Its import graph misses what tests read from disk (fixtures, the prose corpus, CSS, tokens); the core is
+      # shared by everything; and the configs and the lockfile change every test. All of those run the whole suite.
+      - name: Format, lint, typecheck, vitest, build
+        working-directory: src/Codex.Client
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          pnpm run format:check && pnpm run lint && pnpm run typecheck
+          full='^(src/(pnpm-lock\.yaml|package\.json|pnpm-workspace\.yaml)|src/Codex\.Client/(package\.json|tsconfig\.json|vite\.config\.ts)|src/Codex\.Client/src/.*\.css|src/Codex\.Core\.Client/.*|src/Codex\.TestSupport/Fixtures/.*|db/prose-corpus/.*|design/tokens\..*)$'
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            pnpm test
+          elif grep -Eq "$full" <<< "$(git diff --name-only "$BASE_SHA")"; then
+            echo "Change is outside Vitest's import graph; running the full suite"
+            pnpm test
+          else
+            echo "Vitest --changed $BASE_SHA"
+            # pnpm forwards these arguments. A "--" before them would reach vitest, which then
+            # treats --changed as a file filter and runs everything.
+            pnpm test --changed "$BASE_SHA" --passWithNoTests
+          fi
+          pnpm run build
+      # The core shared with the mobile app (#35): no DOM in its tsconfig, a lint boundary, vitest in plain Node.
+      - run: pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm test
+        working-directory: src/Codex.Core.Client
+      # The Expo app (#35): checks, vitest for its pure modules (*.test.ts), jest-expo for its screens and primitives
+      # (*.spec.tsx), and a Metro bundle so a module the bundler cannot resolve fails here rather than on a device.
+      # Device builds go through EAS later. A pull request that cannot reach the app skips all of it.
+      - name: Mobile checks, tests and bundle
+        working-directory: src/Codex.Mobile
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          reach='^(src/(pnpm-lock\.yaml|package\.json|pnpm-workspace\.yaml)|src/Codex\.Mobile/.*|src/Codex\.Core\.Client/.*|design/tokens\..*)$'
+          if [ "$EVENT_NAME" = "pull_request" ] && ! grep -Eq "$reach" <<< "$(git diff --name-only "$BASE_SHA")"; then
+            echo "Nothing the mobile app depends on changed; skipping"
+            exit 0
+          fi
+          pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm test && pnpm run test:screens && pnpm run bundle
+
+  unit:
+    name: unit tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      # One cache per job: each restores different projects, so a shared key would keep whichever job finished first.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ github.job }}-${{ hashFiles('src/**/*.csproj', 'src/Directory.Build.props') }}
+          restore-keys: nuget-${{ github.job }}-
+      - run: dotnet test src/Codex.UnitTest --configuration Release
+
+  api:
+    name: API tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      # One cache per job: each restores different projects, so a shared key would keep whichever job finished first.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ github.job }}-${{ hashFiles('src/**/*.csproj', 'src/Directory.Build.props') }}
+          restore-keys: nuget-${{ github.job }}-
+      # The print tests run pandoc and Tectonic through codex-sandbox, at the versions src/Dockerfile.worker pins.
+      # Tectonic's bundle cache (~/.cache/Tectonic) is kept between runs so the bundle is fetched once. The install
+      # script warms it with every built-in template before any test runs (render jobs read it read-only), and it is
+      # saved right after, whether or not the tests pass.
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/Tectonic
+          key: tectonic-bundle-0.15.0-${{ hashFiles('templates/**') }}
+          restore-keys: tectonic-bundle-0.15.0-
+      - run: scripts/install-print-tools.sh "$RUNNER_TEMP/print-tools" ~/.cache/Tectonic && echo "$RUNNER_TEMP/print-tools" >> "$GITHUB_PATH"
+      - uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: ~/.cache/Tectonic
+          key: tectonic-bundle-0.15.0-${{ hashFiles('templates/**') }}
+      # CODEX_TEST_DB is unset here, so the tests start a postgres:18 container (Docker is on the runner).
+      # Each test class starts its own Kestrel host. Four workers matches the runner's 4 vCPUs.
+      - run: dotnet build src/Codex.WebApi.Tests --configuration Release && dotnet build-server shutdown
+      - run: dotnet test src/Codex.WebApi.Tests --configuration Release --no-build -- NUnit.NumberOfTestWorkers=4
+
+  mcp:
+    name: MCP tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      # One cache per job: each restores different projects, so a shared key would keep whichever job finished first.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ github.job }}-${{ hashFiles('src/**/*.csproj', 'src/Directory.Build.props') }}
+          restore-keys: nuget-${{ github.job }}-
+      # Spawns the Codex.Mcp stdio server and starts the web host; like the API job, a postgres:18 container.
+      # place_figure's test reads the Layout Quick preview, which runs pandoc through codex-sandbox (503 without them).
+      - run: scripts/install-print-tools.sh "$RUNNER_TEMP/print-tools" && echo "$RUNNER_TEMP/print-tools" >> "$GITHUB_PATH"
+      - run: dotnet build src/Codex.Mcp.Tests --configuration Release && dotnet build-server shutdown
+      - run: dotnet test src/Codex.Mcp.Tests --configuration Release --no-build -- NUnit.NumberOfTestWorkers=4
+
+  component:
+    name: component tests
+    runs-on: ubuntu-24.04
+    # Same image used to generate the committed screenshot snapshots. The
+    # GitHub-hosted runner image and this container ship different font
+    # packages even on matching Ubuntu versions, which is enough to break
+    # every screenshot assertion; running inside the image itself is what
+    # reliably matches.
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.0-resolute
+    defaults:
+      run:
+        # A job with a container defaults to `sh`, which is dash in this image and has no `<<<`.
+        shell: bash
+        working-directory: src/Codex.Client
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Playwright --only-changed diffs against the pull request base. A default checkout
+          # is one commit deep and does not have that commit.
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: src/package.json
+      - run: pnpm install --frozen-lockfile
+      # Playwright defaults to half the CPUs it can see: 2 on a 4 vCPU hosted runner. Pinned so that stays true.
+      # --only-changed follows what a spec's components import. The harness, global CSS, the core, fixtures read
+      # from disk, the configs and the lockfile are not reliably in that graph, so they run the whole suite. A pull
+      # request that does not touch the client skips the run. A hand run has no base and runs everything.
+      # So a page change that does not reach a screenshot spec can pass with a stale baseline; the next full run
+      # shows it. When a page shot you did not touch fails, compare the images first.
+      - name: Playwright component tests
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          # The job container runs as root and the checkout belongs to the runner, so Git treats the worktree as
+          # unsafe and `git diff` exits 129. Playwright --only-changed invokes git too, so it is set on the step.
+          # `*`, not github.workspace: in a container job that expression is the host path, not /__w/codex/codex.
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: safe.directory
+          GIT_CONFIG_VALUE_0: "*"
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            pnpm run test-ct --workers=2
+            exit 0
+          fi
+          changed=$(git diff --name-only "$BASE_SHA")
+          full='^(src/(pnpm-lock\.yaml|package\.json|pnpm-workspace\.yaml)|src/Codex\.Client/(playwright-ct\.config\.ts|playwright/.*|tsconfig\.json|package\.json|vite\.config\.ts|src/.*\.css)|src/Codex\.Core\.Client/.*|src/Codex\.TestSupport/Fixtures/.*|design/tokens\..*)$'
+          if grep -Eq "$full" <<< "$changed"; then
+            echo "Change is outside Playwright's component graph; running the full suite"
+            pnpm run test-ct --workers=2
+          elif grep -q '^src/Codex\.Client/' <<< "$changed"; then
+            echo "Playwright --only-changed $BASE_SHA"
+            pnpm run test-ct --workers=2 --only-changed="$BASE_SHA"
+          else
+            echo "No files under src/Codex.Client changed; skipping component tests"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: src/Codex.Client/playwright-report/
+          retention-days: 14
+
+  acceptance:
+    name: acceptance (${{ matrix.group }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # Shards are namespaces, so later slices add tests under these namespaces and never edit this file.
+        # Journeys is the exception, at ~6 min on its own: it splits by class-name prefix, J0x and J1x, with
+        # Journeys.Rest taking every other journey. Each job spends ~2.5 min on setup (client bundle, build, Chromium,
+        # print tools), so shards are grouped into jobs, balanced on test time from the acceptance-trx-* artifacts.
+        # Each shard still runs in its own `dotnet test`, so a test host's memory is what one shard needs.
+        # `Other` runs every test outside the listed namespaces (a new lane's namespace lands there until it
+        # gets a shard), so nothing is silently skipped. A shard with no tests passes (dotnet test exits 0).
+        # main's ruleset requires these checks by name, so a change to the groups changes the ruleset too.
+        include:
+          - group: 1
+            shards: Journeys.J0
+          - group: 2
+            shards: Journeys.J1 Lanes.Settings Lanes.Library
+          - group: 3
+            shards: Journeys.Rest Lanes.References Lanes.Kb
+          - group: 4
+            shards: Lanes.Write Other Lanes.Plan Harness Lanes.Shell
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      # One cache per job: each restores different projects, so a shared key would keep whichever job finished first.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ github.job }}-${{ hashFiles('src/**/*.csproj', 'src/Directory.Build.props') }}
+          restore-keys: nuget-${{ github.job }}-
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: src/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: src/pnpm-lock.yaml
+      # The tests serve the real bundle, so it is built first (into Codex.WebApi/wwwroot).
+      - run: pnpm install --frozen-lockfile && pnpm run build
+        working-directory: src/Codex.Client
+      - run: dotnet build src/Codex.AcceptanceTests --configuration Release
+      # No --with-deps: the runner image already has Chromium's libraries, and the extra apt packages can take
+      # over 10 minutes from a slow Ubuntu mirror. These tests are headless and take no screenshots.
+      - run: pwsh src/Codex.AcceptanceTests/bin/Release/net10.0/playwright.ps1 install chromium
+      # Layout's Quick preview runs pandoc through codex-sandbox; without them it answers 503 not_configured.
+      # Layout's Proof and Export tests compile PDFs with --only-cached, so the Tectonic cache is restored and warmed
+      # as in the API job (which saves it); a stale cache fails on the first package a template change adds.
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/Tectonic
+          key: tectonic-bundle-0.15.0-${{ hashFiles('templates/**') }}
+          restore-keys: tectonic-bundle-0.15.0-
+      - run: scripts/install-print-tools.sh "$RUNNER_TEMP/print-tools" ~/.cache/Tectonic && echo "$RUNNER_TEMP/print-tools" >> "$GITHUB_PATH"
+      - name: dotnet test (${{ matrix.shards }})
+        env:
+          SHARDS: ${{ matrix.shards }}
+        # Every shard runs even after one fails; the step fails at the end, naming the failed shards.
+        # The trailing dot keeps Lanes.Plan from also matching a Lanes.PlanX namespace. Journeys.J0 and Journeys.J1
+        # have none because they are class-name prefixes, not namespaces.
+        run: |
+          failed=""
+          journeys=Codex.AcceptanceTests.Journeys
+          for shard in $SHARDS; do
+            case "$shard" in
+              Other)
+                filter=""
+                for ns in Harness Lanes.Shell Lanes.Library Lanes.Plan Lanes.Write Lanes.Kb Lanes.References Lanes.Settings Journeys; do
+                  filter="${filter:+$filter&}FullyQualifiedName!~Codex.AcceptanceTests.$ns."
+                done
+                ;;
+              Journeys.Rest) filter="FullyQualifiedName~$journeys.&FullyQualifiedName!~$journeys.J0&FullyQualifiedName!~$journeys.J1" ;;
+              Journeys.J*) filter="FullyQualifiedName~Codex.AcceptanceTests.$shard" ;;
+              *) filter="FullyQualifiedName~Codex.AcceptanceTests.$shard." ;;
+            esac
+            echo "::group::$shard"
+            dotnet test src/Codex.AcceptanceTests --configuration Release --no-build --filter "$filter" --logger "trx;LogFileName=$shard.trx" --results-directory artifacts/test-results || failed="$failed $shard"
+            echo "::endgroup::"
+          done
+          if [ -n "$failed" ]; then
+            echo "::error::Failed shards:$failed"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces-${{ matrix.group }}
+          path: artifacts/playwright-traces/
+          if-no-files-found: ignore
+          retention-days: 14
+      # Per-test timings, which the console log does not have; balancing the groups above needs them.
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: acceptance-trx-${{ matrix.group }}
+          path: artifacts/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  images:
+    name: docker images build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/Dockerfile
+          push: false
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=app
+          cache-to: type=gha,scope=app,mode=max
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/Dockerfile.worker
+          push: false
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,scope=worker,mode=max

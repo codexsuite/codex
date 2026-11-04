@@ -1,0 +1,167 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+
+/* Playwright CT bundles each spec's components through its own virtual
+   entry modules, which automatic content detection doesn't reliably walk —
+   force an explicit scan of the whole source tree so utility classes used
+   only in component files aren't silently dropped from CT builds. */
+@source './**/*.{ts,tsx}';
+
+/*
+ * Codex design tokens (design/tokens.css, "Nord Frost" deepened, compact), mapped onto Tailwind's theme so
+ * utilities such as bg-surface, text-muted, border-border, text-sm, rounded-md read the tokens.
+ * Light is the default; the OS preference applies unless <html data-theme="light|dark"> forces one.
+ * Inter ships as @fontsource-variable/inter (family "Inter Variable") instead of the Google Fonts import.
+ * `static` keeps every token in the output, used or not (rules in design/README.md read them directly).
+ */
+@theme static {
+  --color-bg: #e8eef7;
+  --color-surface: #f7f9fd;
+  --color-surface-2: #dfe7f3;
+  --color-border: #cdd9ea;
+  --color-text: #1c2638;
+  --color-muted: #52627c;
+  --color-accent: #2563c9;
+  --color-accent-fg: #ffffff;
+  --color-accent-soft: #dae6fb;
+  --color-ok: #3f8a3a;
+  --color-warn: #b7701b;
+  --color-info: #1d7fb8;
+  --color-danger: #c2353b;
+  --shadow-raised: 0 1px 2px rgb(16 24 40 / 0.08), 0 4px 12px -6px rgb(16 24 40 / 0.12);
+
+  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, monospace;
+  --text-2xs: 10.5px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 18px;
+
+  --radius-xs: 3px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+
+  --category-blog: #a86200;
+  --category-law: #3b5bdb;
+  --category-story: #2f8a4c;
+  --category-research: #7c4dce;
+  --category-person: #c2416b;
+}
+
+/* Layout tokens: compact by default, <html data-density="comfortable"> loosens them. */
+:root {
+  --leading: 1.45;
+  --leading-prose: 1.7;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --bar-height: 38px;
+  --control-height: 28px;
+  --row-height: 34px;
+  --cover-width: 96px;
+  --shelf-gap: 14px;
+  --column-width: 244px;
+  --sidebar-width: 252px;
+  --prose-width: 680px;
+  --gutter-width: 248px;
+  --minimap-width: 28px;
+  --panel-width: 420px;
+  --overlay-width: 920px;
+
+  --status-planning: var(--color-info);
+  --status-draft: var(--color-muted);
+  --status-writing: var(--color-accent);
+  --status-revising: var(--color-warn);
+  --status-published: var(--color-ok);
+}
+
+:root[data-density='comfortable'] {
+  --bar-height: 44px;
+  --control-height: 32px;
+  --row-height: 40px;
+  --cover-width: 128px;
+  --shelf-gap: 18px;
+  --column-width: 288px;
+  --sidebar-width: 280px;
+  --prose-width: 720px;
+  --gutter-width: 280px;
+  --minimap-width: 32px;
+  --panel-width: 460px;
+  --overlay-width: 1000px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --color-bg: #171e2d;
+    --color-surface: #1f2839;
+    --color-surface-2: #29344a;
+    --color-border: #334058;
+    --color-text: #eef2f8;
+    --color-muted: #a0aec6;
+    --color-accent: #5cc8f0;
+    --color-accent-fg: #06192a;
+    --color-accent-soft: #163a57;
+    --color-ok: #9fdc8a;
+    --color-warn: #f4cf72;
+    --color-info: #7aa7f5;
+    --color-danger: #f08a8f;
+    --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 16px -8px rgb(0 0 0 / 0.6);
+    --category-blog: #f2c063;
+    --category-law: #93a8ff;
+    --category-story: #8fd6a0;
+    --category-research: #c3a6ff;
+    --category-person: #f49ab8;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-bg: #171e2d;
+  --color-surface: #1f2839;
+  --color-surface-2: #29344a;
+  --color-border: #334058;
+  --color-text: #eef2f8;
+  --color-muted: #a0aec6;
+  --color-accent: #5cc8f0;
+  --color-accent-fg: #06192a;
+  --color-accent-soft: #163a57;
+  --color-ok: #9fdc8a;
+  --color-warn: #f4cf72;
+  --color-info: #7aa7f5;
+  --color-danger: #f08a8f;
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 16px -8px rgb(0 0 0 / 0.6);
+  --category-blog: #f2c063;
+  --category-law: #93a8ff;
+  --category-story: #8fd6a0;
+  --category-research: #c3a6ff;
+  --category-person: #f49ab8;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--leading);
+  }
+
+  button {
+    cursor: pointer;
+  }
+}

@@ -1,0 +1,42 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IsPackable>false</IsPackable>
+    <!-- Tests run on UTC (TZ, PGTZ) like production; see the file. -->
+    <RunSettingsFilePath>$(MSBuildThisFileDirectory)codex.runsettings</RunSettingsFilePath>
+  </PropertyGroup>
+
+  <!-- The clock is TimeProvider only. RS0030 (banned API) is an error via
+       TreatWarningsAsErrors: TimeProvider.System is the production clock and
+       FakeTimeProvider the test one, so nothing may touch the banned members. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" Link="BannedSymbols.txt" />
+  </ItemGroup>
+
+  <!-- Static analysis for every project. Rules tuned for this codebase live in the root .editorconfig. -->
+  <ItemGroup>
+    <PackageReference Include="SonarAnalyzer.CSharp" Version="10.35.0.4138">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <!-- Agoda.Analyzers declares Roslyn 4.5 and Newtonsoft.Json 12.0.3 (GHSA-5crp-9r3c-p9vr) as
+         ordinary dependencies; without "runtime" they are not copied into bin or flagged by NuGet audit. -->
+    <PackageReference Include="Agoda.Analyzers" Version="1.1.203">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>build; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <!-- The advisory is only reached through Agoda.Analyzers (no runtime asset, see above); every
+         project that really loads Newtonsoft.Json resolves 13.x. -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-5crp-9r3c-p9vr" />
+  </ItemGroup>
+
+</Project>
