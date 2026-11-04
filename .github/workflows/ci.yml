@@ -297,7 +297,7 @@ jobs:
               filter="FullyQualifiedName~Codex.AcceptanceTests.$shard."
             fi
             echo "::group::$shard"
-            dotnet test src/Codex.AcceptanceTests --configuration Release --no-build --filter "$filter" || failed="$failed $shard"
+            dotnet test src/Codex.AcceptanceTests --configuration Release --no-build --filter "$filter" --logger "trx;LogFileName=$shard.trx" --results-directory artifacts/test-results || failed="$failed $shard"
             echo "::endgroup::"
           done
           if [ -n "$failed" ]; then
@@ -309,6 +309,14 @@ jobs:
         with:
           name: playwright-traces-${{ matrix.group }}
           path: artifacts/playwright-traces/
+          if-no-files-found: ignore
+          retention-days: 14
+      # Per-test timings, which the console log does not have; balancing the groups above needs them.
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: acceptance-trx-${{ matrix.group }}
+          path: artifacts/test-results/
           if-no-files-found: ignore
           retention-days: 14
 
