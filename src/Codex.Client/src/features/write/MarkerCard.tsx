@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Marker } from '@codex/core/api/references';
 import { useCanWrite } from '../../shell/bookAccess';
@@ -50,6 +50,14 @@ export function MarkerCard({ bookId, marker, anchor, onClose }: MarkerCardProps)
 
   const rect = anchor.getBoundingClientRect();
   const left = Math.max(8, Math.min(rect.left, window.innerWidth - 320));
+  const [top, setTop] = useState(rect.bottom + 6);
+  // The card is fixed, so scrolling cannot bring back a part below the window: a number near the bottom opens it above.
+  useLayoutEffect(() => {
+    const box = anchor.getBoundingClientRect();
+    const height = card.current?.offsetHeight ?? 0;
+    const below = box.bottom + 6;
+    setTop(below + height + 8 <= window.innerHeight ? below : Math.max(8, box.top - 6 - height));
+  }, [anchor]);
   const tone = markerTone(marker.status);
   return (
     <div
@@ -60,7 +68,7 @@ export function MarkerCard({ bookId, marker, anchor, onClose }: MarkerCardProps)
       data-testid={writeTestIds.markerCard}
       data-use={marker.useId}
       className="write-marker-card"
-      style={{ left, top: rect.bottom + 6 }}
+      style={{ left, top }}
     >
       <span className="write-marker-kind">
         Reference {marker.number} · {marker.kind}

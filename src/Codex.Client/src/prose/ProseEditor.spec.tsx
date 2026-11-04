@@ -90,6 +90,26 @@ test('SummaryEditor_WhenTyped_ShouldEmitMarkdown', async ({ mount, page }) => {
   await expect(page.getByTestId('harness-markdown')).toHaveText('Beck **shipped** it');
 });
 
+test('SlashMenu_WhenTheCaretIsAtTheBottomOfTheWindow_ShouldOpenInsideTheWindow', async ({
+  mount,
+  page,
+}) => {
+  await mount(<ProseHarness />);
+  const editor = page.getByTestId(proseTestIds.editor);
+  await editor.click();
+  const box = await editor.boundingBox();
+  await page.setViewportSize({
+    width: page.viewportSize()?.width ?? 1280,
+    height: Math.max(340, Math.ceil((box?.y ?? 0) + 320)),
+  });
+  await page.evaluate(() => {
+    document.documentElement.style.paddingTop = `${window.innerHeight - 60}px`;
+  });
+  await page.keyboard.type('/Dis');
+
+  await expect(page.getByTestId(proseTestIds.slashItem('disabled'))).toBeInViewport({ ratio: 1 });
+});
+
 test('SlashMenu_WhenItemDisabled_ShouldNotRun', async ({ mount, page }) => {
   await mount(<ProseHarness />);
   const editor = page.getByTestId(proseTestIds.editor);

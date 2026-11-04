@@ -33,8 +33,28 @@ export function MentionPicker({ view }: { view: PopupView<MentionEntry> }) {
   );
 }
 
+// .prose-popup's max-height in prose.css.
+const popupMaxHeight = 280;
+const caretGap = 4;
+const windowMargin = 8;
+
+// The popup is fixed, so scrolling cannot bring back a part outside the window: without room below the caret, it opens above.
 export function popupPosition(rect: DOMRect | null): React.CSSProperties {
-  return rect
-    ? { position: 'fixed', left: rect.left, top: rect.bottom + 4 }
-    : { position: 'fixed', left: 0, top: 0 };
+  if (!rect) return { position: 'fixed', left: 0, top: 0 };
+  const below = window.innerHeight - rect.bottom - caretGap - windowMargin;
+  const above = rect.top - caretGap - windowMargin;
+  if (below >= popupMaxHeight || below >= above) {
+    return {
+      position: 'fixed',
+      left: rect.left,
+      top: Math.max(windowMargin, rect.bottom + caretGap),
+      maxHeight: Math.min(popupMaxHeight, below),
+    };
+  }
+  return {
+    position: 'fixed',
+    left: rect.left,
+    bottom: Math.max(windowMargin, window.innerHeight - rect.top + caretGap),
+    maxHeight: Math.min(popupMaxHeight, above),
+  };
 }

@@ -435,6 +435,28 @@ test('MarkerCard_WhenRemoveIsClicked_ShouldUnwrapTheMarkerAtTheSavedVersion', as
   ]);
 });
 
+test('MarkerCard_WhenTheMarkerIsAtTheBottomOfTheWindow_ShouldKeepRemoveInTheWindow', async ({
+  mount,
+  page,
+}) => {
+  await stubCite(
+    page,
+    cited,
+    () => ({ status: 500, json: {} }),
+    () => [marker],
+  );
+  await open(mount);
+  const number = page.getByTestId(writeTestIds.marker(useId));
+  await expect(number).toBeVisible();
+  const box = await number.boundingBox();
+  const width = page.viewportSize()?.width ?? 1280;
+  await page.setViewportSize({ width, height: Math.ceil((box?.y ?? 0) + (box?.height ?? 0) + 20) });
+
+  await number.click();
+
+  await expect(page.getByTestId(writeTestIds.citeRemove)).toBeInViewport({ ratio: 1 });
+});
+
 test('MarkerCard_WhenRemoveIsRefused_ShouldToastTheReasonAndKeepTheMarker', async ({
   mount,
   page,
