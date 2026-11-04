@@ -182,15 +182,15 @@ public sealed class ProofWorker(
             """,
             new { assetId, owner = job.OwnerId, bookId = job.BookId, filename = $"proof-{job.Id:N}.pdf", bytes = (long)bytes.Length, key, now },
             transaction, cancellationToken: cancellationToken));
-        // content_hash stays as the web process wrote it at request time: cache_key is computed from it, and the web
-        // process (which may have other tool versions) compares currentCacheKey against that same hash.
+        // The hash of what was compiled: cache_key is computed from it. Web and worker hash the same toolchain
+        // (ToolVersions), so it equals the request's key unless the chapter changed before the claim.
         await connection.ExecuteAsync(new CommandDefinition(
             """
-            UPDATE export_job SET status = 'succeeded', step = 'Done', progress = 1, log = @log, error = NULL,
+            UPDATE export_job SET status = 'succeeded', step = 'Done', progress = 1, content_hash = @hash, log = @log, error = NULL,
                    page_count = @pages, output_asset_id = @assetId, finished_at = @now
             WHERE id = @id
             """,
-            new { id = job.Id, log, pages = PdfPages.Count(bytes), assetId, now }, transaction, cancellationToken: cancellationToken));
+            new { id = job.Id, hash = document.ContentHash, log, pages = PdfPages.Count(bytes), assetId, now }, transaction, cancellationToken: cancellationToken));
         await transaction.CommitAsync(cancellationToken);
         await events.PublishAsync(new JobProgress(job.BookId, job.Id, "proof", 100, "done", "Done"));
     }

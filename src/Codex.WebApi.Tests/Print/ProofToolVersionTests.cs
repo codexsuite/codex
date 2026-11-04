@@ -1,8 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
-using System.Text.Json;
+using System.Text.RegularExpressions;
 using Codex.Application.Features.Print.Render;
-using Codex.Application.Features.Print.Templates;
 using Codex.Contracts;
 using Codex.Contracts.Print;
 using Codex.TestSupport.Fixtures;
@@ -10,63 +9,111 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Codex.WebApi.Tests.Print;
 
-// In production the web image has no TeX toolchain and the worker image has it, so the two processes hash the same
-// chapter with different tool versions. The test host runs both in one process, so this fixture makes the worker's
-// hash differ: the render service it registers adds a tool suffix to the content hash of every worker request
-// (the worker names the template version, the web process does not). A finished proof must still carry the key the
-// web process computed, or the Layout screen reads it as out of date. Needs the toolchain on PATH, as CI installs it.
+// A proof's cache key covers the pandoc and Tectonic versions. The web and worker images install different tools, so
+// both set CODEX_TOOLCHAIN at build time and hash the same string (ToolVersions). The test host runs web and worker in
+// one process, so a switchable ToolVersions stands in for the build-time value and lets a test "upgrade" the toolchain.
+// Needs the print toolchain on PATH, as CI installs it.
 [TestFixture]
 public class ProofToolVersionTests : ProofApiFixture
 {
     private static readonly string BookBase = $"/api/books/{SeedIds.Books.PlayersGuide}";
 
+    private static readonly Guid Chapter = SeedIds.Chapters.PlayersGuideCh1;
+
+    private SwitchableTools _tools = null!;
+
     protected override Action<IServiceCollection>? ConfigureTestServices => services =>
-        services.AddSingleton<IRenderService>(sp => new WorkerToolsRenderService(ActivatorUtilities.CreateInstance<RenderService>(sp)));
+        services.AddSingleton<ToolVersions>(sp => _tools = new SwitchableTools(sp.GetRequiredService<RenderSettings>()));
 
     [Test]
-    public async Task Proof_WhenTheWorkerHasOtherToolVersionsThanTheWebProcess_ShouldKeepTheRequestKeyAndStayCurrent()
+    public async Task Proof_WhenTheWorkerFinishesWithNoEdit_ShouldReadAsCurrentInTheWebProcessAndBeServedFromTheCache()
     {
-        var chapter = SeedIds.Chapters.PlayersGuideCh1;
-        using var response = await Client.PostAsJsonAsync($"{BookBase}/proofs", new ProofRequest(chapter));
-        response.StatusCode.ShouldBe(HttpStatusCode.Accepted);
-        var queued = (await response.Content.ReadFromJsonAsync<ProofDto>()).ShouldNotBeNull();
+        var (queued, proof) = await RequestAsync();
 
-        var proof = await SettledAsync(queued.Id);
-
-        proof.Status.ShouldBe("succeeded", proof.Log);
-        var list = (await Client.GetFromJsonAsync<ProofListDto>($"{BookBase}/proofs?chapterId={chapter}")).ShouldNotBeNull();
         proof.CacheKey.ShouldBe(queued.CacheKey);
+        var list = await ListAsync();
         list.CurrentCacheKey.ShouldBe(queued.CacheKey);
         list.Proofs.Single().CacheKey.ShouldBe(list.CurrentCacheKey);
 
-        using var again = await Client.PostAsJsonAsync($"{BookBase}/proofs", new ProofRequest(chapter));
+        using var again = await Client.PostAsJsonAsync($"{BookBase}/proofs", new ProofRequest(Chapter));
         again.StatusCode.ShouldBe(HttpStatusCode.OK);
         var cached = (await again.Content.ReadFromJsonAsync<ProofDto>()).ShouldNotBeNull();
         (cached.Cached, cached.Id).ShouldBe((true, proof.Id));
     }
 
-    // Behaves as RenderService, except that a worker request (one that names the template version) hashes with other tools.
-    private sealed class WorkerToolsRenderService(IRenderService inner) : IRenderService
+    [Test]
+    public async Task Proof_WhenTheToolchainChangesAfterTheProofWasMade_ShouldNotReadAsCurrentOrComeFromTheCache()
     {
-        public Task<(TemplatePackage Template, string Trim, IReadOnlyDictionary<string, JsonElement> Options)> ResolveAsync(RenderRequest request, CancellationToken cancellationToken) =>
-            inner.ResolveAsync(request, cancellationToken);
+        var (queued, proof) = await RequestAsync();
 
-        public Task<ResolvedLayout> ResolveLayoutAsync(RenderRequest request, CancellationToken cancellationToken) =>
-            inner.ResolveLayoutAsync(request, cancellationToken);
+        _tools.Toolchain = "pandoc 3.12|Tectonic 0.16.0";
 
-        public async Task<AssembledDocument> AssembleAsync(RenderRequest request, RenderTarget target, CancellationToken cancellationToken)
+        var list = await ListAsync();
+        list.CurrentCacheKey.ShouldNotBe(proof.CacheKey);
+        list.CurrentCacheKey.ShouldNotBe(queued.CacheKey);
+        using var again = await Client.PostAsJsonAsync($"{BookBase}/proofs", new ProofRequest(Chapter));
+        again.StatusCode.ShouldBe(HttpStatusCode.Accepted);
+        var fresh = (await again.Content.ReadFromJsonAsync<ProofDto>()).ShouldNotBeNull();
+        fresh.Cached.ShouldBeFalse();
+        fresh.Id.ShouldNotBe(proof.Id);
+        var rebuilt = await SettledAsync(fresh.Id);
+        rebuilt.CacheKey.ShouldBe(fresh.CacheKey);
+        (await ListAsync()).CurrentCacheKey.ShouldBe(rebuilt.CacheKey);
+    }
+
+    // The two images pin pandoc and Tectonic separately, and CODEX_TOOLCHAIN is built from those pins, so they must agree.
+    [Test]
+    public void Dockerfiles_ShouldPinTheSameToolVersionsAndBuildTheSameToolchainString()
+    {
+        var src = FindSrc();
+        var web = File.ReadAllText(Path.Combine(src, "Dockerfile"));
+        var worker = File.ReadAllText(Path.Combine(src, "Dockerfile.worker"));
+
+        foreach (var pin in new[] { "PANDOC_VERSION", "TECTONIC_VERSION" })
         {
-            var document = await inner.AssembleAsync(request, target, cancellationToken);
-            return request.TemplateVersionId is null ? document : document with { ContentHash = document.ContentHash + "|worker-tools" };
+            Pin(web, pin).ShouldBe(Pin(worker, pin), pin);
         }
 
-        public Task<RenderedPdf> RenderPdfAsync(RenderRequest request, IProgress<RenderProgress>? progress, CancellationToken cancellationToken) =>
-            inner.RenderPdfAsync(request, progress, cancellationToken);
+        Toolchain(web).ShouldBe(Toolchain(worker));
+        Toolchain(web).ShouldNotBeNull();
+    }
 
-        public Task<RenderedPdf> CompileAsync(AssembledDocument document, IProgress<RenderProgress>? progress, CancellationToken cancellationToken, PrintFinish? finish = null) =>
-            inner.CompileAsync(document, progress, cancellationToken, finish);
+    private async Task<(ProofDto Queued, ProofDto Proof)> RequestAsync()
+    {
+        using var response = await Client.PostAsJsonAsync($"{BookBase}/proofs", new ProofRequest(Chapter));
+        response.StatusCode.ShouldBe(HttpStatusCode.Accepted);
+        var queued = (await response.Content.ReadFromJsonAsync<ProofDto>()).ShouldNotBeNull();
+        var proof = await SettledAsync(queued.Id);
+        proof.Status.ShouldBe("succeeded", proof.Log);
+        return (queued, proof);
+    }
 
-        public Task<RenderedHtml> RenderHtmlAsync(RenderRequest request, CancellationToken cancellationToken) =>
-            inner.RenderHtmlAsync(request, cancellationToken);
+    private async Task<ProofListDto> ListAsync() =>
+        (await Client.GetFromJsonAsync<ProofListDto>($"{BookBase}/proofs?chapterId={Chapter}")).ShouldNotBeNull();
+
+    private static string FindSrc()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "src", "Dockerfile.worker")))
+            {
+                return Path.Combine(dir.FullName, "src");
+            }
+        }
+
+        throw new FileNotFoundException("src/Dockerfile.worker not found above the test output");
+    }
+
+    private static string? Pin(string dockerfile, string name) =>
+        Regex.Match(dockerfile, $@"^ARG {name}=(\S+)", RegexOptions.Multiline) is { Success: true } m ? m.Groups[1].Value : null;
+
+    private static string? Toolchain(string dockerfile) =>
+        Regex.Match(dockerfile, @"^ENV CODEX_TOOLCHAIN=""([^""]+)""", RegexOptions.Multiline) is { Success: true } m ? m.Groups[1].Value : null;
+
+    private sealed class SwitchableTools(RenderSettings settings) : ToolVersions(settings)
+    {
+        public string Toolchain { get; set; } = "pandoc 3.12|Tectonic 0.15.0";
+
+        public override string Value => Toolchain;
     }
 }

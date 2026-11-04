@@ -45,6 +45,8 @@ RUN apt-get update \
     && install -m 0755 "/tmp/pandoc-${PANDOC_VERSION}/bin/pandoc" /usr/local/bin/pandoc \
     && rm -rf /tmp/tectonic.tgz /tmp/pandoc.tgz "/tmp/pandoc-${PANDOC_VERSION}" /var/lib/apt/lists/*
 COPY --from=sandbox /codex-sandbox /usr/local/bin/codex-sandbox
+# The toolchain string the content hash covers; src/Dockerfile sets the same value from the same pins (a test compares them).
+ENV CODEX_TOOLCHAIN="pandoc ${PANDOC_VERSION}|Tectonic ${TECTONIC_VERSION}"
 
 WORKDIR /app
 COPY --from=build /app .

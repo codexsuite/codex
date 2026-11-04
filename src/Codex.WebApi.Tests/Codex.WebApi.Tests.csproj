@@ -1,5 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <!-- Lists every test by name in the CI log (dotnet test prints only failures otherwise), so a test can be found there. -->
+    <VSTestLogger>console%3Bverbosity=detailed</VSTestLogger>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.0" />
