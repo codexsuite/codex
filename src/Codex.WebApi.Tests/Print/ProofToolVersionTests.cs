@@ -46,7 +46,7 @@ public class ProofToolVersionTests : ProofApiFixture
     {
         var (queued, proof) = await RequestAsync();
 
-        _tools.Toolchain = "pandoc 3.12|Tectonic 0.16.0";
+        _tools.Current = "pandoc 3.12|Tectonic 0.16.0";
 
         var list = await ListAsync();
         list.CurrentCacheKey.ShouldNotBe(proof.CacheKey);
@@ -112,8 +112,8 @@ public class ProofToolVersionTests : ProofApiFixture
 
     private sealed class SwitchableTools(RenderSettings settings) : ToolVersions(settings)
     {
-        public string Toolchain { get; set; } = "pandoc 3.12|Tectonic 0.15.0";
+        public string Current { get; set; } = "pandoc 3.12|Tectonic 0.15.0";
 
-        public override string Value => Toolchain;
+        public override string Value => Current;
     }
 }
