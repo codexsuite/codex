@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Every test process runs on UTC, as the containers do (.claude/skills/utc-everywhere), whatever the machine's own
+     zone: TZ fixes .NET's local time zone (and every child process's), PGTZ the TimeZone of each Postgres session
+     Npgsql opens, so current_date and ::date agree with production. Wired in by Directory.Build.props. -->
+<RunSettings>
+  <RunConfiguration>
+    <EnvironmentVariables>
+      <TZ>UTC</TZ>
+      <PGTZ>UTC</PGTZ>
+    </EnvironmentVariables>
+  </RunConfiguration>
+</RunSettings>

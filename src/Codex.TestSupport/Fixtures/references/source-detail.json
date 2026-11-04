@@ -1,0 +1,78 @@
+{
+  "id": "0199c0de-0000-7000-8000-000d00000008",
+  "bookId": "0199c0de-0000-7000-8000-000300000001",
+  "number": 8,
+  "kind": "book",
+  "kindLabel": "Book",
+  "title": "Accelerate",
+  "authorsLabel": "Forsgren et al.",
+  "year": 2018,
+  "publisher": "IT Revolution",
+  "verdict": {
+    "status": "needs_check",
+    "reason": "new_uses_since_signoff",
+    "action": "sign_off",
+    "signedOffBy": "Joel Dickson",
+    "signedOffLabel": "8d ago"
+  },
+  "checks": [
+    { "key": "words", "status": "ok", "title": "Prose quoted against the limit", "detail": "No prose quoted." },
+    { "key": "licence", "status": "warn", "title": "Licence", "detail": "The licence is not recorded." }
+  ],
+  "uses": [
+    {
+      "id": "0199c0de-0000-7000-8000-000e0000000b",
+      "sceneId": "0199c0de-0000-7000-8000-000600000009",
+      "chapterNumber": 5,
+      "chapterTitle": "Metrics",
+      "sceneNumber": 2,
+      "kind": "paraphrase",
+      "excerpt": "Teams that deploy often recover faster.",
+      "words": 6,
+      "locator": "p. 19",
+      "newSinceSignOff": true,
+      "pending": false
+    }
+  ],
+  "quotedWords": 0,
+  "limit": 300,
+  "entry": { "id": "0199c0de-0000-7000-8000-000b00000009", "name": "DORA four keys", "categoryId": "0199c0de-0000-7000-8000-000a00000004" },
+  "details": {
+    "kind": "book",
+    "title": "Accelerate",
+    "authorsText": "Forsgren, Nicole; Humble, Jez; Kim, Gene",
+    "year": 2018,
+    "publisher": "IT Revolution",
+    "edition": null,
+    "isbn": "9781942788331",
+    "doi": null,
+    "url": null,
+    "accessedOn": null,
+    "licence": "all_rights_reserved",
+    "rightsHolder": null,
+    "fairUseNote": null,
+    "missing": [],
+    "identifiers": [{ "field": "isbn", "status": "ok", "resolvedUrl": null }]
+  },
+  "kinds": [{ "code": "book", "label": "Book" }],
+  "licences": [{ "code": "all_rights_reserved", "label": "All rights reserved" }],
+  "history": [{ "when": "2h ago", "who": "Joel Dickson", "text": "marked the source as cleared" }],
+  "permission": {
+    "id": "0199c0de-0000-7000-8000-001000000001",
+    "status": "granted",
+    "to": "permissions@example.test",
+    "letter": "Dear Rights Holder,\n\nMay I quote 342 words?",
+    "sentLabel": "Asked 3 Oct",
+    "remindOn": null,
+    "remindLabel": null,
+    "remindDue": false,
+    "respondedLabel": "Granted 17 Oct",
+    "creditLine": "Used by permission.",
+    "terms": null,
+    "note": null,
+    "attachment": { "fileName": "letter.pdf", "url": "/api/permission-requests/0199c0de-0000-7000-8000-001000000001/letter" },
+    "followUp": null,
+    "followedUpLabel": "Followed up 12 Oct",
+    "feeAmount": 25.5
+  }
+}

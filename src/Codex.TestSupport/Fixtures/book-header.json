@@ -1,0 +1,28 @@
+{
+  "id": "0199a000-0000-7000-8000-000000000012",
+  "title": "Hymns for Machines",
+  "subtitle": null,
+  "authorName": "Joel Dickson",
+  "seriesId": "0199a000-0000-7000-8000-000000000001",
+  "seriesName": "Product Engineering",
+  "seriesNumber": 2,
+  "status": "writing",
+  "coverPalette": "cover-5",
+  "coverInitials": "HM",
+  "wordCount": 26000,
+  "targetWords": null,
+  "scope": [
+    { "id": "0199a000-0000-7000-8000-000000000012", "kind": "book", "title": "Hymns for Machines" },
+    { "id": "0199a000-0000-7000-8000-000000000001", "kind": "series", "title": "Product Engineering" }
+  ],
+  "referenceBadgeCount": 3,
+  "referenceBadgeTone": "danger",
+  "lastEditedAt": "2026-10-19T08:30:00+00:00",
+  "lastEditedLabel": "2h ago",
+  "coverUrl": null,
+  "role": "view",
+  "owner": {
+    "id": "0199c0de-0000-7000-8000-000100000001",
+    "displayName": "Joel Dickson"
+  }
+}

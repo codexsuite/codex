@@ -1,0 +1,657 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Collaboration UI review · #26</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  :where(.grid, .flex, .row, .cols, .bookbar, .toolbar) > * { min-width: 0; }
+  :where(p, h1, h2, h3, h4, li, dd, td, th, figcaption) { overflow-wrap: anywhere; }
+  :where(img, svg, video) { max-width: 100%; height: auto; }
+
+  html { background: var(--color-bg); }
+  body { margin: 0; background: var(--color-bg); color: var(--color-text); font: var(--text-base)/var(--leading) var(--font-sans); -webkit-font-smoothing: antialiased; }
+  main { max-width: 1120px; margin: 0 auto; padding: var(--space-5) var(--space-4) 80px; }
+  h1 { font-size: 26px; font-weight: var(--weight-semibold); margin: 0 0 6px; letter-spacing: -.01em; }
+  h2 { font-size: var(--text-lg); font-weight: var(--weight-semibold); margin: 0 0 var(--space-3); display: flex; align-items: center; gap: 8px; }
+  h2 .n { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--color-accent); color: var(--color-accent-fg); font-size: var(--text-xs); font-weight: var(--weight-semibold); }
+  h3 { font-size: var(--text-md); font-weight: var(--weight-semibold); margin: 0 0 6px; }
+  p { margin: 0 0 10px; }
+  a { color: var(--color-accent); }
+  section.part { margin-top: 44px; padding-top: var(--space-4); border-top: 1px solid var(--color-border); }
+  .lede { font-size: var(--text-md); color: var(--color-muted); max-width: 760px; }
+  .muted { color: var(--color-muted); }
+  .small { font-size: var(--text-xs); }
+  .overline { font-size: var(--text-2xs); font-weight: var(--weight-medium); color: var(--color-muted); text-transform: uppercase; letter-spacing: .02em; }
+  .topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: var(--space-4); }
+  .topbar .spacer { flex: 1; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 12px; background: var(--color-surface); border: 1px solid var(--color-border); font-size: var(--text-xs); font-weight: var(--weight-medium); white-space: nowrap; }
+  .pill i { width: 6px; height: 6px; border-radius: 50%; background: var(--tone, var(--color-accent)); }
+  .seg { display: inline-flex; height: var(--control-height); border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; background: var(--color-surface); }
+  .seg button { display: inline-flex; align-items: center; gap: 4px; padding: 0 9px; border: 0; border-right: 1px solid var(--color-border); background: transparent; color: var(--color-muted); font: inherit; font-size: var(--text-sm); cursor: pointer; }
+  .seg button:last-child { border-right: 0; }
+  .seg button[aria-pressed="true"] { background: var(--color-accent-soft); color: var(--color-text); font-weight: var(--weight-semibold); }
+
+  .card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-raised); }
+  .grid { display: grid; gap: var(--space-3); }
+  .g2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .g3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .note { padding: 10px 12px; font-size: var(--text-sm); }
+  .note h3 { font-size: var(--text-sm); }
+  .note.warn { border-color: color-mix(in srgb, var(--color-warn) 45%, var(--color-border)); background: color-mix(in srgb, var(--color-warn) 7%, var(--color-surface)); }
+  .note.ok { border-color: color-mix(in srgb, var(--color-ok) 45%, var(--color-border)); background: color-mix(in srgb, var(--color-ok) 7%, var(--color-surface)); }
+  .note.info { border-color: color-mix(in srgb, var(--color-info) 45%, var(--color-border)); background: color-mix(in srgb, var(--color-info) 7%, var(--color-surface)); }
+  ul.tight { margin: 0; padding-left: 18px; }
+  ul.tight li { margin: 3px 0; }
+  code { font-family: var(--font-mono); font-size: .92em; background: var(--color-surface-2); padding: 0 4px; border-radius: 3px; }
+  table.t { width: 100%; border-collapse: collapse; font-size: var(--text-sm); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); overflow: hidden; }
+  table.t th, table.t td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+  table.t th { background: var(--color-surface-2); font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--color-muted); }
+  table.t tr:last-child td { border-bottom: 0; }
+  .tbl-wrap { overflow-x: auto; border-radius: var(--radius-md); }
+  figure { margin: 0; }
+  figcaption { font-size: var(--text-xs); color: var(--color-muted); margin-top: 6px; }
+
+  /* Mock frame: a cropped slice of the real app, in its own chrome */
+  .mock { position: relative; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg); overflow: hidden; box-shadow: var(--shadow-raised); }
+  .mock-cap { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-bottom: 1px solid var(--color-border); background: var(--color-surface-2); font-size: var(--text-2xs); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .04em; color: var(--color-muted); }
+  .mock-cap .spacer { flex: 1; }
+  .mock-cap .tag { text-transform: none; letter-spacing: 0; font-weight: var(--weight-medium); color: var(--color-accent); }
+  .callout { position: absolute; z-index: 5; display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--color-text); color: var(--color-bg); font-size: 10.5px; font-weight: 700; box-shadow: 0 0 0 2px var(--color-bg); pointer-events: none; transform: translate(-50%, -50%); }
+  ol.keys { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: var(--text-sm); }
+  ol.keys li { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px; align-items: start; }
+  ol.keys b.k { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--color-text); color: var(--color-bg); font-size: 10.5px; font-weight: 700; margin-top: 1px; }
+
+  /* ---- Copied from design/screens/plan.html + write.html so the mocks are faithful ---- */
+  .bookbar { height: var(--bar-height); display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); background: var(--color-surface); border-bottom: 1px solid var(--color-border); min-width: 0; }
+  .ib { display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--color-muted); cursor: pointer; flex: none; }
+  .ib svg, .btn svg, .mini svg { width: 13px; height: 13px; }
+  .cover.thumb { width: 20px; aspect-ratio: 2 / 3; border-radius: 2px; background: linear-gradient(160deg, #05070d, #0d1a2b); box-shadow: 0 0 0 1px rgb(0 0 0 / .15); flex: none; }
+  .book-id { display: flex; align-items: center; gap: 7px; min-width: 0; padding-right: var(--space-2); border-right: 1px solid var(--color-border); height: 100%; }
+  .book-id .t { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+  .book-id b { font-size: var(--text-sm); font-weight: var(--weight-semibold); white-space: nowrap; }
+  .book-id span { font-size: var(--text-2xs); color: var(--color-muted); white-space: nowrap; }
+  .tabs { display: flex; align-items: center; height: 100%; min-width: 0; overflow: hidden; }
+  .tab { position: relative; display: inline-flex; align-items: center; gap: 5px; height: 100%; padding: 0 10px; border: 0; background: none; color: var(--color-muted); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-medium); white-space: nowrap; }
+  .tab[aria-selected="true"] { color: var(--color-text); font-weight: var(--weight-semibold); }
+  .tab[aria-selected="true"]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--color-accent); }
+  .tabs .vr { width: 1px; height: 16px; margin: 0 4px; background: var(--color-border); }
+  .badge { display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--color-danger); color: #fff; font-size: var(--text-2xs); font-weight: var(--weight-semibold); }
+  .spacer { flex: 1; }
+  .sync { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; }
+  .sync i { width: 6px; height: 6px; border-radius: 50%; background: var(--color-ok); flex: none; }
+  .sync[data-s="editing"] i { background: var(--color-warn); }
+  .sync[data-s="saving"] i, .sync[data-s="syncing"] i { background: var(--color-accent); animation: pulse .7s ease-in-out infinite alternate; }
+  .sync[data-s="reconnecting"] i { background: var(--color-warn); animation: pulse .7s ease-in-out infinite alternate; }
+  .sync[data-s="offline"] i { background: var(--color-warn); }
+  .sync[data-s="offline"], .sync[data-s="reconnecting"] { color: var(--color-warn); }
+  @keyframes pulse { to { opacity: .35; } }
+  .btn { display: inline-flex; align-items: center; gap: 5px; height: var(--control-height); padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: var(--color-surface); color: inherit; font: inherit; font-size: var(--text-sm); font-weight: var(--weight-medium); cursor: pointer; white-space: nowrap; }
+  .btn.primary { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-accent-fg); }
+  .btn.ghost { border-color: transparent; background: transparent; }
+  .btn.sm { height: 24px; padding: 0 8px; font-size: var(--text-xs); }
+  .kbd { border: 1px solid var(--color-border); border-radius: 4px; padding: 1px 5px; font-size: var(--text-xs); color: var(--color-muted); background: var(--color-surface-2); white-space: nowrap; }
+  .avatar { width: 22px; height: 22px; border-radius: 50%; background: var(--color-accent-soft); color: var(--color-accent); font-size: 10px; font-weight: 700; display: grid; place-items: center; flex: none; }
+  .mini { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 6px; border: 0; border-radius: var(--radius-xs); background: none; color: var(--color-muted); font: inherit; font-size: var(--text-xs); font-weight: var(--weight-medium); cursor: pointer; white-space: nowrap; }
+  .lbl { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; height: 17px; border-radius: 9px; background: var(--color-surface-2); font-size: var(--text-2xs); font-weight: var(--weight-medium); white-space: nowrap; }
+  .lbl i { width: 6px; height: 6px; border-radius: 50%; background: var(--tone); }
+  .mention { display: inline; box-shadow: inset 0 -1.5px 0 var(--cat); border-radius: 3px 3px 0 0; padding: 0 3px; background: color-mix(in srgb, var(--cat) 14%, transparent); font-weight: var(--weight-medium); white-space: nowrap; }
+  .cx { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: 4px; background: color-mix(in srgb, var(--cat) 14%, transparent); color: var(--color-text); height: 19px; font-size: var(--text-2xs); font-weight: var(--weight-medium); white-space: nowrap; }
+  .cx i { width: 6px; height: 6px; border-radius: 2px; background: var(--cat); }
+  .auto { text-decoration: underline dotted var(--cat); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+  .grip { display: inline-grid; place-items: center; width: 18px; height: 22px; padding: 0; border: 0; border-radius: var(--radius-xs); background: none; color: var(--color-muted); cursor: grab; flex: none; }
+  .grip svg { width: 10px; height: 14px; }
+  /* Plan board */
+  .cols { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; padding: 12px; }
+  .col { flex: 0 0 var(--column-width); max-width: 100%; min-width: 0; display: flex; flex-direction: column; background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+  .col-h { display: flex; align-items: flex-start; gap: 2px; padding: 6px 4px 6px 2px; border-bottom: 1px solid var(--color-border); }
+  .col-t { flex: 1; min-width: 0; padding-top: 1px; }
+  .col-t .overline { display: flex; gap: 6px; }
+  .col-t .overline span { text-transform: none; letter-spacing: 0; }
+  .col-t .ct { display: block; font-size: var(--text-md); font-weight: var(--weight-semibold); line-height: 1.3; }
+  .scenes { display: flex; flex-direction: column; gap: 6px; padding: 6px; min-height: 40px; }
+  .scene { position: relative; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); box-shadow: var(--shadow-raised); }
+  .sc-h { display: flex; align-items: center; gap: 2px; padding: 3px 3px 3px 1px; border-bottom: 1px solid var(--color-border); min-width: 0; }
+  .sc-n { font-size: var(--text-xs); font-weight: var(--weight-semibold); white-space: nowrap; margin-right: 4px; }
+  .sc-labels { display: flex; gap: 4px; min-width: 0; overflow: hidden; flex: 1; }
+  .sc-body { min-height: 52px; padding: 6px 8px; font-size: var(--text-base); white-space: pre-wrap; }
+  .links { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 8px 4px; }
+  .sc-f { display: flex; align-items: center; gap: 2px; padding: 0 4px 4px; }
+  .words { font-size: var(--text-2xs); color: var(--color-muted); font-variant-numeric: tabular-nums; white-space: nowrap; padding-right: 4px; }
+  .words.none { font-style: italic; }
+  .newscene { margin: 0 6px 6px; height: var(--control-height); border: 0; border-radius: var(--radius-sm); background: none; color: var(--color-muted); font: inherit; font-size: var(--text-sm); font-weight: var(--weight-medium); display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+  /* Write manuscript */
+  .page { padding: var(--space-4) var(--space-4) var(--space-3); }
+  .row { display: grid; grid-template-columns: minmax(0, var(--prose-width)) minmax(180px, var(--gutter-width)); gap: 0 32px; justify-content: center; }
+  .ed { position: relative; font-size: var(--text-md); line-height: var(--leading-prose); }
+  .ed p { margin: 0 0 .85em; }
+  .gutter { min-width: 0; font-size: var(--text-sm); }
+  .g-h { display: flex; align-items: center; gap: 2px; min-height: 22px; }
+  .g-h .overline { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .g-labels { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 4px; }
+  .g-sum { padding: 2px 4px; margin: 0 -4px; color: var(--color-muted); white-space: pre-wrap; line-height: var(--leading); border-radius: var(--radius-xs); }
+  .g-links { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .g-f { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin: 4px 0 0 -6px; }
+  .wtb { display: flex; align-items: center; gap: var(--space-2); padding: 6px var(--space-3); border-bottom: 1px solid var(--color-border); font-size: var(--text-xs); color: var(--color-muted); background: var(--color-bg); }
+  .sel { display: inline-flex; align-items: center; gap: 4px; height: var(--control-height); padding: 0 var(--space-2); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text); font-size: var(--text-sm); white-space: nowrap; }
+  @media (max-width: 760px) {
+    .row { grid-template-columns: minmax(0, 1fr); } .gutter { order: -1; margin-bottom: var(--space-2); }
+    /* the real bookbar hides Scope, Format and Focus here; the stack shrinks to one avatar + count */
+    .bookbar .btn.ghost, .bookbar .kbd, .book-id .t span, .pres .stack .pa:not(:first-child) { display: none; }
+    .bookbar { gap: 5px; } .tab { padding: 0 6px; } .book-id b { max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
+  }
+  @media (max-width: 480px) { .book-id .t, .tabs .vr, .sync .lbl-t { display: none; } .pres .n { display: none; } .pres { padding-right: 3px; } .pres .stack .pa:first-child::before { content: "3"; position: absolute; right: -6px; top: -5px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: var(--color-text); color: var(--color-bg); font-size: 9px; line-height: 14px; text-align: center; } }
+
+  /* ---- Proposed: presence, cursors, card presence, comments ---- */
+  /* Header presence: avatar stack + count. One colour per person, from #15 §8 */
+  .pres { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px 0 3px; border-radius: 13px; background: transparent; border: 1px solid transparent; cursor: pointer; }
+  .pres:hover { background: var(--color-surface-2); border-color: var(--color-border); }
+  .pres .stack { display: inline-flex; }
+  .pres .stack .pa { margin-left: -6px; box-shadow: 0 0 0 2px var(--color-surface); }
+  .pres .stack .pa:first-child { margin-left: 0; }
+  .pres .n { font-size: var(--text-xs); font-weight: var(--weight-medium); color: var(--color-muted); white-space: nowrap; }
+  .pa { position: relative; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; font-weight: 700; color: #fff; background: var(--u); flex: none; }
+  .pa.me { background: var(--color-accent-soft); color: var(--color-accent); }
+  .pa.idle { opacity: .45; }
+  .pa.active::after { content: ""; position: absolute; right: -1px; bottom: -1px; width: 7px; height: 7px; border-radius: 50%; background: var(--color-ok); box-shadow: 0 0 0 1.5px var(--color-surface); }
+  .pa.sm { width: 16px; height: 16px; font-size: 8px; }
+  .pa.xs { width: 14px; height: 14px; font-size: 7.5px; }
+  /* Hover card */
+  .pcard { width: 236px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-raised), 0 12px 32px -12px rgb(0 0 0 / .35); font-size: var(--text-sm); overflow: hidden; }
+  .pcard .pr { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 7px 10px; }
+  .pcard .pr + .pr { border-top: 1px solid var(--color-border); }
+  .pcard .pr b { display: block; font-weight: var(--weight-medium); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pcard .pr small { display: block; font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pcard .pr .role { font-size: var(--text-2xs); color: var(--color-muted); }
+  .pcard .pr .btn.sm { height: 22px; }
+  .pcard .foot { padding: 6px 10px; border-top: 1px solid var(--color-border); background: var(--color-bg); font-size: var(--text-2xs); color: var(--color-muted); }
+  /* Remote selection and caret in prose */
+  .rsel { background: color-mix(in srgb, var(--u) 22%, transparent); border-radius: 2px; }
+  .rcaret { position: relative; display: inline-block; width: 0; height: 1.2em; vertical-align: text-bottom; border-left: 2px solid var(--u); margin-left: -1px; }
+  .rcaret b { position: absolute; left: -2px; top: -1.25em; padding: 0 5px; border-radius: 3px 3px 3px 0; background: var(--u); color: #fff; font-size: var(--text-2xs); font-weight: var(--weight-semibold); line-height: 1.5; white-space: nowrap; }
+  /* Live field: a summary another person is editing right now */
+  .live { box-shadow: 0 0 0 1.5px var(--u); border-radius: var(--radius-xs); }
+  .live-tag { display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-2xs); color: var(--u); font-weight: var(--weight-medium); margin-top: 4px; }
+  /* Comment anchor + thread */
+  .cmt { background: color-mix(in srgb, var(--color-warn) 22%, transparent); box-shadow: inset 0 -2px 0 var(--color-warn); border-radius: 2px 2px 0 0; cursor: pointer; }
+  .cmt.open { background: color-mix(in srgb, var(--color-warn) 38%, transparent); }
+  .thread { margin-top: 10px; background: var(--color-surface); border: 1px solid var(--color-border); border-left: 3px solid var(--color-warn); border-radius: var(--radius-md); box-shadow: var(--shadow-raised); font-size: var(--text-sm); }
+  .thread .q { margin: 0; padding: 7px 10px 0; font-size: var(--text-xs); color: var(--color-muted); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .thread .m { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 7px; padding: 6px 10px; }
+  .thread .m + .m { border-top: 1px solid var(--color-border); }
+  .thread .m .who { display: flex; gap: 6px; align-items: baseline; font-size: var(--text-xs); }
+  .thread .m .who b { font-weight: var(--weight-semibold); }
+  .thread .m .who span { color: var(--color-muted); }
+  .thread .m p { margin: 1px 0 0; }
+  .thread .reply { display: flex; align-items: center; gap: 6px; padding: 6px; border-top: 1px solid var(--color-border); }
+  .thread .reply .in { flex: 1; min-width: 0; height: 24px; display: flex; align-items: center; padding: 0 8px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg); color: var(--color-muted); font-size: var(--text-xs); }
+  .cmark { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 10px; background: color-mix(in srgb, var(--color-warn) 16%, transparent); color: var(--color-warn); font-size: var(--text-2xs); font-weight: var(--weight-semibold); white-space: nowrap; }
+  .cmark svg { width: 11px; height: 11px; }
+  /* Card presence on the Plan board */
+  .scene.rp { box-shadow: 0 0 0 1.5px var(--u), var(--shadow-raised); }
+  .scene .rp-tag { position: absolute; top: -8px; right: 8px; display: inline-flex; align-items: center; gap: 4px; height: 16px; padding: 0 6px 0 2px; border-radius: 8px; background: var(--u); color: #fff; font-size: var(--text-2xs); font-weight: var(--weight-semibold); white-space: nowrap; box-shadow: 0 0 0 2px var(--color-surface-2); }
+  .scene .rp-tag .pa { width: 12px; height: 12px; font-size: 7px; background: rgb(255 255 255 / .28); }
+  .scene.ghost { opacity: .5; border-style: dashed; box-shadow: none; }
+  .dropline { height: 2px; margin: 0 6px; border-radius: 2px; background: var(--u); box-shadow: 0 0 0 2px color-mix(in srgb, var(--u) 25%, transparent); }
+  .scene.arrived { animation: arrive 1.8s ease-out; }
+  @keyframes arrive { from, 30% { box-shadow: 0 0 0 3px var(--u), var(--shadow-raised); } }
+  .scene.snap { animation: snap .6s ease-out; }
+  @keyframes snap { from { transform: translateY(-64px); } }
+  .scene.ro .sc-body { cursor: default; }
+  .tool-note { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 11px; background: var(--color-surface-2); font-size: var(--text-2xs); font-weight: var(--weight-medium); color: var(--color-muted); white-space: nowrap; }
+  .toast { display: inline-flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: var(--radius-md); background: var(--color-text); color: var(--color-bg); font-size: var(--text-sm); box-shadow: var(--shadow-raised); }
+  .toast .link { color: var(--color-accent); font-weight: var(--weight-medium); }
+  :root[data-theme="dark"] .toast, :root:not([data-theme="light"]) .toast { }
+
+  /* Colour study */
+  .sw { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 4px; }
+  .sw div { height: 34px; border-radius: 4px; display: grid; place-items: center; color: #fff; font-size: 9px; font-weight: 700; }
+  .sw-row { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; align-items: center; margin-top: 8px; font-size: var(--text-xs); }
+  .surf { padding: 10px; border-radius: var(--radius-md); border: 1px solid var(--color-border); }
+  .surf.light { background: #f7f9fd; color: #1c2638; }
+  .surf.dark { background: #1f2839; color: #eef2f8; }
+  .cat { display: inline-flex; align-items: center; gap: 5px; margin-right: 10px; font-size: var(--text-xs); }
+  .cat i { width: 8px; height: 8px; border-radius: 2px; background: var(--cat); }
+
+  .q h3 .id { font-size: var(--text-2xs); font-weight: var(--weight-semibold); color: var(--color-muted); font-family: var(--font-mono); white-space: nowrap; }
+  details.shots { margin-top: var(--space-3); }
+  details.shots summary { cursor: pointer; font-weight: var(--weight-medium); font-size: var(--text-sm); }
+  details.shots img { width: 100%; border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+  .path { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-muted); }
+  @media (max-width: 720px) { .sw { grid-template-columns: repeat(6, minmax(0, 1fr)); } .sw-row { grid-template-columns: 1fr; } h1 { font-size: 22px; } }
+</style>
+</head>
+<body>
+<main>
+
+<div class="topbar">
+  <span class="pill" style="--tone:var(--color-info)"><i></i>Codex · Write it together</span>
+  <span class="pill" style="--tone:var(--color-warn)"><i></i>Design task · not built yet</span>
+  <span class="spacer"></span>
+  <div class="seg" role="group" aria-label="Theme">
+    <button type="button" data-theme-set="system" aria-pressed="true">System</button>
+    <button type="button" data-theme-set="light" aria-pressed="false">Light</button>
+    <button type="button" data-theme-set="dark" aria-pressed="false">Dark</button>
+  </div>
+</div>
+
+<h1>Real-time collaboration: what the Plan and Write tabs will show</h1>
+<p class="lede">The UI reference for the product side of “Write it together”. Every mock below is drawn with the Codex tokens and the real Plan and Write markup, so what you see is what <a href="screens/plan.html">plan.html</a> and <a href="screens/write.html">write.html</a> gain when the design task lands. Decisions were settled in review on 20 Oct 2026 and are listed in section 8.</p>
+
+<div class="grid g3" id="scope">
+  <div class="card note">
+    <h3>What #26 adds</h3>
+    <ul class="tight">
+      <li>Header presence, hover card and <b>Follow</b> on both tabs</li>
+      <li>Write: live co-editing, remote carets, live gutter, anchored comments, offline merge</li>
+      <li>Plan: live board, card presence, co-edited summaries, conflicting-move snap</li>
+    </ul>
+  </div>
+  <div class="card note">
+    <h3>What is fixed already</h3>
+    <ul class="tight">
+      <li>Transport: Yjs over SignalR, server as a peer</li>
+      <li>Colour: a Knuth hash of the user id → <code>hsl(h, 70%, 45%)</code> (#15 §8)</li>
+      <li>Text goes through Yjs; board moves go through <code>BoardChanged</code> hub events <span class="muted">(confirmed in this review, D6)</span></li>
+    </ul>
+  </div>
+  <div class="card note warn">
+    <h3>Blocked by</h3>
+    <ul class="tight">
+      <li>Sign-in (v1 runs as one seeded user)</li>
+      <li>Book membership: owner · co-author · reviewer</li>
+      <li>The v1 SignalR hub (#23 wave 3)</li>
+    </ul>
+    <p class="small muted" style="margin:6px 0 0">The design can land before any of these. The reference screens are static HTML.</p>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<section class="part" id="cast">
+  <h2><span class="n">1</span>Who is in the book, and what colour they are</h2>
+  <p>Three people appear in every mock. Their colours are computed live on this page with the #15 §8 formula, from a hash of the user id, so they are the colours the app would really assign.</p>
+  <div class="grid g3" id="people"></div>
+
+  <h3 style="margin-top:18px">The formula at both lightnesses, on both surfaces</h3>
+  <p class="small muted">Twelve hues 30° apart. Top row is #15 as written (L 45%). Bottom row lifts lightness to 62% for the dark theme, which is what the rest of the palette does (accent goes from <code>#2563c9</code> to <code>#5cc8f0</code>).</p>
+  <div class="grid g2">
+    <div class="surf light">
+      <div class="overline" style="color:#52627c">Light surface · #f7f9fd</div>
+      <div class="sw-row"><span>L 45% (as in #15)</span><div class="sw" data-sw="45"></div></div>
+      <div class="sw-row"><span>L 62%</span><div class="sw" data-sw="62"></div></div>
+    </div>
+    <div class="surf dark">
+      <div class="overline" style="color:#a0aec6">Dark surface · #1f2839</div>
+      <div class="sw-row"><span>L 45% (as in #15)</span><div class="sw" data-sw="45"></div></div>
+      <div class="sw-row"><span>L 62%</span><div class="sw" data-sw="62"></div></div>
+    </div>
+  </div>
+  <div class="grid g2" style="margin-top:12px">
+    <div class="card note warn" id="f01">
+      <h3>F-01 · One lightness does not survive both themes</h3>
+      <p>At L 45% the blue, violet and red hues almost vanish against the dark surface, and a white label on a yellow hue is unreadable in light. The hash should pick the hue only; lightness and saturation come from the theme, like every other token. Suggest <code>--user-l: 42%</code> light, <code>62%</code> dark, with the label colour flipping to <code>--color-text</code> on the light hues.</p>
+    </div>
+    <div class="card note" id="f02">
+      <h3>F-02 · User colours will collide with the category palette</h3>
+      <p>Codex already uses five hues for meaning: <span class="cat" style="--cat:var(--category-blog)"><i></i>blog</span><span class="cat" style="--cat:var(--category-law)"><i></i>law</span><span class="cat" style="--cat:var(--category-story)"><i></i>story</span><span class="cat" style="--cat:var(--category-research)"><i></i>research</span><span class="cat" style="--cat:var(--category-person)"><i></i>person</span> plus accent blue and warn amber. A hashed hue will land on one of them for some users, so a caret can look like a Knowledge-base mention. The shapes differ (caret with a name tag, ring with an avatar), so this is tolerable. <b>Decided (D3):</b> accept the collision and document the shape rule; the hash keeps picking the hue.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="part" id="header">
+  <h2><span class="n">2</span>Both tabs: presence in the header</h2>
+  <p>The bookbar gains one element: an avatar stack with a count, sitting just left of the save status. Nothing else moves. The reviewer’s own avatar stays at the far right where it is today.</p>
+
+  <figure class="mock" id="mock-bookbar">
+    <div class="mock-cap">Plan · bookbar <span class="spacer"></span><span class="tag">Proposed</span></div>
+    <header class="bookbar">
+      <span class="ib" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3 5 8l5 5"/></svg></span>
+      <span class="ib" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg></span>
+      <div class="book-id"><div class="cover thumb"></div><div class="t"><b>Product Engineering</b><span>Joel Dickson</span></div></div>
+      <nav class="tabs"><span class="tab" aria-selected="true">Plan</span><span class="tab" aria-selected="false">Write</span><span class="vr"></span><span class="tab" aria-selected="false">References <span class="badge">3</span></span><span class="tab" aria-selected="false">Layout</span></nav>
+      <span class="spacer"></span>
+      <span class="pres" id="presStack" title="2 editing"><span class="stack"><span class="pa active" data-u="priya">PN</span><span class="pa active" data-u="marcus">MO</span><span class="pa idle" data-u="ana">AK</span></span><span class="n">2 editing</span></span>
+      <span class="sync" data-s="saved" id="syncMock"><i></i><span class="lbl-t">Synced</span></span>
+      <span class="btn ghost">Format</span><span class="btn ghost">Focus</span>
+      <span class="kbd">⌘K</span>
+      <span class="avatar">JD</span>
+    </header>
+    <span class="callout" data-for="#presStack" data-at="tl">1</span>
+    <span class="callout" data-for="#syncMock" data-at="tl">2</span>
+  </figure>
+  <ol class="keys">
+    <li><b class="k">1</b><span><b>Avatar stack</b>, newest joiner last, in each person’s colour. A green dot marks someone active in the last 30 s; an idle person fades to 45%. Four or more collapse to three avatars and <i>+N</i>. The label says <i>2 editing</i> only while someone is active, otherwise <i>3 here</i>. Reviewers who can only comment are in the stack too.</span></li>
+    <li><b class="k">2</b><span><b>Save status becomes sync status.</b> With Yjs there is no “Unsaved”: every keystroke is applied locally and sent. The dot now reports the connection. States in section 5.</span></li>
+  </ol>
+
+  <div class="grid g2" style="margin-top:14px;align-items:start">
+    <figure>
+      <div class="pcard" id="mock-pcard">
+        <div class="pr"><span class="pa active" data-u="priya">PN</span><div><b>Priya Natarajan</b><small>Write · Chapter 5 · Scene 1 · typing</small><span class="role">Co-author</span></div><span class="btn sm">Follow</span></div>
+        <div class="pr"><span class="pa active" data-u="marcus">MO</span><div><b>Marcus Oyelaran</b><small>Plan · Chapter 7 · Scene 2</small><span class="role">Reviewer · comments only</span></div><span class="btn sm">Follow</span></div>
+        <div class="pr"><span class="pa idle" data-u="ana">AK</span><div><b>Ana Kowalczyk</b><small>Idle 4 min · Write · Chapter 2</small><span class="role">Co-author</span></div><span class="btn sm ghost">Follow</span></div>
+        <div class="foot">You are editing as Joel Dickson · Owner</div>
+      </div>
+      <figcaption>Hover (or click, on touch) the stack. One row per person: name, tab, chapter and scene, their role, and <b>Follow</b>.</figcaption>
+    </figure>
+    <div>
+      <h3>Follow</h3>
+      <p><b>Same tab:</b> scroll to the card or scene and flash it for 1.8 s, reusing the existing <code>flash</code> keyframe but in that person’s colour. <b>Other tab:</b> navigate with the existing deep links, <code>write.html#scene=5.1</code> or <code>plan.html#scene=…</code>, then flash. Follow is a one-shot jump, not a lock: you are not pinned to their viewport afterwards.</p>
+      <h3>Leaving</h3>
+      <p>Closing the tab sends the awareness removal at once. A dropped connection is cleared by the server after 30 s. The issue also drops <em>idle</em> people at 30 s, which is too quick for a writer who stops to think. <b>Decided (D5):</b> fade at 30 s idle, remove at 5 min.</p>
+      <h3>Narrow screens</h3>
+      <p>Below 760px the bookbar already hides Scope, Format and Focus. The stack shrinks to one avatar with a count badge; the hover card becomes a sheet.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="part" id="write">
+  <h2><span class="n">3</span>Write tab: carets, selections, the live gutter and comments</h2>
+  <p>One scene row from Chapter 5, with Priya typing in the second paragraph and a comment Marcus left on the first. The gutter keeps its sticky scene details; the open comment thread sits underneath them, in the same column, level with the passage it belongs to.</p>
+
+  <figure class="mock" id="mock-write">
+    <div class="mock-cap">Write · Chapter 5, Scene 1 <span class="spacer"></span><span class="tag">Proposed</span></div>
+    <div class="wtb"><span class="sel">Chapter 5: Owning Outcomes ▾</span><span>Act 2 · Scene 1 of 2</span><span class="spacer"></span><span class="cmark"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/></svg>2 open</span></div>
+    <div class="page">
+      <section class="row">
+        <div class="ed">
+          <p>Eighteen months into <span class="auto" style="--cat:var(--category-story)">the payments rewrite</span>, someone asked a simple question at the quarterly review: when did any of us last talk to a merchant? <span class="cmt open">Nobody could remember.</span> We had a roadmap, a velocity chart and a migration plan with forty-one steps. We did not have a customer.</p>
+          <p><span class="mention" style="--cat:var(--category-person)">Marty Cagan</span> describes the alternative as empowered teams: give engineers a problem to solve rather than a feature to build. <span class="rsel" data-u="priya">We had read the book.</span> We had not changed how we worked<span class="rcaret" data-u="priya"><b>Priya</b></span>, and the gap showed in the next planning cycle.</p>
+          <p>The change was small. Two engineers joined the next round of merchant interviews, with no slides and no agenda. They came back with eleven complaints.</p>
+        </div>
+        <aside class="gutter">
+          <div class="g-h"><span class="overline">Chapter 5 · Scene 1</span><span class="pa xs active" data-u="priya" title="Priya is in this scene">PN</span></div>
+          <div class="g-labels"><span class="lbl" style="--tone:var(--color-info)"><i></i>Drafting</span></div>
+          <div class="g-sum live" data-u="marcus">Engineers in discovery, with <span class="mention" style="--cat:var(--category-story)">The Payments Rewrite</span> as the cautionary tale and the merchant question as the turn.</div>
+          <div class="live-tag" data-u="marcus"><span class="pa xs" data-u="marcus">MO</span>Marcus is editing the summary</div>
+          <div class="g-links"><span class="cx" style="--cat:var(--category-person)"><i></i>Marty Cagan</span></div>
+          <div class="g-f"><span class="mini">Label</span><span class="mini">+ Codex</span><span class="spacer"></span><span class="words">3,120 words</span></div>
+          <div class="thread" id="mock-thread">
+            <p class="q">“Nobody could remember.”</p>
+            <div class="m"><span class="pa sm" data-u="marcus">MO</span><div><div class="who"><b>Marcus Oyelaran</b><span>2 min ago</span></div><p>Six months or eighteen? The beat above says six, this paragraph says eighteen months into the rewrite.</p></div></div>
+            <div class="m"><span class="pa sm me">JD</span><div><div class="who"><b>You</b><span>just now</span></div><p>Eighteen. The beat is wrong, fixing it.</p></div></div>
+            <div class="reply"><span class="in">Reply…</span><span class="btn sm">Resolve</span></div>
+          </div>
+        </aside>
+      </section>
+    </div>
+    <span class="callout" data-for="#mock-write .cmt.open" data-at="tl">1</span>
+    <span class="callout" data-for="#mock-write .rsel" data-at="bl">2</span>
+    <span class="callout" data-for="#mock-write .rcaret b" data-at="tr">3</span>
+    <span class="callout" data-for="#mock-write .g-sum.live" data-at="tr">4</span>
+    <span class="callout" data-for="#mock-thread" data-at="tr">5</span>
+  </figure>
+  <ol class="keys">
+    <li><b class="k">1</b><span><b>Comment anchor.</b> A warn-tinted highlight with a 2px underline, the same amber the References markers use for “needs check”, so it reads as “someone has a question here”. The open thread’s anchor is tinted stronger. Anchors are Yjs relative positions, so they move with the text.</span></li>
+    <li><b class="k">2</b><span><b>Remote selection</b> at 22% of the person’s colour.</span></li>
+    <li><b class="k">3</b><span><b>Remote caret</b>: a 2px bar with the first name in a tag above it. This is what <code>@tiptap/extension-collaboration-caret</code> renders; the styles above are the ones to hand it. The tag hides after 2 s of no movement and comes back on the next keystroke, so a parked caret does not cover prose.</span></li>
+    <li><b class="k">4</b><span><b>Live gutter.</b> A small avatar in the scene header says who is in this scene. A field someone else is editing gets a 1.5px ring in their colour and a one-line caption; it drops out when their caret leaves. Summaries and labels are co-edited through Yjs, so the ring is the only “in use” signal, never a lock.</span></li>
+    <li><b class="k">5</b><span><b>Thread card</b>, aligned to the passage’s first line (clamped so it never overlaps the sticky details). Quoted anchor, messages, Reply, Resolve. The toolbar shows <i>2 open</i>; clicking it steps through open threads like the Codex highlight chip steps through scenes. Resolved threads leave the gutter and live under <i>Resolved (n)</i> in the scene ⋯ menu.</span></li>
+  </ol>
+
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card note" id="f04">
+      <h3>F-04 · Below 760px the gutter moves above the scene</h3>
+      <p>That is where the thread card would go too, which pushes the prose down by a whole conversation. On narrow screens a tapped anchor should open the thread as a bottom sheet (the pattern the Knowledge-base panel already uses below 860px) and the gutter should show only the <i>2 open</i> count.</p>
+    </div>
+    <div class="card note" id="f05">
+      <h3>F-05 · Focus mode</h3>
+      <p>Focus hides everything but the prose. Remote carets should stay (you still need to see where a co-author is typing), comment anchors should fade to the underline only, and the header stack is hidden with the rest of the bookbar. <b>Decided (D4):</b> carets stay, name tags hidden.</p>
+    </div>
+    <div class="card note" id="f06">
+      <h3>F-06 · Reviewer role in Write</h3>
+      <p>A reviewer’s prose is read-only: no caret of their own in the text, no <code>/</code> menu, Scene Beat buttons disabled. Selecting text still offers <b>Comment</b>. A quiet <span class="tool-note">Reviewer · comment only</span> chip in the Write toolbar explains why typing does nothing. Their presence avatar is drawn with a hollow ring instead of a fill so the stack shows who can edit.</p>
+    </div>
+    <div class="card note" id="f07">
+      <h3>F-07 · Comment entry point</h3>
+      <p>Select text → a small floating <b>Comment</b> button at the selection end (Google Docs style), plus <code>/</code> → <i>Comment</i> and <kbd class="kbd">⌘⌥M</kbd>. The floating button is new chrome for Codex, but reviewers will not know the <code>/</code> menu. <b>Decided (D2):</b> all three routes.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="part" id="plan">
+  <h2><span class="n">4</span>Plan tab: card presence, live moves and the losing move</h2>
+  <p>Two chapter columns from Act 2. Marcus is editing the summary on Scene 1 of Chapter 7; Priya is dragging Scene 2 of Chapter 7 into Chapter 6, and the board shows her drop line to everyone.</p>
+
+  <figure class="mock" id="mock-plan">
+    <div class="mock-cap">Plan · Act 2 <span class="spacer"></span><span class="tag">Proposed</span></div>
+    <div class="cols">
+      <section class="col">
+        <header class="col-h"><span class="grip"><svg viewBox="0 0 10 14" fill="currentColor"><circle cx="3" cy="3" r="1.2"/><circle cx="7" cy="3" r="1.2"/><circle cx="3" cy="7" r="1.2"/><circle cx="7" cy="7" r="1.2"/><circle cx="3" cy="11" r="1.2"/><circle cx="7" cy="11" r="1.2"/></svg></span><div class="col-t"><div class="overline">Chapter 6<span>· 2 scenes · 640</span></div><span class="ct">The Customer Loop</span></div></header>
+        <div class="scenes">
+          <article class="scene"><header class="sc-h"><span class="grip"></span><span class="sc-n">Scene 1</span><span class="sc-labels"><span class="lbl" style="--tone:var(--color-ok)"><i></i>Ready to write</span></span></header><div class="sc-body">Weekly merchant calls become the planning input.</div><footer class="sc-f"><span class="mini">+ Codex</span><span class="mini">Label</span><span class="spacer"></span><span class="words">640 words</span></footer></article>
+          <div class="dropline" data-u="priya" id="mock-dropline"></div>
+          <article class="scene ghost" data-u="priya" id="mock-ghost"><header class="sc-h"><span class="grip"></span><span class="sc-n">Scene 2</span><span class="sc-labels"></span></header><div class="sc-body">Org charts that ship themselves.</div><footer class="sc-f"><span class="mini">+ Codex</span><span class="mini">Label</span><span class="spacer"></span><span class="words none">Not written</span></footer></article>
+          <article class="scene"><header class="sc-h"><span class="grip"></span><span class="sc-n">Scene 2</span><span class="sc-labels"></span></header><div class="sc-body">The first roadmap item cut because of a call.</div><footer class="sc-f"><span class="mini">+ Codex</span><span class="mini">Label</span><span class="spacer"></span><span class="words none">Not written</span></footer></article>
+        </div>
+        <span class="newscene">+ New scene</span>
+      </section>
+      <section class="col">
+        <header class="col-h"><span class="grip"></span><div class="col-t"><div class="overline">Chapter 7<span>· 2 scenes · 940</span></div><span class="ct">Shipping the List</span></div></header>
+        <div class="scenes">
+          <article class="scene rp" data-u="marcus" id="mock-rp"><span class="rp-tag"><span class="pa">MO</span>Marcus</span><header class="sc-h"><span class="grip"></span><span class="sc-n">Scene 1</span><span class="sc-labels"><span class="lbl" style="--tone:var(--color-warn)"><i></i>Needs research</span></span></header><div class="sc-body">Eleven complaints, nine about one screen. What we shipped<span class="rcaret" data-u="marcus"></span> and what we dropped.</div><div class="links"><span class="cx" style="--cat:var(--category-research)"><i></i>DORA Four Keys</span></div><footer class="sc-f"><span class="mini">+ Codex</span><span class="mini">Label</span><span class="spacer"></span><span class="words">940 words</span></footer></article>
+          <article class="scene rp" data-u="priya" style="opacity:.55" id="mock-moving"><span class="rp-tag"><span class="pa">PN</span>Priya is moving this</span><header class="sc-h"><span class="grip"></span><span class="sc-n">Scene 2</span><span class="sc-labels"></span></header><div class="sc-body">Org charts that ship themselves.</div><footer class="sc-f"><span class="mini">+ Codex</span><span class="mini">Label</span><span class="spacer"></span><span class="words none">Not written</span></footer></article>
+        </div>
+        <span class="newscene">+ New scene</span>
+      </section>
+    </div>
+    <span class="callout" data-for="#mock-rp" data-at="tl">1</span>
+    <span class="callout" data-for="#mock-moving" data-at="tl">2</span>
+    <span class="callout" data-for="#mock-ghost" data-at="tl">3</span>
+  </figure>
+  <ol class="keys">
+    <li><b class="k">1</b><span><b>Card presence.</b> A 1.5px ring in the person’s colour and a name tag on the top edge, for the card someone is editing. The caret inside the summary is the same remote caret as Write, without the name tag because the card already says who. The ring is thinner than the 2px accent rings the board uses for <i>hit</i>, <i>drop-target</i> and <i>flash</i>, and those win when both apply (F-03).</span></li>
+    <li><b class="k">2</b><span><b>A remote drag, where it started.</b> The card being dragged dims to 55% where it sits and its tag says <i>Priya is moving this</i>. Only her own board shows the real dragged element.</span></li>
+    <li><b class="k">3</b><span><b>Where it will land.</b> Her drop line and a ghost of the card appear in the target column, in her colour, so nobody is surprised when it jumps. On drop, the card slides into place (120 ms) and flashes once in her colour, the <code>arrive</code> variant of the existing flash. The same arrival flash marks a card someone else adds. Renames just change in place; the ring already says who.</span></li>
+  </ol>
+
+  <h3 style="margin-top:18px">When two people move the same scene</h3>
+  <p>Board structure is not a CRDT: moves go through the command path and the server orders them. Both moves are applied in the order the server received them, the final order is broadcast, and the person whose move was overtaken sees their card snap to the server’s answer.</p>
+  <figure id="fig-conflict">
+    <svg viewBox="0 0 1000 250" width="100%" role="img" aria-labelledby="conflict-t" style="font-family:var(--font-sans);color:var(--color-text)">
+      <title id="conflict-t">Two people move Scene 2 at once; the server applies both in arrival order and both boards converge</title>
+      <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="currentColor"/></marker></defs>
+      <g font-size="12" font-weight="600">
+        <text x="20" y="48" fill="var(--u-priya)">Priya</text>
+        <text x="20" y="130" fill="var(--color-muted)">Server</text>
+        <text x="20" y="212" fill="var(--color-accent)">You</text>
+      </g>
+      <g stroke="var(--color-border)" stroke-width="1"><line x1="90" y1="44" x2="980" y2="44"/><line x1="90" y1="126" x2="980" y2="126"/><line x1="90" y1="208" x2="980" y2="208"/></g>
+      <!-- t1 priya move -->
+      <g id="c-move-a"><title>Priya drags Scene 2 to Chapter 6 (t=0)</title>
+        <rect x="150" y="26" width="190" height="36" rx="6" fill="var(--color-surface)" stroke="var(--u-priya)" stroke-width="1.5"/>
+        <text x="245" y="43" text-anchor="middle" font-size="11.5" fill="currentColor">Move Scene 2 → Ch 6, pos 2</text>
+        <text x="245" y="56" text-anchor="middle" font-size="10" fill="var(--color-muted)">applied locally at once</text>
+        <line x1="245" y1="62" x2="300" y2="110" stroke="var(--u-priya)" stroke-width="1.5" marker-end="url(#arr)" style="color:var(--u-priya)"/>
+      </g>
+      <!-- t1 your move -->
+      <g id="c-move-b"><title>You drag Scene 2 to Chapter 7, position 1 (t=40 ms)</title>
+        <rect x="190" y="190" width="190" height="36" rx="6" fill="var(--color-surface)" stroke="var(--color-accent)" stroke-width="1.5"/>
+        <text x="285" y="207" text-anchor="middle" font-size="11.5" fill="currentColor">Move Scene 2 → Ch 7, pos 1</text>
+        <text x="285" y="220" text-anchor="middle" font-size="10" fill="var(--color-muted)">applied locally at once</text>
+        <line x1="285" y1="190" x2="340" y2="142" stroke="var(--color-accent)" stroke-width="1.5" marker-end="url(#arr)" style="color:var(--color-accent)"/>
+      </g>
+      <!-- server -->
+      <g id="c-server"><title>The server applies both commands in arrival order and broadcasts BoardChanged with the final order</title>
+        <rect x="300" y="108" width="300" height="36" rx="6" fill="var(--color-surface-2)" stroke="var(--color-border)"/>
+        <text x="450" y="125" text-anchor="middle" font-size="11.5" fill="currentColor">apply Priya’s, then yours · order = Ch 7, pos 1</text>
+        <text x="450" y="138" text-anchor="middle" font-size="10" fill="var(--color-muted)">broadcast BoardChanged(version 418)</text>
+        <line x1="600" y1="118" x2="700" y2="60" stroke="var(--color-muted)" stroke-width="1.5" marker-end="url(#arr)" style="color:var(--color-muted)"/>
+        <line x1="600" y1="134" x2="700" y2="192" stroke="var(--color-muted)" stroke-width="1.5" marker-end="url(#arr)" style="color:var(--color-muted)"/>
+      </g>
+      <g id="c-snap"><title>Priya’s board snaps Scene 2 from Chapter 6 to Chapter 7 with a 600 ms slide, and a toast says why</title>
+        <rect x="705" y="26" width="270" height="36" rx="6" fill="color-mix(in srgb, var(--color-warn) 10%, var(--color-surface))" stroke="var(--color-warn)" stroke-width="1.5"/>
+        <text x="840" y="43" text-anchor="middle" font-size="11.5" fill="currentColor">Scene 2 slides to Ch 7 · toast: “Joel moved it first”</text>
+        <text x="840" y="56" text-anchor="middle" font-size="10" fill="var(--color-muted)">her move lost · Undo re-issues it</text>
+      </g>
+      <g id="c-confirm"><title>Your board already shows the server order; nothing visible changes</title>
+        <rect x="705" y="190" width="270" height="36" rx="6" fill="var(--color-surface)" stroke="var(--color-border)"/>
+        <text x="840" y="207" text-anchor="middle" font-size="11.5" fill="currentColor">matches local state · no change</text>
+        <text x="840" y="220" text-anchor="middle" font-size="10" fill="var(--color-muted)">version 418 acknowledged</text>
+      </g>
+    </svg>
+    <figcaption>The snap is a 600 ms slide, not a flash, so it reads as “it went somewhere” rather than “something arrived”. The toast names the winner and offers Undo, which re-issues the loser’s move on top of the new order. Both boards are identical after one round trip.</figcaption>
+  </figure>
+
+  <div class="card note" id="f03" style="margin-top:12px">
+    <h3>F-03 · State precedence on a card</h3>
+    <p>A scene card can now carry five rings: dragging (35% opacity), drop-target (2px accent), hit (2px accent, from a Knowledge-base highlight), flash/arrive, and presence (1.5px in a colour). Rule: <b>drag &gt; drop-target &gt; hit &gt; arrive &gt; presence</b>, one ring at a time, and the presence name tag stays visible through all of them. Without this, a highlighted card that Marcus is editing would show two rings of different colours.</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="part" id="states">
+  <h2><span class="n">5</span>Connection states, and what replaces the 409 banner</h2>
+  <p>The bookbar dot today says Unsaved → Saving… → Saved. For a collaborative document it reports the link to the server instead. Edits never wait: they are applied locally and recovered by the reconnect handshake in #15 §4.</p>
+  <div class="tbl-wrap"><table class="t" id="sync-states">
+    <thead><tr><th style="width:190px">Bookbar</th><th>When</th><th>What else the person sees</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sync" data-s="saved"><i></i>Synced</span></td><td>Connected and the last update acknowledged.</td><td>Nothing.</td></tr>
+      <tr><td><span class="sync" data-s="syncing"><i></i>Syncing…</span></td><td>An update is in flight (normally under 100 ms, so this rarely shows).</td><td>Nothing.</td></tr>
+      <tr><td><span class="sync" data-s="reconnecting"><i></i>Reconnecting…</span></td><td>The socket dropped; SignalR is retrying on its 0 / 250 / 1 s / 2 s / 5 s schedule.</td><td>Remote carets freeze, then clear after 30 s. Editing continues.</td></tr>
+      <tr><td><span class="sync" data-s="offline"><i></i>Offline · edits kept</span></td><td>Retries exhausted, or the browser reports no network.</td><td>Header stack empties. A warn bar under the toolbar: <i>You’re offline. Keep writing; your edits will merge when you’re back.</i> No 409 conflict banner, ever, for Yjs-backed text.</td></tr>
+      <tr><td><span class="sync" data-s="saved"><i></i>Synced</span></td><td>Back online after an offline spell.</td><td><span class="toast">Back online · merged 4 edits from Priya <span class="link">View</span></span></td></tr>
+    </tbody>
+  </table></div>
+  <div class="card note info" style="margin-top:12px" id="f08">
+    <h3>F-08 · Board moves while offline</h3>
+    <p>Text merges, but a board move is a command and cannot be applied blind. While offline the grips are disabled with a tooltip <i>Reordering needs a connection</i>, and New scene / New chapter are queued and shown as ghost cards until acknowledged. Worth stating in #26, since “Offline” there only mentions prose.</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section class="part" id="flow">
+  <h2><span class="n">6</span>What travels how</h2>
+  <p>Three lanes, which is why some things appear within 100 ms and some need a round trip.</p>
+  <figure id="fig-lanes">
+    <svg viewBox="0 0 1000 200" width="100%" role="img" aria-labelledby="lanes-t" style="font-family:var(--font-sans);color:var(--color-text)">
+      <title id="lanes-t">Three transports: Yjs for text, awareness for presence, hub events for board structure and comments</title>
+      <g font-size="12">
+        <rect x="10" y="20" width="200" height="160" rx="8" fill="var(--color-surface)" stroke="var(--color-border)"/>
+        <text x="110" y="42" text-anchor="middle" font-weight="600">Browser</text>
+        <text x="110" y="70" text-anchor="middle" fill="var(--color-muted)" font-size="11">Y.Doc · Awareness</text>
+        <text x="110" y="88" text-anchor="middle" fill="var(--color-muted)" font-size="11">TipTap + caret ext.</text>
+        <text x="110" y="106" text-anchor="middle" fill="var(--color-muted)" font-size="11">Board (React state)</text>
+        <rect x="790" y="20" width="200" height="160" rx="8" fill="var(--color-surface)" stroke="var(--color-border)"/>
+        <text x="890" y="42" text-anchor="middle" font-weight="600">Server (one SignalR hub)</text>
+        <text x="890" y="70" text-anchor="middle" fill="var(--color-muted)" font-size="11">YDotNet peer → prose.body</text>
+        <text x="890" y="88" text-anchor="middle" fill="var(--color-muted)" font-size="11">PresenceStore</text>
+        <text x="890" y="106" text-anchor="middle" fill="var(--color-muted)" font-size="11">Rows + order column</text>
+        <text x="890" y="124" text-anchor="middle" fill="var(--color-muted)" font-size="11">Comments table</text>
+      </g>
+      <g id="lane-yjs" font-size="11.5"><title>Yjs updates: prose, scene summaries, labels. Both directions, about 100 ms, merges offline</title>
+        <line x1="215" y1="60" x2="785" y2="60" stroke="var(--color-accent)" stroke-width="2" marker-start="url(#arr)" marker-end="url(#arr)" style="color:var(--color-accent)"/>
+        <rect x="380" y="46" width="240" height="26" rx="13" fill="var(--color-accent-soft)"/>
+        <text x="500" y="63" text-anchor="middle" font-weight="600">Yjs · prose, summaries, labels</text>
+        <text x="500" y="86" text-anchor="middle" fill="var(--color-muted)" font-size="10.5">~100 ms · no lost edits · merges after offline</text>
+      </g>
+      <g id="lane-aw" font-size="11.5"><title>Awareness: cursor, selection, tab, scene or card. Ephemeral, never stored</title>
+        <line x1="215" y1="112" x2="785" y2="112" stroke="var(--color-muted)" stroke-width="2" stroke-dasharray="5 4" marker-start="url(#arr)" marker-end="url(#arr)" style="color:var(--color-muted)"/>
+        <rect x="360" y="98" width="280" height="26" rx="13" fill="var(--color-surface-2)"/>
+        <text x="500" y="115" text-anchor="middle" font-weight="600">Awareness · caret, selection, tab, card</text>
+        <text x="500" y="138" text-anchor="middle" fill="var(--color-muted)" font-size="10.5">ephemeral · presence summary built by the server from identity</text>
+      </g>
+      <g id="lane-ev" font-size="11.5"><title>Hub events: BoardChanged for moves, adds and deletes; CommentChanged for threads. Commands go up over REST, events come down</title>
+        <line x1="215" y1="164" x2="785" y2="164" stroke="var(--color-warn)" stroke-width="2" marker-start="url(#arr)" marker-end="url(#arr)" style="color:var(--color-warn)"/>
+        <rect x="340" y="150" width="320" height="26" rx="13" fill="color-mix(in srgb, var(--color-warn) 16%, transparent)"/>
+        <text x="500" y="167" text-anchor="middle" font-weight="600">Commands up · BoardChanged / CommentChanged down</text>
+        <text x="500" y="190" text-anchor="middle" fill="var(--color-muted)" font-size="10.5">server orders moves · one round trip · needs a connection</text>
+      </g>
+    </svg>
+  </figure>
+</section>
+
+<!-- ============================================================ -->
+<section class="part" id="today">
+  <h2><span class="n">7</span>Today, for reference</h2>
+  <p>The current reference screens have no collaboration chrome; the single avatar at the right of the bookbar is the seeded user. Open them beside this page to compare: <a href="screens/plan.html">screens/plan.html</a> and <a href="screens/write.html">screens/write.html</a>. The Preview panel on each switches light and dark.</p>
+</section>
+
+<!-- ============================================================ -->
+<section class="part" id="decisions">
+  <h2><span class="n">8</span>Decisions · settled 20 Oct 2026</h2>
+  <p>All six went with the recommended option, and all eight findings apply. The same list, with the findings as a checklist, is the brief for the design task.</p>
+  <div class="tbl-wrap" style="margin-bottom:14px"><table class="t" id="decided">
+    <thead><tr><th style="width:60px">ID</th><th style="width:200px">Question</th><th>Decision</th></tr></thead>
+    <tbody>
+      <tr><td><code>D1</code></td><td>Presence placement</td><td>Avatar stack with a count, just left of the sync status. Shrinks to one avatar and a badge below 760px.</td></tr>
+      <tr><td><code>D2</code></td><td>Starting a comment</td><td>Floating <b>Comment</b> button on selection, plus <code>/</code> → Comment and a shortcut.</td></tr>
+      <tr><td><code>D3</code></td><td>User colours</td><td>Hash picks the hue only; lightness and saturation per theme. Category-hue collisions accepted.</td></tr>
+      <tr><td><code>D4</code></td><td>Focus mode</td><td>Remote carets stay, name tags hidden. Anchors fade to the underline.</td></tr>
+      <tr><td><code>D5</code></td><td>Idle and leaving</td><td>Fade at 30 s idle, remove at 5 min. A dropped connection is cleared after 30 s.</td></tr>
+      <tr><td><code>D6</code></td><td>Board transport</td><td>Confirmed: commands and <code>BoardChanged</code> events, not Yjs. Server orders moves; the loser’s card slides with a toast and Undo.</td></tr>
+      <tr><td><code>F-01</code></td><td>Colour per theme</td><td>Hash picks the hue; lightness and label colour come from the theme.</td></tr>
+      <tr><td><code>F-02</code></td><td>Category hues</td><td>Note the collision and the shape rule in design/README.md.</td></tr>
+      <tr><td><code>F-03</code></td><td>Card rings</td><td>drag &gt; drop-target &gt; hit &gt; arrive &gt; presence, one ring at a time; the name tag always shows.</td></tr>
+      <tr><td><code>F-04</code></td><td>Narrow screens</td><td>Below 760px the thread opens as a bottom sheet; the gutter shows only the open count.</td></tr>
+      <tr><td><code>F-05</code></td><td>Focus mode</td><td>Anchors fade to the underline, header stack hidden with the bookbar, carets per D4.</td></tr>
+      <tr><td><code>F-06</code></td><td>Reviewer role</td><td>Read-only prose, a <i>Reviewer · comment only</i> chip, hollow avatar ring in the stack.</td></tr>
+      <tr><td><code>F-07</code></td><td>Comment entry</td><td>As decided in D2.</td></tr>
+      <tr><td><code>F-08</code></td><td>Offline board</td><td>Grips disabled with a tooltip; adds queued as ghost cards. Added to #26.</td></tr>
+    </tbody>
+  </table></div>
+
+</section>
+
+</main>
+
+<script>
+// ---- User colours: #15 §8, Knuth multiplicative hash of the user id → hue. Lightness per theme (F-01). ----
+const PEOPLE = [
+  { id: 'priya',  uid: 'usr_8f3a1c92', name: 'Priya Natarajan', init: 'PN', role: 'Co-author', where: 'Write · Chapter 5 · Scene 1' },
+  { id: 'marcus', uid: 'usr_41d7b0e5', name: 'Marcus Oyelaran', init: 'MO', role: 'Reviewer · comments only', where: 'Plan · Chapter 7 · Scene 1' },
+  { id: 'ana',    uid: 'usr_c2e96a07', name: 'Ana Kowalczyk',  init: 'AK', role: 'Co-author', where: 'Idle 4 min · Write · Chapter 2' },
+];
+function fnv(s) { let h = 2166136261; for (const ch of s) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+function hueOf(uid) { return (Math.imul(fnv(uid), 2654435761) >>> 0) % 360; }   // Knuth multiplicative hash → 0..359
+function paint() {
+  const dark = document.documentElement.dataset.theme === 'dark' || (!document.documentElement.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
+  const L = dark ? 62 : 42;
+  for (const p of PEOPLE) {
+    const col = `hsl(${hueOf(p.uid)} 70% ${L}%)`;
+    document.documentElement.style.setProperty(`--u-${p.id}`, col);
+    for (const el of document.querySelectorAll(`[data-u="${p.id}"]`)) el.style.setProperty('--u', col);
+  }
+}
+// People cards
+document.getElementById('people').innerHTML = PEOPLE.map(p => `
+  <div class="card note" style="display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;align-items:center">
+    <span class="pa active" data-u="${p.id}" style="width:34px;height:34px;font-size:13px">${p.init}</span>
+    <div><b>${p.name}</b><div class="small muted">${p.role}</div><div class="small muted">hue ${hueOf(p.uid)}° from <code>${p.uid}</code></div></div>
+  </div>`).join('');
+// Swatches: 12 hues at two lightnesses
+for (const sw of document.querySelectorAll('[data-sw]')) {
+  const L = sw.dataset.sw;
+  sw.innerHTML = Array.from({ length: 12 }, (_, i) => `<div style="background:hsl(${i * 30} 70% ${L}%)">${i * 30}°</div>`).join('');
+}
+// Theme switch
+for (const b of document.querySelectorAll('[data-theme-set]')) b.addEventListener('click', () => {
+  const v = b.dataset.themeSet;
+  if (v === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = v;
+  for (const x of document.querySelectorAll('[data-theme-set]')) x.setAttribute('aria-pressed', x === b);
+  paint();
+});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', paint);
+paint();
+
+// ---- Callouts: pin each numbered marker to the corner of the element it describes ----
+function placeCallouts() {
+  for (const c of document.querySelectorAll('.callout[data-for]')) {
+    const mock = c.closest('.mock'), t = document.querySelector(c.dataset.for);
+    if (!mock || !t) continue;
+    const m = mock.getBoundingClientRect(), r = t.getBoundingClientRect(), at = c.dataset.at || 'tl';
+    const x = (at.endsWith('r') ? r.right : r.left) - m.left, y = (at.startsWith('b') ? r.bottom : r.top) - m.top;
+    c.style.left = Math.min(Math.max(x, 12), m.width - 12) + 'px';
+    c.style.top = Math.min(Math.max(y, 12), m.height - 12) + 'px';
+  }
+}
+addEventListener('load', placeCallouts); addEventListener('resize', placeCallouts); document.fonts?.ready.then(placeCallouts);
+
+</script>
+</body>
+</html>

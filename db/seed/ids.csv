@@ -1,0 +1,127 @@
+kind,name,uuid,notes
+users,Jd,0199c0de-0000-7000-8000-000100000001,"Joel Dickson (JD), owner of everything"
+users,Ana,0199c0de-0000-7000-8000-000100000002,"Ana Kowalczyk, a second dev user: view on Product Engineering, write on the Forsaken Gods series (#80)"
+series,ForsakenGods,0199c0de-0000-7000-8000-000200000001,Tabletop campaign setting
+series,AshenCrown,0199c0de-0000-7000-8000-000200000002,Epic fantasy quartet
+series,TidewaterChronicles,0199c0de-0000-7000-8000-000200000003,Coastal mystery
+books,PlayersGuide,0199c0de-0000-7000-8000-000300000001,Forsaken Gods 001
+books,GamemastersCodex,0199c0de-0000-7000-8000-000300000002,Forsaken Gods 002
+books,BestiaryOfTheFallen,0199c0de-0000-7000-8000-000300000003,Forsaken Gods 003
+books,EmberOath,0199c0de-0000-7000-8000-000300000004,Ashen Crown 001
+books,IronLitany,0199c0de-0000-7000-8000-000300000005,Ashen Crown 002
+books,HollowThrone,0199c0de-0000-7000-8000-000300000006,Ashen Crown 003
+books,LastCinder,0199c0de-0000-7000-8000-000300000007,Ashen Crown 004
+books,Saltmarsh,0199c0de-0000-7000-8000-000300000008,Tidewater 001
+books,Undertow,0199c0de-0000-7000-8000-000300000009,Tidewater 002
+books,ProductEngineering,0199c0de-0000-7000-8000-00030000000a,Standalone; the only fully modelled book
+books,ProductEngineeringV1,0199c0de-0000-7000-8000-00030000000b,Standalone; stands for the old Novelcrafter import
+books,TheQuietAlgorithm,0199c0de-0000-7000-8000-00030000000c,Standalone
+books,SaltwaterLedger,0199c0de-0000-7000-8000-00030000000d,Standalone
+books,Northbound,0199c0de-0000-7000-8000-00030000000e,Standalone; empty book with one untitled act
+books,HymnsForMachines,0199c0de-0000-7000-8000-00030000000f,Standalone; holds a chapter link to an archived chapter
+acts,Introduction,0199c0de-0000-7000-8000-000400000001,Product Engineering act 1
+acts,TheProductEngineer,0199c0de-0000-7000-8000-000400000002,Product Engineering act 2
+acts,Practices,0199c0de-0000-7000-8000-000400000003,Product Engineering act 3 (collapsed on Plan)
+acts,NorthboundUntitled,0199c0de-0000-7000-8000-000400000004,Northbound untitled act
+acts,PlayersGuideAct1,0199c0de-0000-7000-8000-000400000005,Players Guide act holding the figure and LaTeX scenes
+acts,HymnsAct1,0199c0de-0000-7000-8000-000400000006,Hymns for Machines act
+chapters,Ch1,0199c0de-0000-7000-8000-000500000001,Preface (preface)
+chapters,Ch2,0199c0de-0000-7000-8000-000500000002,About this book (about-this-book)
+chapters,Ch3,0199c0de-0000-7000-8000-000500000003,A Brief History of Software Practice
+chapters,Ch4,0199c0de-0000-7000-8000-000500000004,What Went Wrong
+chapters,Ch5,0199c0de-0000-7000-8000-000500000005,Owning Outcomes (owning-outcomes)
+chapters,Ch6,0199c0de-0000-7000-8000-000500000006,Discovery is Everyone's Job
+chapters,Ch7,0199c0de-0000-7000-8000-000500000007,Shipping Small (shipping-small)
+chapters,Ch8,0199c0de-0000-7000-8000-000500000008,Estimation Without Theatre
+chapters,Ch9,0199c0de-0000-7000-8000-000500000009,Teams and Topology
+chapters,Ch10,0199c0de-0000-7000-8000-00050000000a,Where to From Here
+chapters,PlayersGuideCh1,0199c0de-0000-7000-8000-00050000000b,Players Guide chapter holding the figure and LaTeX scenes
+chapters,HymnsCh1,0199c0de-0000-7000-8000-00050000000c,Hymns for Machines live chapter
+chapters,HymnsArchivedCh,0199c0de-0000-7000-8000-00050000000d,Hymns for Machines archived chapter (target of a chapter link)
+scenes,Ch1Sc1,0199c0de-0000-7000-8000-000600000001,Preface
+scenes,Ch2Sc1,0199c0de-0000-7000-8000-000600000002,About this book
+scenes,Ch3Sc1,0199c0de-0000-7000-8000-000600000003,Early agile years
+scenes,Ch3Sc2,0199c0de-0000-7000-8000-000600000004,Agile Manifesto and Scrum
+scenes,Ch3Sc3,0199c0de-0000-7000-8000-000600000005,Bad Scrum
+scenes,Ch4Sc1,0199c0de-0000-7000-8000-000600000006,Feature factories
+scenes,Ch4Sc2,0199c0de-0000-7000-8000-000600000007,Org charts that ship themselves
+scenes,Ch5Sc1,0199c0de-0000-7000-8000-000600000008,Engineers in discovery
+scenes,Ch5Sc2,0199c0de-0000-7000-8000-000600000009,Outcome metrics; pending AI draft
+scenes,Ch6Sc1,0199c0de-0000-7000-8000-00060000000a,Team Atlas Offsite
+scenes,Ch6Sc2,0199c0de-0000-7000-8000-00060000000b,Empty scene: no summary no prose
+scenes,Ch7Sc1,0199c0de-0000-7000-8000-00060000000c,Thin slices
+scenes,Ch8Sc1,0199c0de-0000-7000-8000-00060000000d,Why we stopped estimating
+scenes,Ch9Sc1,0199c0de-0000-7000-8000-00060000000e,Teams and topology
+scenes,Ch10Sc1,0199c0de-0000-7000-8000-00060000000f,Closing and epigraph
+scenes,PlayersGuideFigureScene,0199c0de-0000-7000-8000-000600000010,Holds one low-dpi figure
+scenes,PlayersGuideLatexScene,0199c0de-0000-7000-8000-000600000011,Holds one raw LaTeX block
+scenes,HymnsSc1,0199c0de-0000-7000-8000-000600000012,Holds a chapter link to the archived chapter
+beats,Ch3Sc1EarlyAgileYears,0199c0de-0000-7000-8000-000700000001,200 words; hidden; prose written under it
+beats,Ch3Sc3BadScrum,0199c0de-0000-7000-8000-000700000002,600 words; no prose yet
+beats,Ch4Sc1MeasuringOutput,0199c0de-0000-7000-8000-000700000003,400 words; context Feature Factory
+beats,Ch5Sc1EngineersInDiscovery,0199c0de-0000-7000-8000-000700000004,400 words; has prose
+beats,Ch5Sc1WhatChanged,0199c0de-0000-7000-8000-000700000005,200 words; has prose
+beats,Ch5Sc2OutcomeMetrics,0199c0de-0000-7000-8000-000700000006,400 words; Opus; context Goodhart's Law
+beats,Ch8Sc1WhatWeDidInstead,0199c0de-0000-7000-8000-000700000007,600 words; no prose yet
+kbProgressions,Ch4Sc1GoodhartsLaw,0199c0de-0000-7000-8000-000800000001,KB addition on Goodhart's Law in Ch 4 Sc 1
+aiGenerations,Ch5Sc2Pending,0199c0de-0000-7000-8000-000900000001,Pending draft: attempt 1; Claude Opus 5.5; General purpose (Nonfiction); 3 paragraphs
+kbCategories,BlogPosts,0199c0de-0000-7000-8000-000a00000001,blog; book scope
+kbCategories,Laws,0199c0de-0000-7000-8000-000a00000002,law; book scope
+kbCategories,Stories,0199c0de-0000-7000-8000-000a00000003,story; book scope
+kbCategories,Research,0199c0de-0000-7000-8000-000a00000004,research; book scope
+kbCategories,People,0199c0de-0000-7000-8000-000a00000005,person; book scope
+kbCategories,ForsakenGodsSpells,0199c0de-0000-7000-8000-000a00000006,Spells; series scope
+kbCategories,AshenCrownCharacters,0199c0de-0000-7000-8000-000a00000007,Characters; series scope
+kbCategories,AshenCrownPlaces,0199c0de-0000-7000-8000-000a00000008,Places; series scope
+kbEntries,SignsOfBadScrum,0199c0de-0000-7000-8000-000b00000001,Blog Posts; alias Bad Scrum
+kbEntries,FeatureFactory,0199c0de-0000-7000-8000-000b00000002,Blog Posts; alias feature factories
+kbEntries,WhyWeStoppedEstimating,0199c0de-0000-7000-8000-000b00000003,Blog Posts
+kbEntries,ConwaysLaw,0199c0de-0000-7000-8000-000b00000004,Laws; alias Conway
+kbEntries,GoodhartsLaw,0199c0de-0000-7000-8000-000b00000005,Laws; alias Goodhart
+kbEntries,BrooksLaw,0199c0de-0000-7000-8000-000b00000006,Laws
+kbEntries,ThePaymentsRewrite,0199c0de-0000-7000-8000-000b00000007,Stories; alias payments rewrite
+kbEntries,TeamAtlasOffsite,0199c0de-0000-7000-8000-000b00000008,Stories; alias Team Atlas
+kbEntries,DoraFourKeys,0199c0de-0000-7000-8000-000b00000009,Research; alias DORA
+kbEntries,AgileManifesto,0199c0de-0000-7000-8000-000b0000000a,Research; Agile Manifesto (2001)
+kbEntries,KentBeck,0199c0de-0000-7000-8000-000b0000000b,People
+kbEntries,MartyCagan,0199c0de-0000-7000-8000-000b0000000c,People; alias Cagan
+kbEntries,Gravetouch,0199c0de-0000-7000-8000-000b0000000d,Forsaken Gods series spell
+kbEntries,HollowPrayer,0199c0de-0000-7000-8000-000b0000000e,Forsaken Gods series spell
+kbEntries,EmberWard,0199c0de-0000-7000-8000-000b0000000f,Forsaken Gods series spell
+labels,ReadyToWrite,0199c0de-0000-7000-8000-000c00000001,ok
+labels,Drafting,0199c0de-0000-7000-8000-000c00000002,info
+labels,NeedsResearch,0199c0de-0000-7000-8000-000c00000003,warn
+labels,MaybeCut,0199c0de-0000-7000-8000-000c00000004,danger
+labels,Playtested,0199c0de-0000-7000-8000-000c00000005,Forsaken Gods series label
+references,BeckXp,0199c0de-0000-7000-8000-000d00000001,Beck; Extreme Programming Explained (1999); cleared
+references,AgileManifestoWeb,0199c0de-0000-7000-8000-000d00000002,Manifesto for Agile Software Development (2001); needs check
+references,GoodhartMonetary,0199c0de-0000-7000-8000-000d00000003,Goodhart; Problems of Monetary Management (1975); needs check
+references,VelocityTrap,0199c0de-0000-7000-8000-000d00000004,Whitlock; The Velocity Trap (2021); copyright risk
+references,ConwayCommittees,0199c0de-0000-7000-8000-000d00000005,Conway; How Do Committees Invent? (1968); cleared
+references,CaganEmpowered,0199c0de-0000-7000-8000-000d00000006,Cagan and Jones; Empowered (2020); cleared
+references,DoraReport2024,0199c0de-0000-7000-8000-000d00000007,DORA; 2024 State of DevOps Report; needs check
+references,Accelerate,0199c0de-0000-7000-8000-000d00000008,Forsgren et al.; Accelerate (2018); needs check
+references,TeamTopologies,0199c0de-0000-7000-8000-000d00000009,Skelton and Pais; Team Topologies (2019); copyright risk
+references,MythicalManMonth,0199c0de-0000-7000-8000-000d0000000a,Brooks; The Mythical Man-Month (1995); cleared
+references,ShipItFriday,0199c0de-0000-7000-8000-000d0000000b,The Retros; Ship It Friday (2012); copyright risk
+references,LeanSoftware,0199c0de-0000-7000-8000-000d0000000c,Poppendieck; Lean Software Development (2003); not cited
+referenceUses,BeckXpCh3Sc1,0199c0de-0000-7000-8000-000e00000001,Paraphrase
+referenceUses,AgileManifestoWebCh3Sc2,0199c0de-0000-7000-8000-000e00000002,Quote; 7 words
+referenceUses,GoodhartMonetaryCh4Sc1,0199c0de-0000-7000-8000-000e00000003,Quote
+referenceUses,GoodhartMonetaryCh5Sc2,0199c0de-0000-7000-8000-000e00000004,Paraphrase
+referenceUses,VelocityTrapCh4Sc1,0199c0de-0000-7000-8000-000e00000005,Quote; 214 words; pp. 41-43
+referenceUses,VelocityTrapCh8Sc1,0199c0de-0000-7000-8000-000e00000006,Quote; 128 words; p. 118
+referenceUses,ConwayCommitteesCh4Sc2,0199c0de-0000-7000-8000-000e00000007,Quote
+referenceUses,ConwayCommitteesCh9Sc1,0199c0de-0000-7000-8000-000e00000008,Paraphrase
+referenceUses,CaganEmpoweredCh5Sc1,0199c0de-0000-7000-8000-000e00000009,Paraphrase
+referenceUses,DoraReport2024Ch5Sc2,0199c0de-0000-7000-8000-000e0000000a,Data; Table 5.1
+referenceUses,AccelerateCh5Sc2,0199c0de-0000-7000-8000-000e0000000b,Paraphrase; new since sign-off
+referenceUses,AccelerateCh7Sc1,0199c0de-0000-7000-8000-000e0000000c,Paraphrase
+referenceUses,TeamTopologiesCh9Sc1,0199c0de-0000-7000-8000-000e0000000d,Figure
+referenceUses,MythicalManMonthCh9Sc1,0199c0de-0000-7000-8000-000e0000000e,Quote
+referenceUses,ShipItFridayCh10Sc1,0199c0de-0000-7000-8000-000e0000000f,Lyric; epigraph
+quoteFlags,Ch6Sc1UnmarkedQuote,0199c0de-0000-7000-8000-000f00000001,f1: quotation marks with no marker
+quoteFlags,Ch8Sc1VelocityTrapMatch,0199c0de-0000-7000-8000-000f00000002,f2: 34-word passage; 93% match; p. 112
+permissionRequests,TeamTopologies,0199c0de-0000-7000-8000-001000000001,Asked 3 Oct; no reply
+assets,PlayersGuideFigure,0199c0de-0000-7000-8000-001100000001,Low-dpi image
+figures,PlayersGuideFigure,0199c0de-0000-7000-8000-001200000001,Figure placed in the Players Guide figure scene

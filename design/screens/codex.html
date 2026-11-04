@@ -1,0 +1,1296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Codex · Knowledge base (reference)</title>
+<!--
+  Reference implementation of the Knowledge base entry window (#3) inside the book workspace chrome (#6).
+  Open directly in a browser. Uses ../tokens.css only; no build step.
+  The sidebar is the same Knowledge base as plan.html and write.html. Clicking an entry (or New Entry, or a
+  Codex mention in the manuscript) opens the entry window over the main area; the sidebar stays live, so
+  another click switches entry. Working: category picker, rename (the e:id never changes),
+  aliases, summary, long-form content with headings, quotes, lists and "@" mentions, category fields,
+  custom fields, linked source (#2), related entries, Used in (every scene that touches the entry, by kind, with Make mention and Unlink), Timeline
+  (Codex Additions in book order, editable, add at any scene), prev/next, expand, duplicate, delete with
+  undo, simulated autosave, deep links (codex.html#goodhart, #new).
+  The manuscript behind the window is a static stand-in for write.html, so its marks stay in step with edits.
+  The "Preview" panel bottom-left is a review aid, not part of the design.
+-->
+<link rel="stylesheet" href="../tokens.css">
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--color-bg); color: var(--color-text); font: var(--text-base)/var(--leading) var(--font-sans); -webkit-font-smoothing: antialiased; display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+button, input { font: inherit; color: inherit; }
+svg { flex: none; }
+.spacer { flex: 1; }
+.dim-t { color: var(--color-muted); }
+
+/* Shared controls (same as write.html) */
+.btn { display: inline-flex; align-items: center; gap: 5px; height: var(--control-height); padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: var(--color-surface); font-size: var(--text-sm); font-weight: var(--weight-medium); cursor: pointer; white-space: nowrap; text-decoration: none; color: var(--color-text); }
+.btn:hover { background: var(--color-surface-2); }
+.btn.primary { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-accent-fg); }
+.btn.primary:hover { filter: brightness(1.07); }
+.btn.danger { background: var(--color-danger); border-color: var(--color-danger); color: var(--color-accent-fg); }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--color-surface-2); }
+.btn svg, .seg svg, .ib svg, .mini svg { width: 13px; height: 13px; }
+.btn:focus-visible, .seg button:focus-visible, .ib:focus-visible, .mini:focus-visible, .tab:focus-visible, .ktab:focus-visible, .search:focus-within, .entry:focus-visible, .catsel:focus-visible, .sel:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.search { display: flex; align-items: center; gap: 6px; height: var(--control-height); width: 200px; max-width: 100%; padding: 0 var(--space-2); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); }
+.search svg { width: 13px; height: 13px; color: var(--color-muted); }
+.search input { flex: 1; min-width: 0; border: 0; background: transparent; outline: 0; font-size: var(--text-sm); }
+.search input::placeholder { color: var(--color-muted); }
+.sel { display: inline-flex; align-items: center; gap: 4px; height: var(--control-height); padding: 0 var(--space-2); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); font-size: var(--text-sm); white-space: nowrap; cursor: pointer; min-width: 0; }
+.sel em { font-style: normal; color: var(--color-muted); }
+.sel svg { width: 11px; height: 11px; color: var(--color-muted); }
+.seg { display: inline-flex; height: var(--control-height); border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; background: var(--color-surface); }
+.seg button { display: inline-flex; align-items: center; gap: 4px; padding: 0 9px; border: 0; border-right: 1px solid var(--color-border); background: transparent; color: var(--color-muted); font-size: var(--text-sm); cursor: pointer; font-variant-numeric: tabular-nums; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--color-accent-soft); color: var(--color-text); font-weight: var(--weight-semibold); }
+.overline { font-size: var(--text-2xs); font-weight: var(--weight-medium); color: var(--color-muted); text-transform: uppercase; letter-spacing: .02em; }
+.ib { display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--color-muted); cursor: pointer; }
+.ib:hover { background: var(--color-surface-2); color: var(--color-text); }
+.ib:disabled { opacity: .35; cursor: default; background: none; }
+.cover.thumb { width: 20px; aspect-ratio: 2 / 3; border-radius: 2px; background: linear-gradient(160deg, #05070d, #0d1a2b); box-shadow: 0 0 0 1px rgb(0 0 0 / .15); flex: none; }
+.mini { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 6px; border: 0; border-radius: var(--radius-xs); background: none; color: var(--color-muted); font-size: var(--text-xs); font-weight: var(--weight-medium); cursor: pointer; white-space: nowrap; text-decoration: none; }
+.mini:hover { background: var(--color-surface-2); color: var(--color-text); }
+.mini svg { width: 11px; height: 11px; }
+.vr { width: 1px; height: 16px; background: var(--color-border); margin: 0 2px; flex: none; }
+
+/* Book header (#6 shared chrome, same as write.html) */
+.bookbar { height: var(--bar-height); flex: none; display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); background: var(--color-surface); border-bottom: 1px solid var(--color-border); min-width: 0; }
+.book-id { display: flex; align-items: center; gap: 7px; min-width: 0; padding-right: var(--space-2); border-right: 1px solid var(--color-border); height: 100%; }
+.book-id .t { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+.book-id b { font-size: var(--text-sm); font-weight: var(--weight-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+.book-id span { font-size: var(--text-2xs); color: var(--color-muted); white-space: nowrap; }
+.tabs { display: flex; height: 100%; }
+.tab { position: relative; display: inline-flex; align-items: center; padding: 0 10px; border: 0; background: none; color: var(--color-muted); font-size: var(--text-sm); font-weight: var(--weight-medium); cursor: pointer; text-decoration: none; }
+.tab:hover { color: var(--color-text); }
+.tab[aria-selected="true"] { color: var(--color-text); font-weight: var(--weight-semibold); }
+.tab[aria-selected="true"]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--color-accent); }
+.sync { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; }
+.sync i { width: 6px; height: 6px; border-radius: 50%; background: var(--color-ok); }
+.sync[data-s="editing"] i { background: var(--color-warn); }
+.sync[data-s="saving"] i { background: var(--color-accent); animation: pulse .7s ease-in-out infinite alternate; }
+@keyframes pulse { to { opacity: .25; } }
+.avatar { width: 22px; height: 22px; border-radius: 50%; background: var(--color-accent-soft); color: var(--color-accent); font-size: 10px; font-weight: 700; display: grid; place-items: center; flex: none; }
+
+/* Workspace */
+.ws { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); }
+.ws.no-side { grid-template-columns: minmax(0, 1fr); }
+.ws.no-side .side { display: none; }
+
+/* Sidebar: Knowledge base (same as write.html; here a click opens the entry window) */
+.side { min-height: 0; display: flex; flex-direction: column; background: var(--color-surface); border-right: 1px solid var(--color-border); }
+.side-h { padding: 10px var(--space-3) 0; font-size: var(--text-md); font-weight: var(--weight-semibold); }
+.side-tools { display: flex; gap: 6px; padding: var(--space-2); }
+.side-tools .search { width: auto; flex: 1; }
+.side-new { padding: 0 var(--space-2) var(--space-2); }
+.side-new .btn { width: 100%; justify-content: center; }
+.side-list { flex: 1; overflow: auto; padding: 0 var(--space-1) var(--space-3); }
+.cat-h { display: flex; align-items: center; gap: 6px; padding: 10px 6px 4px; font-size: var(--text-2xs); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .04em; color: var(--color-muted); }
+.cat-h i, .dot { width: 7px; height: 7px; border-radius: 2px; background: var(--cat); flex: none; }
+.cat-h .ib { width: 18px; height: 18px; margin: -4px -2px -4px 0; }
+.cat-h .ib svg { width: 11px; height: 11px; }
+@media (hover: hover) { .cat-h .ib { opacity: 0; } .cat-h:hover .ib, .cat-h .ib:focus-visible { opacity: 1; } }
+.entry { width: 100%; display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 6px; border: 0; border-radius: var(--radius-sm); background: none; font-size: var(--text-sm); text-align: left; cursor: pointer; }
+.entry:hover { background: var(--color-surface-2); }
+.entry[aria-pressed="true"] { background: var(--color-accent-soft); font-weight: var(--weight-medium); }
+.entry .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.entry .n:empty::before { content: "Untitled entry"; font-style: italic; color: var(--color-muted); }
+.entry .u { font-size: var(--text-2xs); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.side-empty { padding: var(--space-5) var(--space-3); text-align: center; color: var(--color-muted); font-size: var(--text-sm); }
+
+/* Main area: a static stand-in for the Write manuscript behind the entry window */
+.main { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.toolbar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--space-2); min-height: calc(var(--control-height) + 2 * var(--space-2)); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--color-border); }
+.crumb { font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; }
+.hl-chip { display: inline-flex; align-items: center; gap: 6px; height: var(--control-height); padding: 0 4px 0 9px; border-radius: var(--radius-sm); background: var(--color-accent-soft); font-size: var(--text-sm); white-space: nowrap; }
+.hl-chip .dim-t { font-size: var(--text-xs); }
+.doc { flex: 1; min-height: 0; overflow: auto; container-type: inline-size; }
+.page { padding: var(--space-3) var(--space-5) 30vh; }
+.row { display: grid; grid-template-columns: minmax(0, var(--prose-width)) minmax(180px, var(--gutter-width)); gap: 0 40px; justify-content: center; }
+.act-mark { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-5) 0 var(--space-2); font-size: var(--text-2xs); font-weight: var(--weight-semibold); color: var(--color-muted); text-transform: uppercase; letter-spacing: .06em; }
+.act-mark::after { content: ""; flex: 1; height: 1px; background: var(--color-border); }
+.chapter + .chapter { border-top: 1px dashed var(--color-border); margin-top: var(--space-5); padding-top: var(--space-3); }
+.ch-h { padding: var(--space-3) 0 var(--space-4); }
+.ch-h h2 { margin: 2px 0 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); line-height: 1.3; }
+.ed { font-size: var(--text-md); line-height: var(--leading-prose); overflow-wrap: break-word; }
+.ed p, .ed blockquote { margin: 0 0 .85em; }
+.ed .empty-p { color: var(--color-muted); font-style: italic; }
+.scene-main > * + * { margin-top: var(--space-3); }
+.beat-line { display: flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 8px; border: 1px dashed var(--color-border); border-radius: var(--radius-md); font-size: var(--text-xs); color: var(--color-muted); min-width: 0; }
+.beat-line b { color: var(--color-text); font-weight: var(--weight-medium); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kind { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-2xs); font-weight: var(--weight-semibold); color: var(--color-muted); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+.kind svg { width: 13px; height: 13px; }
+.beat-line .kind { color: var(--color-accent); }
+.card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-raised); }
+.addition { border-left: 3px solid var(--cat); padding: 6px 10px 8px; }
+.addition .kind { color: var(--cat); }
+.addition .add-h { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.addition .add-b { font-size: var(--text-base); }
+.divider { display: grid; place-items: center; height: 48px; color: var(--color-muted); }
+.divider svg { width: 120px; height: 12px; }
+.gutter { min-width: 0; font-size: var(--text-sm); }
+.g-in { position: sticky; top: var(--space-3); padding-top: 2px; }
+.g-sum { color: var(--color-muted); white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 2px; }
+.g-links { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.scene.hit .g-in { box-shadow: -2px 0 0 var(--color-accent); padding-left: 8px; }
+.scene.flash .scene-main { animation: flash 1.2s ease-out; border-radius: var(--radius-sm); }
+@keyframes flash { from { box-shadow: 0 0 0 4px var(--color-accent-soft); background: var(--color-accent-soft); } }
+@container (max-width: 760px) {
+  .row { grid-template-columns: minmax(0, 1fr); }
+  .gutter { order: -1; margin-bottom: var(--space-2); }
+  .g-in { position: static; }
+  .page { padding-left: var(--space-4); padding-right: var(--space-4); }
+}
+
+/* Inline marks (same as write.html): Codex mention, Codex alias match, chapter ref, source ref */
+.mention, .cx { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: 4px; background: color-mix(in srgb, var(--cat) 14%, transparent); color: var(--color-text); font-size: .92em; font-weight: var(--weight-medium); line-height: 1.55; white-space: nowrap; cursor: pointer; vertical-align: baseline; }
+.mention { display: inline; box-shadow: inset 0 -1.5px 0 var(--cat); border-radius: 3px 3px 0 0; padding: 0 3px; font-size: 1em; }
+.cx { height: 19px; font-size: var(--text-2xs); }
+.cx i { width: 6px; height: 6px; border-radius: 2px; background: var(--cat); }
+.cx b { font-weight: inherit; }
+.cx .x { display: none; margin-right: -3px; padding: 0; border: 0; background: none; color: var(--color-muted); cursor: pointer; font-size: 12px; line-height: 1; }
+.cx:hover .x, .cx:focus-within .x { display: inline; }
+.auto { text-decoration: underline dotted var(--cat); text-decoration-thickness: 1.5px; text-underline-offset: 3px; cursor: pointer; }
+.mention.hl, .auto.hl { background: color-mix(in srgb, var(--cat) 30%, transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--cat) 30%, transparent); border-radius: 3px; }
+.chref { display: inline; padding: 0 4px; border-radius: 3px; background: var(--color-surface-2); color: var(--color-accent); font-weight: var(--weight-medium); white-space: nowrap; }
+.chref::before { content: "§ "; color: var(--color-muted); font-weight: var(--weight-regular); }
+.refm { display: inline-block; min-width: 14px; padding: 0 3px; margin-left: 1px; border-radius: 3px; background: color-mix(in srgb, var(--tone) 16%, transparent); color: var(--tone); font-size: var(--text-2xs); font-weight: var(--weight-semibold); line-height: 1.4; text-align: center; vertical-align: super; font-variant-numeric: tabular-nums; }
+
+/* ---------- Entry window (#3) ---------- */
+.scrim { position: absolute; inset: 0; z-index: 15; display: none; background: color-mix(in srgb, var(--color-bg) 62%, transparent); }
+.scrim.open { display: block; }
+.kb { position: absolute; z-index: 16; top: var(--space-4); bottom: var(--space-4); left: 50%; width: min(var(--overlay-width), calc(100% - 2 * var(--space-4))); transform: translateX(-50%); display: none; flex-direction: column; min-height: 0; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-raised), 0 24px 56px -24px rgb(0 0 0 / .45); overflow: hidden; container-type: inline-size; }
+.kb:focus { outline: 0; }
+.kb.open { display: flex; animation: kbIn .14s ease-out; }
+.kb.expanded { top: 0; bottom: 0; left: 0; width: 100%; transform: none; border: 0; border-radius: 0; box-shadow: none; animation: none; }
+@keyframes kbIn { from { opacity: 0; transform: translateX(-50%) translateY(6px); } }
+.kb::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--cat); }
+.kb.expanded::before { display: none; }
+
+.kb-top { flex: none; display: flex; align-items: center; gap: 4px; padding: 10px var(--space-3) 0 var(--space-4); min-width: 0; }
+.catsel { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 7px 0 8px; border: 0; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--cat) 14%, transparent); font-size: var(--text-xs); font-weight: var(--weight-semibold); cursor: pointer; white-space: nowrap; }
+.catsel i { width: 7px; height: 7px; border-radius: 2px; background: var(--cat); }
+.catsel svg { width: 10px; height: 10px; color: var(--color-muted); }
+.kb-pos { font-size: var(--text-xs); color: var(--color-muted); font-variant-numeric: tabular-nums; white-space: nowrap; padding: 0 4px; }
+
+.kb-head { flex: none; padding: var(--space-2) var(--space-4) 0; }
+.kb-name { margin: 0; padding: 1px 4px; margin-left: -4px; font-size: var(--text-lg); font-weight: var(--weight-semibold); line-height: 1.3; outline: 0; border-radius: var(--radius-xs); overflow-wrap: anywhere; }
+.kb-name:empty::before { content: attr(data-placeholder); color: var(--color-muted); font-weight: var(--weight-regular); }
+.kb-alias { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 26px; margin-top: 2px; font-size: var(--text-xs); }
+.kb-alias > .dim-t { margin-right: 2px; }
+.alias { display: inline-flex; align-items: center; gap: 3px; height: 19px; padding: 0 3px 0 7px; border-radius: 10px; background: var(--color-surface-2); font-size: var(--text-xs); white-space: nowrap; }
+.alias button { display: inline-grid; place-items: center; width: 14px; height: 14px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--color-muted); cursor: pointer; font-size: 12px; line-height: 1; }
+.alias button:hover { background: var(--color-border); color: var(--color-text); }
+.alias-in { height: 20px; width: 140px; padding: 0 7px; border: 1px solid var(--color-accent); border-radius: 10px; background: var(--color-bg); outline: 0; font-size: var(--text-xs); }
+
+.kb-tabs { flex: none; display: flex; align-items: flex-end; gap: 2px; padding: 0 var(--space-3) 0 var(--space-3); border-bottom: 1px solid var(--color-border); min-width: 0; }
+.ktab { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px; border: 0; background: none; color: var(--color-muted); font-size: var(--text-sm); font-weight: var(--weight-medium); cursor: pointer; white-space: nowrap; }
+.ktab:hover { color: var(--color-text); }
+.ktab[aria-selected="true"] { color: var(--color-text); font-weight: var(--weight-semibold); }
+.ktab[aria-selected="true"]::after { content: ""; position: absolute; left: 6px; right: 6px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--color-accent); }
+.ktab .n { min-width: 16px; height: 16px; padding: 0 5px; border-radius: 8px; background: var(--color-surface-2); font-size: var(--text-2xs); font-weight: var(--weight-semibold); line-height: 16px; text-align: center; font-variant-numeric: tabular-nums; }
+.kb-tabs .eid { align-self: center; display: inline-flex; align-items: center; gap: 2px; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-muted); white-space: nowrap; min-width: 0; overflow: hidden; }
+
+.kb-body { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: minmax(0, 1fr) var(--gutter-width); align-items: start; }
+.kb-main { min-width: 0; padding: var(--space-4) var(--space-5) var(--space-5) var(--space-4); }
+.kb.expanded .kb-main { padding-left: max(var(--space-4), calc((100% - var(--prose-width)) / 2)); }
+.kb-rail { position: sticky; top: 0; min-width: 0; align-self: stretch; padding: var(--space-4) var(--space-4) var(--space-5) var(--space-3); border-left: 1px solid var(--color-border); background: color-mix(in srgb, var(--color-surface-2) 30%, var(--color-surface)); }
+@container (max-width: 680px) {
+  .kb-body { grid-template-columns: minmax(0, 1fr); }
+  .kb-rail { position: static; border-left: 0; border-top: 1px solid var(--color-border); padding-left: var(--space-4); }
+  .kb-main { padding-right: var(--space-4); }
+  .kb-tabs .eid { display: none; }
+}
+
+/* Entry tab */
+.sec-h { display: flex; align-items: center; gap: 6px; min-height: 24px; margin-bottom: 4px; }
+.sec-h .overline { font-weight: var(--weight-semibold); }
+.sec-h .hint { font-size: var(--text-xs); color: var(--color-muted); }
+.kb-sum { padding: 6px 8px; margin: 0 -8px; border-radius: var(--radius-sm); font-size: var(--text-base); outline: 0; min-height: 2.2em; overflow-wrap: anywhere; }
+.kb-sum:empty::before, .kb-ed.empty::before, .fv:empty::before, .fk:empty::before, .prog-t:empty::before { content: attr(data-placeholder); color: var(--color-muted); font-style: italic; pointer-events: none; }
+.kb-sum:hover, .fv:hover, .fk:hover, .prog-t:hover, .kb-name:hover { background: color-mix(in srgb, var(--color-surface-2) 60%, transparent); }
+.kb-sum:focus, .fv:focus, .fk:focus, .prog-t:focus, .kb-name:focus { background: var(--color-surface); box-shadow: 0 0 0 2px var(--color-accent); }
+.content-sec { margin-top: var(--space-4); }
+.fbar { display: inline-flex; align-items: center; gap: 1px; margin-left: 4px; }
+.fbar .ib { width: 24px; height: 22px; font-size: var(--text-xs); font-weight: var(--weight-semibold); }
+.kb-ed { position: relative; max-width: var(--prose-width); min-height: 160px; padding: var(--space-2) 0; outline: 0; font-size: var(--text-md); line-height: var(--leading-prose); overflow-wrap: break-word; border-top: 1px solid var(--color-border); }
+.kb-ed.empty::before { position: absolute; left: 0; top: var(--space-2); }
+.kb-ed p, .kb-ed ul, .kb-ed blockquote { margin: 0 0 .8em; }
+.kb-ed ul { padding-left: 1.3em; }
+.kb-ed li + li { margin-top: .15em; }
+.kb-ed h3 { margin: 1.1em 0 .35em; font-size: var(--text-md); font-weight: var(--weight-semibold); line-height: 1.4; }
+.kb-ed h3:first-child { margin-top: 0; }
+.kb-ed blockquote { padding-left: var(--space-3); border-left: 3px solid var(--cat); color: var(--color-muted); }
+.kb-ed .mention { cursor: pointer; }
+.ed-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; max-width: var(--prose-width); padding-top: var(--space-2); border-top: 1px solid var(--color-border); font-size: var(--text-xs); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.import { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: var(--space-2); font-size: var(--text-xs); color: var(--color-muted); }
+
+/* Used in tab */
+.use-sum { display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--space-2); margin-bottom: var(--space-3); font-size: var(--text-sm); }
+.use-sum b { font-weight: var(--weight-semibold); }
+.use-ch { margin-top: var(--space-3); padding: 0 0 4px; border-bottom: 1px solid var(--color-border); display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.use-ch b { font-size: var(--text-sm); font-weight: var(--weight-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.use { padding: var(--space-2) 0 var(--space-2); border-bottom: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent); }
+.use-h { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-height: 22px; }
+.use-h .sn { font-size: var(--text-xs); font-weight: var(--weight-semibold); white-space: nowrap; }
+.kchip { display: inline-flex; align-items: center; gap: 3px; height: 17px; padding: 0 6px; border-radius: 9px; background: var(--color-surface-2); font-size: var(--text-2xs); font-weight: var(--weight-medium); color: var(--color-muted); white-space: nowrap; }
+.kchip.strong { background: color-mix(in srgb, var(--cat) 14%, transparent); color: var(--color-text); }
+.kchip.weak { background: none; box-shadow: inset 0 0 0 1px var(--color-border); }
+.use-snip { margin-top: 4px; font-size: var(--text-sm); line-height: 1.55; color: var(--color-muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.use-snip .mention, .use-snip .auto { color: var(--color-text); }
+.use-fix { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; font-size: var(--text-xs); color: var(--color-muted); }
+
+/* Timeline tab: the entry's Codex Additions (dated notes) in book order */
+.prog-intro { margin: 0 0 var(--space-3); font-size: var(--text-sm); color: var(--color-muted); max-width: 60ch; }
+.tl { position: relative; padding-left: 20px; }
+.tl::before { content: ""; position: absolute; left: 5px; top: 8px; bottom: 8px; width: 2px; border-radius: 1px; background: color-mix(in srgb, var(--cat) 35%, var(--color-border)); }
+.tl-i { position: relative; padding: 2px 0 var(--space-3); }
+.tl-i::before { content: ""; position: absolute; left: -19px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: var(--color-surface); box-shadow: inset 0 0 0 2px var(--cat); }
+.tl-i.start::before { background: var(--cat); }
+.tl-i.add::before { box-shadow: inset 0 0 0 1.5px var(--color-muted); border: 0; }
+.tl-h { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-height: 22px; }
+.tl-h .overline { font-weight: var(--weight-semibold); color: var(--color-text); }
+.tl-h .ctx { font-size: var(--text-xs); color: var(--color-muted); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 120px; }
+.prog-t { padding: 4px 8px; margin: 2px -8px 0; border-radius: var(--radius-sm); font-size: var(--text-base); outline: 0; overflow-wrap: anywhere; }
+.tl-i.start .prog-t { color: var(--color-muted); }
+.prog-t:hover { cursor: text; }
+
+/* Rail: AI context, details, source, related */
+.rail-sec + .rail-sec { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--color-border); }
+.rail-h { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: var(--text-2xs); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .04em; color: var(--color-muted); }
+.rail-l { font-size: var(--text-xs); color: var(--color-muted); margin-bottom: 4px; }
+.rail-h .mini { margin-left: auto; text-transform: none; letter-spacing: 0; }
+.fields { display: grid; grid-template-columns: minmax(64px, auto) minmax(0, 1fr); gap: 2px var(--space-2); align-items: baseline; font-size: var(--text-sm); }
+.fk { font-size: var(--text-xs); color: var(--color-muted); padding: 3px 4px; margin-left: -4px; border-radius: var(--radius-xs); outline: 0; overflow-wrap: anywhere; }
+.fk:not([contenteditable]) { cursor: default; }
+.fk:not([contenteditable]):hover { background: none; }
+.fv { padding: 3px 4px; margin: 0 -4px; border-radius: var(--radius-xs); outline: 0; overflow-wrap: anywhere; min-width: 0; }
+.fv:empty::before { font-style: normal; }
+.src { display: flex; flex-direction: column; gap: 3px; font-size: var(--text-sm); }
+.src .st { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-xs); font-weight: var(--weight-medium); }
+.src .st i { width: 6px; height: 6px; border-radius: 50%; background: var(--tone); }
+.src-acts { display: flex; flex-wrap: wrap; gap: 2px; margin: 2px 0 0 -6px; }
+.rel { display: flex; flex-wrap: wrap; gap: 4px; }
+.rail-empty { font-size: var(--text-xs); color: var(--color-muted); font-style: italic; }
+.meta { font-size: var(--text-xs); color: var(--color-muted); line-height: 1.6; }
+
+/* Popover menu / picker (same as write.html) */
+#pop { position: fixed; z-index: 40; width: 236px; max-height: min(420px, calc(100vh - 16px)); display: none; flex-direction: column; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-raised), 0 12px 32px -12px rgb(0 0 0 / .35); overflow: hidden; }
+#pop.open { display: flex; }
+#pop.wide { width: 320px; }
+#pop .search { width: auto; margin: 6px; flex: none; }
+#pop .list { overflow: auto; padding: 0 4px 4px; }
+#pop .item { width: 100%; display: flex; align-items: center; gap: 7px; min-height: 28px; padding: 0 8px; border: 0; border-radius: var(--radius-sm); background: none; font-size: var(--text-sm); text-align: left; cursor: pointer; }
+#pop .item:hover, #pop .item.on { background: var(--color-accent-soft); }
+#pop .item .k { margin-left: auto; font-size: var(--text-2xs); color: var(--color-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+#pop .item .ck { margin-left: auto; color: var(--color-accent); }
+#pop .item.danger { color: var(--color-danger); }
+#pop .item:disabled { color: var(--color-muted); cursor: default; background: none; }
+#pop .item svg { width: 13px; height: 13px; color: var(--color-muted); }
+#pop .item.danger svg { color: inherit; }
+#pop .item .sub { display: block; font-size: var(--text-2xs); color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#pop .item.two { align-items: flex-start; flex-direction: column; justify-content: center; gap: 0; padding: 4px 8px; }
+#pop .sep { height: 1px; margin: 4px 0; background: var(--color-border); }
+#pop .cat-h { padding: 6px 8px 2px; }
+#pop .grp { padding: 8px 8px 2px; font-size: var(--text-2xs); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .04em; color: var(--color-muted); }
+#pop .card-in { padding: 10px 12px; font-size: var(--text-sm); }
+#pop .card-in h4 { margin: 0 0 2px; font-size: var(--text-md); font-weight: var(--weight-semibold); }
+#pop .card-in p { margin: 6px 0 0; color: var(--color-muted); }
+#pop .card-in .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+#pop .form { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; font-size: var(--text-sm); }
+#pop .form input[type="text"], #pop .form input[type="url"] { height: var(--control-height); padding: 0 8px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg); font-size: var(--text-sm); outline: 0; }
+#pop .form input:focus { border-color: var(--color-accent); }
+#pop .swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+#pop .sw { width: 22px; height: 22px; border-radius: var(--radius-sm); border: 2px solid transparent; background: var(--cat); cursor: pointer; padding: 0; }
+#pop .sw[aria-pressed="true"] { border-color: var(--color-text); }
+
+/* Toast */
+#toast { position: fixed; left: 50%; bottom: 16px; z-index: 50; transform: translateX(-50%) translateY(20px); opacity: 0; pointer-events: none; display: flex; align-items: center; gap: var(--space-3); max-width: calc(100vw - 32px); padding: 7px 8px 7px 12px; border-radius: var(--radius-md); background: var(--color-text); color: var(--color-bg); font-size: var(--text-sm); box-shadow: var(--shadow-raised); transition: .18s; }
+#toast.show { opacity: 1; transform: translateX(-50%); pointer-events: auto; }
+#toast code { font-family: var(--font-mono); font-size: var(--text-xs); opacity: .8; }
+#toast button { border: 0; background: none; color: inherit; font-weight: var(--weight-semibold); text-decoration: underline; cursor: pointer; font-size: var(--text-sm); }
+
+/* Review aid (not part of the design) */
+.preview { position: fixed; left: 12px; bottom: 12px; z-index: 20; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; max-width: calc(var(--sidebar-width) - 24px); padding: 6px 8px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); box-shadow: var(--shadow-raised); font-size: var(--text-xs); }
+.preview > b { color: var(--color-muted); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .05em; }
+.preview .seg { height: 24px; }
+.preview .seg button { padding: 0 7px; font-size: var(--text-xs); }
+
+@media (max-width: 900px) {
+  .sync .lbl-t, .book-id .t { display: none; }
+}
+@media (max-width: 720px) {
+  .ws:not(.no-side) { grid-template-columns: minmax(0, 1fr); }
+  .ws:not(.no-side) .side { position: fixed; z-index: 25; top: var(--bar-height); bottom: 0; left: 0; width: min(300px, 86vw); box-shadow: var(--shadow-raised); }
+  .bookbar .hide-sm { display: none; }
+  .kb, .kb.expanded { position: fixed; z-index: 30; top: var(--bar-height); bottom: 0; left: 0; width: 100%; transform: none; border: 0; border-radius: 0; animation: none; }
+  .kb [data-cmd="expand"] { display: none; }
+  .preview { display: none; }
+}
+</style>
+</head>
+<body>
+<header class="bookbar">
+  <button class="ib" aria-label="Back to Library" title="Back to Library"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3 5 8l5 5"/></svg></button>
+  <a class="ib" href="settings.html?book=pe" aria-label="Book settings" title="Book settings"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg></a>
+  <div class="book-id">
+    <div class="cover thumb"></div>
+    <div class="t"><b>Product Engineering</b><span>Joel Dickson</span></div>
+    <button class="ib" id="sideToggle" aria-label="Toggle sidebar" title="Toggle sidebar"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M6 3v10"/></svg></button>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="Mode">
+    <a class="tab" role="tab" aria-selected="false" href="plan.html">Plan</a>
+    <a class="tab" role="tab" aria-selected="true" href="write.html">Write</a>
+    <button class="tab hide-sm" role="tab" aria-selected="false">Chat</button>
+    <button class="tab hide-sm" role="tab" aria-selected="false">Review</button>
+  </nav>
+  <span class="spacer"></span>
+  <span class="sync" id="sync" data-s="saved" role="status" aria-live="polite"><i></i><span class="lbl-t">Saved</span></span>
+  <span class="avatar">JD</span>
+</header>
+
+<div class="ws" id="ws">
+  <aside class="side" aria-label="Book sidebar">
+    <div class="side-h">Knowledge base</div>
+    <div id="sideBody"></div>
+  </aside>
+  <main class="main" id="main">
+    <div class="toolbar"><span class="crumb">Full manuscript</span><span id="hl"></span></div>
+    <div class="doc" id="doc"><div class="page" id="page"></div></div>
+    <div class="scrim" id="scrim"></div>
+    <section class="kb" id="kb" tabindex="-1" role="dialog" aria-modal="false" aria-labelledby="kbName"></section>
+  </main>
+</div>
+
+<div id="pop" role="menu"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<div class="preview" aria-label="Preview controls (review aid)">
+  <b>Preview</b>
+  <div class="seg"><button data-theme-set="system">System</button><button data-theme-set="light">Light</button><button data-theme-set="dark">Dark</button></div>
+  <div class="seg"><button data-dens-set="compact">Compact</button><button data-dens-set="comfortable">Comfortable</button></div>
+</div>
+
+<script>
+// ---------- Sample data (same book as write.html, plus two Codex Additions for The Payments Rewrite) ----------
+const CATS = {
+  blog: { name: 'Blog Posts', color: 'blog' },
+  law: { name: 'Laws', color: 'law' },
+  story: { name: 'Stories', color: 'story' },
+  research: { name: 'Research', color: 'research' },
+  person: { name: 'People', color: 'person' },
+};
+// Category fields: each category has its own short fields, shown in the rail
+const FIELDS = {
+  blog: [['url', 'URL'], ['published', 'Published']],
+  law: [['origin', 'Coined by'], ['year', 'Year']],
+  story: [['when', 'When'], ['where', 'Where']],
+  research: [['authors', 'Authors'], ['year', 'Year']],
+  person: [['role', 'Role'], ['known', 'Known for']],
+};
+const E = (id, cat, name, aliases, summary, body, o = {}) => ({ id, cat, name, aliases, summary, body: Array.isArray(body) ? body.join('\n\n') : body, fields: o.fields || {}, extra: o.extra || [], related: o.related || [], source: o.source || null, created: o.created || '12 Mar', updated: o.updated || '3 days ago' });
+const ENTRIES = [
+  E('bad-scrum', 'blog', 'Signs of Bad Scrum', ['Bad Scrum'], 'Blog post: the rituals survive, the feedback loop does not. Twelve warning signs.', [
+    'The rituals survive; the feedback loop does not. This is the most-read post on the blog, and the reason Act 1 exists.',
+    '## Some of the warning signs',
+    '- Stand-ups are status reports to a manager.\n- The sprint goal is "finish the tickets".\n- Velocity is reported upward and compared between teams.\n- Retrospectives produce the same three actions every fortnight.\n- Nobody on the team has spoken to a customer this quarter.',
+    '## How the book uses it',
+    'The turning point of Act 1: Scrum the framework becomes Scrum the methodology, and [[e:goodhart]] takes over from there.',
+  ], { fields: { url: 'joeldickson.dev/signs-of-bad-scrum', published: 'March 2023' }, related: ['feature-factory', 'manifesto'], created: '2 Mar', updated: 'Yesterday' }),
+  E('feature-factory', 'blog', 'Feature Factory', ['feature factories', 'feature factory'], 'Blog post: teams measured by output shipped rather than outcomes changed.', [
+    'A feature factory measures success by what it ships, not by what changes for the customer. The roadmap is a list of features, the demo is the finish line, and nobody checks back a month later.',
+    'The fix is not a new process. It is asking, before work starts, what we expect to change and how we will know. [[e:cagan]] calls this the difference between a feature team and an empowered team.',
+  ], { fields: { url: 'joeldickson.dev/feature-factory', published: 'June 2022' }, related: ['bad-scrum', 'goodhart'] }),
+  E('no-estimates', 'blog', 'Why We Stopped Estimating', [], 'Blog post: what replaced story points on the payments team, and what it cost.', [
+    'We stopped estimating in story points in 2021. We sliced work to roughly the same size, counted how many slices we finished each week, and forecast from that.',
+    'It worked for the team. It did not work for one stakeholder, who wanted a date for every ticket and never forgave us.',
+  ], { fields: { url: 'joeldickson.dev/no-estimates', published: 'January 2024' }, related: ['payments'] }),
+  E('conway', 'law', "Conway's Law", ['Conway'], 'Organisations design systems that mirror their own communication structure.', [
+    '> Any organization that designs a system (defined broadly) will produce a design whose structure is a copy of the organization\'s communication structure.',
+    'The useful inverse: shape the teams for the architecture you want, because the architecture will follow the teams whether you plan it or not.',
+  ], { fields: { origin: 'Melvin Conway', year: '1968' }, related: ['brooks'] }),
+  E('goodhart', 'law', "Goodhart's Law", ['Goodhart'], 'When a measure becomes a target, it ceases to be a good measure.', [
+    'The popular wording comes from Marilyn Strathern. Goodhart\'s own 1975 version was about monetary policy: a statistical regularity collapses once you lean on it for control.',
+    '## In this book',
+    'Velocity, story points and tickets closed all start as honest measures and end as targets. The [[e:dora]] metrics hold up better because they describe the delivery system, not the effort of the people in it.',
+    'Define it in one sentence the first time it appears, then lean on it without explaining it again.',
+  ], { fields: { origin: 'Charles Goodhart; wording by Marilyn Strathern', year: '1975' }, related: ['feature-factory', 'dora'], updated: '2 hours ago' }),
+  E('brooks', 'law', "Brooks's Law", [], 'Adding people to a late software project makes it later.', [
+    'From The Mythical Man-Month. New people need time to become productive, and every person added increases the number of conversations the team has to have.',
+  ], { fields: { origin: 'Fred Brooks', year: '1975' }, related: ['conway'] }),
+  E('payments', 'story', 'The Payments Rewrite', ['payments rewrite'], 'Story: an 18-month rewrite that nobody had validated with a merchant.', [
+    'Eighteen months, a migration plan with forty-one steps, and no merchant interviews. The question that stopped it came at a quarterly review: when did any of us last talk to a merchant?',
+    '## Details to keep straight',
+    '- The team was six engineers and a product manager.\n- The review was in the second quarter of the second year.\n- Eleven complaints came back from the first interviews; nine were about one screen.',
+  ], { fields: { when: '2019–2020', where: 'Payments team' }, related: ['no-estimates', 'atlas'] }),
+  E('atlas', 'story', 'Team Atlas Offsite', ['Team Atlas'], 'Story: engineers run customer interviews for the first time.', [
+    'The spring offsite where the engineers on Team Atlas ran customer interviews themselves. The first question was a one-to-five rating of a feature; the answer was a long silence.',
+  ], { fields: { when: 'Spring 2021', where: 'Offsite, store visits' }, related: ['payments'] }),
+  E('dora', 'research', 'DORA Four Keys', ['DORA'], 'Deployment frequency, lead time, change failure rate, time to restore.', [
+    '- Deployment frequency: how often a change reaches production.\n- Lead time for changes: from commit to running in production.\n- Change failure rate: the share of deployments that cause a failure.\n- Time to restore service: how long recovery takes.',
+    'The first two measure speed, the last two stability. The research found that the best teams do well on both, so you do not have to trade one for the other.',
+  ], { fields: { authors: 'Forsgren, Humble, Kim', year: '2018' }, source: 'accelerate', related: ['goodhart'] }),
+  E('manifesto', 'research', 'Agile Manifesto (2001)', ['Agile Manifesto'], 'Four values and twelve principles, written at Snowbird in 2001.', [
+    'Written by seventeen practitioners at Snowbird, Utah, in February 2001. Four values and twelve principles, on a single page.',
+    'Quote the four values sparingly: the licence is not recorded yet (see References).',
+  ], { fields: { authors: 'Beck, Beedle, van Bennekum and others', year: '2001' }, source: 'manifesto', related: ['beck', 'bad-scrum'] }),
+  E('beck', 'person', 'Kent Beck', ['Kent Beck'], 'Creator of Extreme Programming; co-author of the Agile Manifesto.', [
+    'Created Extreme Programming in the late 1990s and wrote Extreme Programming Explained (1999). Popularised test-driven development. One of the seventeen authors of the [[e:manifesto]].',
+  ], { fields: { role: 'Software engineer, author', known: 'Extreme Programming, TDD' }, source: 'xp', related: ['manifesto'] }),
+  E('cagan', 'person', 'Marty Cagan', ['Cagan'], 'Author of Inspired and Empowered; product discovery advocate.', [
+    'Founder of Silicon Valley Product Group. Argues that teams should be given problems to solve, not features to build.',
+  ], { fields: { role: 'Product leader, SVPG', known: 'Inspired, Empowered' }, related: ['feature-factory'] }),
+];
+// Source references (#2): status drives the marker colour
+const REFS = [
+  { id: 'xp', title: 'Extreme Programming Explained (Beck, 1999)', kind: 'Book', st: 'ok' },
+  { id: 'manifesto', title: 'Manifesto for Agile Software Development (2001)', kind: 'Web page', st: 'warn' },
+  { id: 'accelerate', title: 'Accelerate (Forsgren, Humble & Kim, 2018)', kind: 'Book', st: 'ok' },
+];
+const REF_ST = { ok: ['ok', 'Cleared'], warn: ['warn', 'Needs check'], danger: ['danger', 'Copyright risk'] };
+
+let uid = 0;
+const id = p => p + (++uid);
+const slugify = s => s.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) || 'untitled';
+const para = t => Array.isArray(t) ? t.join('\n\n') : t;
+const P = text => ({ id: id('b'), kind: 'prose', text: para(text) });
+const B = (title, body, o = {}) => ({ id: id('b'), kind: 'beat', title, body, context: o.context || [], prose: para(o.prose || '') });
+const A = (entry, body) => ({ id: id('b'), kind: 'addition', entry, body });
+const sc = (summary, blocks = [], o = {}) => ({ id: id('s'), summary, codex: o.codex || [], blocks: blocks.length ? blocks : [P('')] });
+const ch = (title, scenes) => ({ id: id('c'), title, slug: slugify(title), scenes });
+const act = (title, chapters) => ({ id: id('a'), title, chapters });
+
+const state = {
+  acts: [
+    act('Introduction', [
+      ch('Preface', [sc('Why I wrote this: ten years of watching good teams ship the wrong thing, on time.', [P([
+        'For ten years I watched good teams ship the wrong thing, on time. They had the rituals: stand-ups at nine, two-week sprints, a burndown chart that sloped the right way. What they rarely had was a reason to care whether any of it worked for the people paying for it.',
+        'This book is about closing that gap. It is written for engineers who want to own the result and not only the ticket, and for the leaders who have to make room for them to do it.',
+      ])])]),
+      ch('About this book', [sc('Who it is for, how to read it, and what I mean by "product engineering".', [P([
+        'Each chapter stands on its own, but the argument builds. Act 1 explains how we got here, Act 2 describes the product engineer, and Act 3 covers the practices that keep one effective. If you are short on time, read [[ch:owning-outcomes]] and [[ch:shipping-small]] first.',
+        'When I say product engineering, I mean engineers who are accountable for an outcome a customer would recognise, not for an estimate a manager would.',
+      ])])]),
+      ch('A Brief History of Software Practice', [
+        sc('The beginnings in Agile (80s–00s): XP, [[e:beck]] and the shift to short feedback loops.', [
+          B('The early agile years.', 'Short history: XP, [[e:beck]], why feedback loops shortened. Keep it under 300 words.', { prose: [
+            'In the late nineties Kent Beck and a handful of others started writing down what the better teams already did: test first, release often, and sit with the customer. Extreme Programming read like a list of habits rather than a methodology, and that was the point.',
+            'The common thread was feedback. Every practice shortened the time between making a decision and finding out whether it was right.[[r:xp]]',
+          ] }),
+        ]),
+        sc('The [[e:manifesto]] and the rise of Scrum.', [P('By 2001 those habits had a name. The Agile Manifesto fitted on a single page and preferred individuals and interactions over processes and tools.[[r:manifesto]] Within a decade, Scrum had turned that page into a certification.')]),
+        sc('The gaining popularity of Scrum and the rise of "Scrum as a methodology", or "Bad Scrum".\n[[e:bad-scrum]]', [
+          B('Bad Scrum.', 'Describe the drift from Scrum as a framework to Scrum as a methodology. Use [[e:bad-scrum]] for the warning signs. Wry, not bitter.'),
+        ]),
+      ]),
+      ch('What Went Wrong', [
+        sc('Feature factories: measuring output because outcomes are hard. [[e:goodhart]]', [
+          A('goodhart', "The reader meets Goodhart's Law for the first time here. Define it in one sentence before leaning on it."),
+          B('Measuring output.', 'Feature factories measure what is easy to count. Tie velocity targets to [[e:goodhart]].', { context: ['feature-factory'] }),
+        ], { codex: ['feature-factory'] }),
+        sc('Org charts that ship themselves.', [], { codex: ['conway'] }),
+      ]),
+    ]),
+    act('The Product Engineer', [
+      ch('Owning Outcomes', [
+        sc('Engineers in discovery, with [[e:payments]] as the cautionary tale.', [
+          A('payments', 'Eighteen months in. The rewrite has not been shown to a single merchant, and the team does not know it yet.'),
+          B('Engineers in discovery.', 'Open with the moment the team realised nobody had talked to a merchant in six months. Use [[e:payments]].', { prose: [
+            'Eighteen months into the payments rewrite, someone asked a simple question at the quarterly review: when did any of us last talk to a merchant? Nobody could remember. We had a roadmap, a velocity chart and a migration plan with forty-one steps. We did not have a customer.',
+            '[[e:cagan]] describes the alternative as empowered teams: give engineers a problem to solve rather than a feature to build. We had read the book. We had not changed how we worked.',
+          ] }),
+          B('What changed.', 'Two engineers join the next round of merchant interviews. Short, concrete, no lessons yet.', { prose:
+            'The change was small. Two engineers joined the next round of merchant interviews, with no slides and no agenda. They came back with eleven complaints. Nine were about a screen we had planned to leave alone. The rest of this act is about what we did with that list, and [[ch:shipping-small]] picks up how we shipped it.',
+          }),
+        ], { codex: ['cagan'] }),
+        sc("Outcome metrics that don't rot.", [
+          B("Outcome metrics that don't rot.", 'Explain why output metrics decay. Contrast with [[e:dora]]. End on the question the reader should ask of their own dashboard.', { context: ['goodhart'] }),
+        ], { codex: ['dora', 'goodhart'] }),
+      ]),
+      ch("Discovery is Everyone's Job", [
+        sc('What happened at [[e:atlas]] when the engineers ran the customer interviews.', [P([
+          'The engineers on Team Atlas ran the customer interviews themselves for the first time at the spring offsite. It was not comfortable. One of them asked a store manager to rate a feature from one to five and got a long silence in reply.',
+          'By the third interview they had stopped asking about features altogether. They asked what the manager had done that morning, and wrote down everything.',
+        ])]),
+        sc(''),
+      ]),
+      ch('Shipping Small', [sc('Thin slices, feature flags, and why batch size is the strategy.', [
+        A('payments', 'The merchant complaints have shipped as eleven small releases. The rewrite is no longer one big launch.'),
+        P([
+          'Batch size is the strategy. A team that releases once a quarter has four chances a year to be wrong in public. A team that releases every working day has about two hundred and fifty, and each one costs almost nothing.[[r:accelerate]]',
+          'The merchant complaints from [[ch:owning-outcomes]] went out as eleven separate releases over three weeks, each behind a feature flag. Two were rolled back within an hour. Nobody outside the team noticed.',
+        ]),
+      ], { codex: ['dora'] })]),
+    ]),
+    act('Practices', [
+      ch('Estimation Without Theatre', [sc('[[e:no-estimates]]: what we did instead, and what it cost us.', [
+        B('What we did instead.', 'Walk through [[e:no-estimates]]: slicing to similar sizes, counting throughput, and the one stakeholder who never forgave us.'),
+      ])]),
+      ch('Teams and Topology', [sc('[[e:conway]] in practice: design the teams for the architecture you want.', [], { codex: ['brooks'] })]),
+      ch('Where to From Here', [sc('Closing: a reading list and an invitation.')]),
+    ]),
+  ],
+  side: true, sideQ: '', highlight: null,
+  kb: { open: false, id: null, tab: 'entry', expanded: false },
+};
+
+// ---------- Helpers ----------
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const entry = eid => ENTRIES.find(e => e.id === eid);
+const ref = rid => REFS.find(r => r.id === rid);
+const cv = cat => `var(--category-${CATS[cat].color})`;
+const TOKEN = /\[\[(e|ch|r):([\w-]+)\]\]/g;
+const allChapters = () => state.acts.flatMap(a => a.chapters);
+const allScenes = () => allChapters().flatMap(c => c.scenes);
+const chapterBySlug = slug => allChapters().find(c => c.slug === slug);
+const chapterNo = cid => allChapters().findIndex(c => c.id === cid) + 1;
+function where(sid) {
+  for (const c of allChapters()) { const i = c.scenes.findIndex(s => s.id === sid); if (i >= 0) return { c, s: c.scenes[i], n: chapterNo(c.id), sn: i + 1 }; }
+}
+const at = sid => { const w = where(sid); return `Chapter ${w.n} · Scene ${w.sn}`; };
+const plain = t => (t || '').replace(TOKEN, (_, k, v) => k === 'e' ? entry(v)?.name || '' : k === 'ch' ? `Chapter ${chapterNo(chapterBySlug(v)?.id)}` : '').replace(/^(> |## |- )/gm, '');
+const countWords = t => plain(t).split(/\s+/).filter(Boolean).length;
+const sceneText = s => s.blocks.map(b => b.kind === 'prose' ? b.text : b.kind === 'beat' ? b.prose : '').join('\n\n');
+const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const namesOf = e => [e.name, ...e.aliases].map(n => n.trim()).filter(Boolean);
+const aliasRe = e => namesOf(e).length ? new RegExp(`\\b(${namesOf(e).map(reEsc).join('|')})\\b`, 'i') : /(?!)/;
+const stripTokens = t => (t || '').replace(TOKEN, ' ');
+let AUTO;
+function buildAuto() {
+  const pairs = ENTRIES.flatMap(e => namesOf(e).map(n => [n, e.id])).sort((x, y) => y[0].length - x[0].length);
+  AUTO = pairs.length ? { re: new RegExp(`\\b(${pairs.map(p => reEsc(esc(p[0]))).join('|')})\\b`, 'gi'), map: new Map(pairs.map(([n, eid]) => [esc(n).toLowerCase(), eid])) } : null;
+}
+// Every Codex entry a scene touches: links, mentions, alias matches, beat context, additions
+function sceneRefs(s) {
+  const set = new Set(s.codex);
+  const text = [s.summary, sceneText(s), ...s.blocks.map(b => b.body || '')].join('\n');
+  for (const m of text.matchAll(TOKEN)) if (m[1] === 'e') set.add(m[2]);
+  const p = stripTokens(text);
+  ENTRIES.forEach(e => { if (aliasRe(e).test(p)) set.add(e.id); });
+  s.blocks.forEach(b => { (b.context || []).forEach(x => set.add(x)); if (b.entry) set.add(b.entry); });
+  return set;
+}
+const usage = eid => allScenes().filter(s => sceneRefs(s).has(eid)).length;
+// How a scene uses one entry, for the Used in tab
+const KIND = {
+  mention: ['Mention', 'Mentioned in the prose', 'strong'],
+  summary: ['Summary', 'Mentioned in the scene summary', 'strong'],
+  linked: ['Linked', 'Linked to the scene', 'strong'],
+  beat: ['Beat', 'Mentioned in a scene beat instruction', ''],
+  context: ['Beat context', 'Sent as context with a scene beat', ''],
+  addition: ['Timeline', 'A timeline note (Codex Addition) in this scene', ''],
+  text: ['Name in text', 'The name appears as plain text, not as a mention', 'weak'],
+};
+function usesIn(s, e) {
+  const tok = `[[e:${e.id}]]`, cnt = t => (t || '').split(tok).length - 1, out = [];
+  const m = cnt(sceneText(s)); if (m) out.push(['mention', m]);
+  if (cnt(s.summary)) out.push(['summary']);
+  if (s.codex.includes(e.id)) out.push(['linked']);
+  if (s.blocks.some(b => b.kind === 'beat' && cnt(b.body))) out.push(['beat']);
+  if (s.blocks.some(b => (b.context || []).includes(e.id))) out.push(['context']);
+  if (s.blocks.some(b => b.kind === 'addition' && b.entry === e.id)) out.push(['addition']);
+  if (aliasRe(e).test(stripTokens([s.summary, sceneText(s), ...s.blocks.filter(b => b.kind === 'beat').map(b => b.body)].join('\n')))) out.push(['text']);
+  return out;
+}
+// The sentence that best shows the entry in use
+function snippet(s, e) {
+  const tok = `[[e:${e.id}]]`, re = aliasRe(e);
+  const texts = [...s.blocks.flatMap(b => b.kind === 'prose' ? [b.text] : b.kind === 'beat' ? [b.prose, b.body] : b.entry === e.id ? [b.body] : []), s.summary];
+  for (const t of texts) for (const p of (t || '').split(/\n+/)) {
+    if (!p.includes(tok) && !re.test(stripTokens(p))) continue;
+    return p.split(/(?<=[.!?])\s+(?=[A-Z[])/).find(x => x.includes(tok) || re.test(stripTokens(x))) || p;
+  }
+  return s.summary || '';
+}
+// Codex Additions for an entry, in book order
+const additions = eid => allScenes().flatMap(s => s.blocks.filter(b => b.kind === 'addition' && b.entry === eid).map(b => ({ s, b })));
+function sideOrder() {
+  const q = state.sideQ.trim().toLowerCase();
+  return Object.keys(CATS).flatMap(cat => ENTRIES.filter(e => e.cat === cat && (!q || [e.name, ...e.aliases, e.summary].join(' ').toLowerCase().includes(q))));
+}
+
+const I = {
+  plus: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3v10M3 8h10"/></svg>',
+  chev: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6 4 4 4-4"/></svg>',
+  up: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 10 4-4 4 4"/></svg>',
+  down: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6 4 4 4-4"/></svg>',
+  x: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 4 8 8M12 4l-8 8"/></svg>',
+  more: '<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="12.5" cy="8" r="1.3"/></svg>',
+  expand: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9"/></svg>',
+  collapse: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13.5 6.5h-4v-4M2.5 9.5h4v4M9.5 6.5l4-4M6.5 9.5l-4 4"/></svg>',
+  db: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><ellipse cx="8" cy="3.8" rx="5" ry="1.8"/><path d="M3 3.8v8.4c0 1 2.2 1.8 5 1.8s5-.8 5-1.8V3.8M3 8c0 1 2.2 1.8 5 1.8s5-.8 5-1.8"/></svg>',
+  beat: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8.5h3l2-5 3 9 2-4h3"/></svg>',
+  copy: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></svg>',
+  dup: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="2.5" width="8" height="8" rx="1.5"/><path d="M13.5 5.5v7a1 1 0 0 1-1 1h-7"/></svg>',
+  trash: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg>',
+  quote: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v10M6.5 5h7M6.5 8h7M6.5 11h4"/></svg>',
+  list: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 4h7.5M6 8h7.5M6 12h7.5"/><circle cx="3" cy="4" r=".9" fill="currentColor"/><circle cx="3" cy="8" r=".9" fill="currentColor"/><circle cx="3" cy="12" r=".9" fill="currentColor"/></svg>',
+  at: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.5"/><path d="M10.5 8v1.2a1.8 1.8 0 0 0 3.5 0V8a6 6 0 1 0-2.4 4.8"/></svg>',
+  link: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6.5 9.5l3-3M7 4.5l1-1a2.8 2.8 0 0 1 4 4l-1 1M9 11.5l-1 1a2.8 2.8 0 0 1-4-4l1-1"/></svg>',
+  open: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 2.5h4.5V7M13.5 2.5 7.5 8.5M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3"/></svg>',
+  eye: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 8s2.2-4.5 6-4.5S14 8 14 8s-2.2 4.5-6 4.5S2 8 2 8z"/><circle cx="8" cy="8" r="1.8"/></svg>',
+  search: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>',
+  check: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 8.5 3 3 7-7"/></svg>',
+  globe: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c1.8 1.7 2.6 3.7 2.6 6S9.8 12.3 8 14c-1.8-1.7-2.6-3.7-2.6-6S6.2 3.7 8 2z"/></svg>',
+};
+const ORNAMENT = '<svg viewBox="0 0 120 12" fill="none" stroke="currentColor" stroke-width="1"><path d="M2 6h44M74 6h44"/><circle cx="50" cy="6" r="1.6" fill="currentColor"/><circle cx="70" cy="6" r="1.6" fill="currentColor"/><path d="M60 1.5 64.5 6 60 10.5 55.5 6z"/></svg>';
+
+// ---------- Rendering: inline text (same marks as write.html) ----------
+const mention = eid => { const e = entry(eid); return e ? `<span class="mention" contenteditable="false" data-e="${eid}" style="--cat:${cv(e.cat)}" title="${esc(e.name)} · ${esc(CATS[e.cat].name)}">${esc(e.name || 'Untitled entry')}</span>` : ''; };
+function chref(slug) { const c = chapterBySlug(slug); return `<span class="chref" title="ch:${slug}">${c ? `Chapter ${chapterNo(c.id)}` : 'Missing chapter'}</span>`; }
+let refOrder = new Map();
+function computeRefOrder() { refOrder = new Map(); allScenes().forEach(s => { for (const m of sceneText(s).matchAll(TOKEN)) if (m[1] === 'r' && !refOrder.has(m[2])) refOrder.set(m[2], refOrder.size + 1); }); }
+const refMark = rid => { const r = ref(rid); return r ? `<sup class="refm" style="--tone:var(--color-${REF_ST[r.st][0]})" title="${esc(r.title)}">${refOrder.get(rid) || '?'}</sup>` : ''; };
+const autoMark = t => AUTO ? t.replace(AUTO.re, m => { const eid = AUTO.map.get(m.toLowerCase()), e = entry(eid); return e ? `<span class="auto" data-e="${eid}" style="--cat:${cv(e.cat)}" title="${esc(e.name)} · ${esc(CATS[e.cat].name)}">${m}</span>` : m; }) : t;
+function inline(s, auto = true) {
+  let out = '', last = 0;
+  const seg = t => auto ? autoMark(esc(t)) : esc(t);
+  for (const m of (s || '').matchAll(TOKEN)) {
+    out += seg(s.slice(last, m.index));
+    out += m[1] === 'e' ? mention(m[2]) : m[1] === 'ch' ? chref(m[2]) : refMark(m[2]);
+    last = m.index + m[0].length;
+  }
+  return out + seg((s || '').slice(last));
+}
+const proseHTML = t => t ? t.split(/\n{2,}/).map(p => `<p>${inline(p)}</p>`).join('') : '<p class="empty-p">Nothing written yet.</p>';
+// Entry content: paragraphs, "## " headings, "> " quotes and "- " lists
+const mdHTML = t => (t ? t.split(/\n{2,}/) : []).map(p => p.startsWith('## ') ? `<h3>${inline(p.slice(3), false)}</h3>`
+  : p.startsWith('> ') ? `<blockquote>${inline(p.slice(2), false)}</blockquote>`
+  : p.startsWith('- ') ? `<ul>${p.split('\n').map(l => `<li>${inline(l.replace(/^- /, ''), false)}</li>`).join('')}</ul>`
+  : `<p>${inline(p, false)}</p>`).join('');
+const cxChip = (eid, cmd) => { const e = entry(eid); return e ? `<span class="cx" data-e="${eid}" style="--cat:${cv(e.cat)}" title="${esc(CATS[e.cat].name)}"><i></i><b>${esc(e.name || 'Untitled entry')}</b>${cmd ? `<button class="x" data-cmd="${cmd}" data-e="${eid}" aria-label="Remove ${esc(e.name)}">×</button>` : ''}</span>` : ''; };
+// Serialise edited DOM back to stored text: mention chips become [[e:id]] tokens
+function inlineText(node) {
+  let t = '';
+  node.childNodes.forEach(n => {
+    if (n.nodeType === 3) t += n.nodeValue;
+    else if (n.dataset?.e && n.classList.contains('mention')) t += `[[e:${n.dataset.e}]]`;
+    else if (n.nodeName === 'BR') t += '\n';
+    else t += inlineText(n);
+  });
+  return t.replace(/ /g, ' ');
+}
+function blockText(el) {
+  const out = [];
+  el.childNodes.forEach(n => {
+    if (n.nodeType === 3) { if (n.nodeValue.trim()) out.push(n.nodeValue.trim()); return; }
+    const tag = n.nodeName, t = () => inlineText(n).trim();
+    if (tag === 'H3' || /^H[1-6]$/.test(tag)) t() && out.push('## ' + t());
+    else if (tag === 'BLOCKQUOTE') t() && out.push('> ' + t());
+    else if (tag === 'UL' || tag === 'OL') { const li = [...n.querySelectorAll('li')].map(l => inlineText(l).trim()).filter(Boolean); li.length && out.push(li.map(l => '- ' + l).join('\n')); }
+    else if (n.classList?.contains('mention')) out.push(`[[e:${n.dataset.e}]]`);
+    else t() && out.push(t());
+  });
+  return out.join('\n\n');
+}
+
+// ---------- Background: the manuscript (static stand-in for write.html) ----------
+function blockHTML(b) {
+  if (b.kind === 'prose') return `<div class="ed">${proseHTML(b.text)}</div>`;
+  if (b.kind === 'beat') return `<div class="beat-line"><span class="kind">${I.beat}Scene beat</span><b>${esc(b.title)}</b></div>${b.prose ? `<div class="ed">${proseHTML(b.prose)}</div>` : ''}`;
+  const e = entry(b.entry);
+  return e ? `<div class="addition card" style="--cat:${cv(e.cat)}"><div class="add-h"><span class="kind">${I.db}Codex addition</span>${cxChip(b.entry)}</div><div class="add-b">${inline(b.body, false)}</div></div>` : '';
+}
+function renderDoc() {
+  computeRefOrder();
+  let h = '';
+  state.acts.forEach((a, ai) => {
+    h += `<div class="act-mark">Act ${ai + 1} · ${esc(a.title)}</div>`;
+    a.chapters.forEach(c => {
+      const n = chapterNo(c.id);
+      h += `<section class="chapter"><div class="row"><div class="ch-h"><div class="overline">Chapter ${n}</div><h2>${esc(c.title)}</h2></div><div></div></div>`;
+      c.scenes.forEach((s, si) => {
+        if (si) h += `<div class="row"><div class="divider">${ORNAMENT}</div><div></div></div>`;
+        h += `<div class="row scene" id="${s.id}"><div class="scene-main">${s.blocks.map(blockHTML).join('')}</div>
+          <div class="gutter"><div class="g-in"><div class="overline">Chapter ${n} · Scene ${si + 1}</div><div class="g-sum">${inline(s.summary, false) || '<i>No summary yet</i>'}</div>${s.codex.length ? `<div class="g-links">${s.codex.map(x => cxChip(x)).join('')}</div>` : ''}</div></div></div>`;
+      });
+      h += '</section>';
+    });
+  });
+  $('#page').innerHTML = h;
+  applyHighlight();
+}
+function applyHighlight() {
+  const eid = state.highlight, e = entry(eid);
+  document.querySelectorAll('#page .hl').forEach(x => x.classList.remove('hl'));
+  document.querySelectorAll('#page .scene.hit').forEach(x => x.classList.remove('hit'));
+  if (!e) { state.highlight = null; $('#hl').innerHTML = ''; return; }
+  document.querySelectorAll(`#page [data-e="${eid}"]`).forEach(x => x.classList.add('hl'));
+  allScenes().forEach(s => { if (sceneRefs(s).has(eid)) document.getElementById(s.id)?.classList.add('hit'); });
+  const n = usage(eid);
+  $('#hl').innerHTML = `<span class="hl-chip"><span class="dot" style="--cat:${cv(e.cat)}"></span>${esc(e.name)} <span class="dim-t">in ${n} ${n === 1 ? 'scene' : 'scenes'}</span><button class="ib" data-cmd="open-entry" data-e="${eid}" aria-label="Open entry" title="Open entry">${I.open}</button><button class="ib" data-cmd="clear-hl" aria-label="Clear highlight">✕</button></span>`;
+}
+let docT;
+const renderDocSoon = () => { clearTimeout(docT); docT = setTimeout(renderDoc, 250); };
+
+// ---------- Sidebar ----------
+function renderSide() {
+  const list = sideOrder(), open = state.kb.open ? state.kb.id : null;
+  if (!$('#sideBody').children.length) {
+    $('#sideBody').innerHTML = `<div class="side-tools"><label class="search">${I.search}<input id="sideQ" placeholder="Search Knowledge base" aria-label="Search Knowledge base"></label></div>
+      <div class="side-new"><button class="btn" data-cmd="new-entry">${I.plus}New Entry</button></div><div class="side-list" id="sideList"></div>`;
+  }
+  const html = Object.entries(CATS).map(([cat, c]) => {
+    const items = list.filter(e => e.cat === cat);
+    if (!items.length && state.sideQ) return '';
+    return `<div class="cat-h" style="--cat:${cv(cat)}"><i></i>${esc(c.name)}<span class="spacer"></span>${items.length}<button class="ib" data-cmd="new-entry" data-cat="${cat}" aria-label="New entry in ${esc(c.name)}" title="New entry in ${esc(c.name)}">${I.plus}</button></div>` +
+      items.map(e => { const n = usage(e.id); return `<button class="entry" data-entry="${e.id}" aria-pressed="${open === e.id}" title="Open ${esc(e.name || 'entry')}"><span class="dot" style="--cat:${cv(cat)}"></span><span class="n">${esc(e.name)}</span><span class="u" title="Scenes that use it">${n || ''}</span></button>`; }).join('');
+  }).join('');
+  $('#sideList').innerHTML = html || `<div class="side-empty">No entries match “${esc(state.sideQ)}”.</div>`;
+}
+
+// ---------- Entry window ----------
+const kb = $('#kb');
+const cur = () => entry(state.kb.id);
+function openKB(eid, o = {}) {
+  if (state.kb.open && state.kb.id !== eid) leaveEntry();
+  const e = entry(eid); if (!e) return;
+  closePop();
+  // The tab stays put while the window is open, so prev/next can step through "Used in" for each entry
+  Object.assign(state.kb, { tab: o.tab || (state.kb.open ? state.kb.tab : 'entry'), open: true, id: eid });
+  if (o.returnTo) kbReturn = o.returnTo;
+  renderKB();
+  kb.classList.add('open'); $('#scrim').classList.add('open');
+  history.replaceState(null, '', '#' + eid);
+  renderSide();
+  if (o.focusName) placeCaret(kb.querySelector('.kb-name'));
+  else kb.focus({ preventScroll: true });
+}
+let kbReturn = null;
+function closeKB() {
+  if (!state.kb.open) return;
+  leaveEntry();
+  state.kb.open = false;
+  kb.classList.remove('open'); $('#scrim').classList.remove('open');
+  history.replaceState(null, '', location.pathname + location.search);
+  renderSide();
+  const back = kbReturn && document.contains(kbReturn) ? kbReturn : document.querySelector(`.entry[data-entry="${state.kb.id}"]`);
+  back?.focus(); kbReturn = null;
+}
+// Leaving an entry: flush autosave, discard a new entry left completely empty
+function leaveEntry() {
+  flush();
+  const e = cur(); if (!e) return;
+  e.extra = e.extra.filter(x => x.k || x.v);
+  if (!e.fresh) return;
+  if (!e.name.trim() && !e.summary.trim() && !e.body.trim()) { ENTRIES.splice(ENTRIES.indexOf(e), 1); renderSide(); }
+  else finishNew(e);
+}
+// A new entry gets its permanent id (e:slug) from its first name; it never changes after that
+function finishNew(e) {
+  if (!e.fresh) return;
+  e.fresh = false;
+  if (!e.name.trim()) e.name = 'Untitled entry';
+  let nid = slugify(e.name), i = 2; const base = nid;
+  while (ENTRIES.some(x => x !== e && x.id === nid)) nid = `${base}-${i++}`;
+  if (state.kb.id === e.id) state.kb.id = nid;
+  e.id = nid;
+  buildAuto();
+}
+function newEntry(cat) {
+  const c = cat || 'blog';
+  const e = E(id('new-'), c, '', [], '', '', { created: 'Today', updated: 'Just now' });
+  e.fresh = true;
+  ENTRIES.push(e);
+  state.kb.tab = 'entry';
+  openKB(e.id, { focusName: true });
+}
+
+function renderKB() {
+  const e = cur(); if (!e) return;
+  const list = sideOrder(), i = list.indexOf(e), n = usage(e.id), adds = additions(e.id).length;
+  kb.style.setProperty('--cat', cv(e.cat));
+  kb.classList.toggle('expanded', state.kb.expanded);
+  const scroll = kb.querySelector('.kb-body')?.scrollTop || 0;
+  kb.innerHTML = `
+    <div class="kb-top">
+      <button class="catsel" data-cmd="cat" aria-haspopup="menu" title="Category"><i></i>${esc(CATS[e.cat].name)}${I.chev}</button>
+      <span class="spacer"></span>
+      ${i >= 0 ? `<span class="kb-pos">${i + 1} of ${list.length}</span>` : ''}
+      <button class="ib" data-cmd="prev" aria-label="Previous entry" title="Previous entry (Alt+↑)" ${i <= 0 ? 'disabled' : ''}>${I.up}</button>
+      <button class="ib" data-cmd="next" aria-label="Next entry" title="Next entry (Alt+↓)" ${i < 0 || i >= list.length - 1 ? 'disabled' : ''}>${I.down}</button>
+      <span class="vr"></span>
+      <button class="ib" data-cmd="expand" aria-pressed="${state.kb.expanded}" aria-label="${state.kb.expanded ? 'Collapse to window' : 'Expand to full view'}" title="${state.kb.expanded ? 'Collapse to window' : 'Expand to full view'}">${state.kb.expanded ? I.collapse : I.expand}</button>
+      <button class="ib" data-cmd="more" aria-haspopup="menu" aria-label="More actions" title="More actions">${I.more}</button>
+      <button class="ib" data-cmd="close" aria-label="Close (Esc)" title="Close (Esc)">${I.x}</button>
+    </div>
+    <div class="kb-head">
+      <h2 class="kb-name" id="kbName" contenteditable="true" spellcheck="false" data-f="name" data-placeholder="Entry name">${esc(e.name)}</h2>
+      <div class="kb-alias"><span class="dim-t">Also matches</span>${e.aliases.map((a, ai) => `<span class="alias">${esc(a)}<button data-cmd="rm-alias" data-i="${ai}" aria-label="Remove ${esc(a)}">×</button></span>`).join('')}<button class="mini" data-cmd="add-alias" title="Other names that should count as this entry in the text">${I.plus}Alias</button></div>
+    </div>
+    <div class="kb-tabs" role="tablist">
+      <button class="ktab" role="tab" data-tab="entry" aria-selected="${state.kb.tab === 'entry'}">Entry</button>
+      <button class="ktab" role="tab" data-tab="uses" aria-selected="${state.kb.tab === 'uses'}">Used in <span class="n">${n}</span></button>
+      <button class="ktab" role="tab" data-tab="prog" aria-selected="${state.kb.tab === 'prog'}">Timeline <span class="n">${adds}</span></button>
+      <span class="spacer"></span>
+      ${e.fresh ? '' : `<span class="eid" title="Reference id: stays the same when the entry is renamed">e:${esc(e.id)}<button class="ib" data-cmd="copy-id" aria-label="Copy reference id" title="Copy reference id">${I.copy}</button></span>`}
+    </div>
+    <div class="kb-body">
+      <div class="kb-main" role="tabpanel">${state.kb.tab === 'uses' ? usesHTML(e) : state.kb.tab === 'prog' ? progHTML(e) : entryHTML(e)}</div>
+      <aside class="kb-rail" aria-label="Entry properties">${railHTML(e)}</aside>
+    </div>`;
+  kb.querySelector('.kb-body').scrollTop = scroll;
+  kb.querySelectorAll('.use-snip').forEach(x => x.querySelectorAll(`[data-e="${e.id}"]`).forEach(m => m.classList.add('hl')));
+}
+
+function entryHTML(e) {
+  const w = countWords(e.body);
+  return `
+    <div class="sec-h"><span class="overline">Summary</span><span class="hint">· one or two lines, shown on cards and sent as short context</span></div>
+    <div class="kb-sum" contenteditable="true" data-f="summary" data-placeholder="What is this, in a sentence?">${inline(e.summary, false)}</div>
+    <div class="content-sec">
+      <div class="sec-h"><span class="overline">Content</span>
+        <span class="fbar" role="toolbar" aria-label="Formatting">
+          <button class="ib" data-fmt="h3" title="Heading">H</button>
+          <button class="ib" data-fmt="blockquote" title="Quote">${I.quote}</button>
+          <button class="ib" data-fmt="ul" title="List">${I.list}</button>
+          <button class="ib" data-fmt="at" title="Mention an entry (@)">${I.at}</button>
+        </span>
+      </div>
+      <div class="kb-ed${e.body ? '' : ' empty'}" contenteditable="true" data-f="body" data-placeholder="The article, notes or research. Type @ to mention another entry.">${mdHTML(e.body) || '<p><br></p>'}</div>
+      ${e.body ? '' : `<div class="import">Or bring it in: <button class="btn" data-cmd="import-url">${I.globe}Import from URL…</button><span>or paste the text in.</span></div>`}
+      <div class="ed-foot"><span id="kbWords">${w.toLocaleString()} ${w === 1 ? 'word' : 'words'}</span><span class="spacer"></span><span>Edited ${esc(e.updated)}</span></div>
+    </div>`;
+}
+
+function usesHTML(e) {
+  const rows = [];
+  allChapters().forEach(c => c.scenes.forEach((s, si) => { const k = usesIn(s, e); if (k.length) rows.push({ c, s, si, k }); }));
+  if (!rows.length) return `<div class="use-sum"><span>Not used in the book yet.</span></div>
+    <p class="prog-intro">Type <b>@</b> in a scene summary, a beat or the prose to mention it, drag it from the sidebar onto a scene to link it, or add it to a beat's <b>+ Context</b>.${namesOf(e).length ? ` Plain-text uses of “${esc(namesOf(e)[0])}” show up here too.` : ''}</p>`;
+  const chs = new Set(rows.map(r => r.c.id)).size;
+  const tally = k => rows.filter(r => r.k.some(x => x[0] === k)).length;
+  let h = `<div class="use-sum"><span>Used in <b>${rows.length} ${rows.length === 1 ? 'scene' : 'scenes'}</b> across ${chs} ${chs === 1 ? 'chapter' : 'chapters'}</span>
+    <span class="dim-t">${Object.keys(KIND).filter(tally).map(k => `${KIND[k][0]} ${tally(k)}`).join(' · ')}</span><span class="spacer"></span>
+    <button class="btn" data-cmd="highlight">${I.eye}Highlight in Write</button></div>`;
+  let lastC = null;
+  rows.forEach(({ c, s, si, k }) => {
+    if (c !== lastC) { h += `<div class="use-ch"><span class="overline">Chapter ${chapterNo(c.id)}</span><b>${esc(c.title)}</b></div>`; lastC = c; }
+    const hasText = k.some(x => x[0] === 'text');
+    h += `<div class="use"><div class="use-h"><span class="sn">Scene ${si + 1}</span>${k.map(([kk, n]) => `<span class="kchip ${KIND[kk][2]}" title="${KIND[kk][1]}">${KIND[kk][0]}${n > 1 ? ` ×${n}` : ''}</span>`).join('')}<span class="spacer"></span>
+      ${k.some(x => x[0] === 'linked') ? `<button class="mini" data-cmd="unlink" data-s="${s.id}" title="Remove the link from this scene">Unlink</button>` : ''}
+      <button class="mini" data-cmd="goto" data-s="${s.id}">${I.open}Open in Write</button></div>
+      <div class="use-snip">${inline(snippet(s, e))}</div>
+      ${hasText ? `<div class="use-fix">“${esc(stripTokens(sceneText(s) + ' ' + s.summary).match(aliasRe(e))?.[0] || e.name)}” is plain text here, so it isn't linked to the entry.<button class="mini" data-cmd="make-mention" data-s="${s.id}">${I.at}Make mention</button></div>` : ''}
+    </div>`;
+  });
+  return h;
+}
+
+function progHTML(e) {
+  const adds = additions(e.id);
+  return `<p class="prog-intro">It's always the same entry. Timeline notes are facts that hold from a point in the book onward, like "Guyon has broken his leg". A draft for a scene gets the entry plus every note up to that scene, so it never uses something the reader hasn't been told yet. Notes are the Codex Additions you add in Write.</p>
+    <div class="tl">
+      <div class="tl-i start"><div class="tl-h"><span class="overline">Start of book</span><span class="ctx">The entry as written</span></div><div class="prog-t">${inline(e.summary, false) || '<i>No summary yet</i>'}</div></div>
+      ${adds.map(({ s, b }) => { const w = where(s.id); return `<div class="tl-i"><div class="tl-h"><span class="overline">${at(s.id)}</span><span class="ctx" title="${esc(w.c.title)}">${esc(w.c.title)}</span>
+        <button class="mini" data-cmd="goto" data-s="${s.id}">${I.open}Open in Write</button><button class="mini" data-cmd="rm-add" data-b="${b.id}" title="Remove this note">Remove</button></div>
+        <div class="prog-t" contenteditable="true" data-f="add" data-b="${b.id}" data-placeholder="What holds from this point on?">${inline(b.body, false)}</div></div>`; }).join('')}
+      <div class="tl-i add"><button class="btn" data-cmd="add-prog">${I.plus}Add a note at…</button></div>
+    </div>`;
+}
+
+function railHTML(e) {
+  const fields = FIELDS[e.cat] || [], src = ref(e.source);
+  return `
+    <div class="rail-sec">
+      <div class="rail-h">Details<button class="mini" data-cmd="add-field">${I.plus}Field</button></div>
+      <div class="fields">
+        ${fields.map(([k, label]) => `<span class="fk">${label}</span><span class="fv" contenteditable="true" data-field="${k}" data-placeholder="Add…">${esc(e.fields[k] || '')}</span>`).join('')}
+        ${e.extra.map((x, xi) => `<span class="fk" contenteditable="true" data-extra-k="${xi}" data-placeholder="Field">${esc(x.k)}</span><span class="fv" contenteditable="true" data-extra-v="${xi}" data-placeholder="Add…">${esc(x.v)}</span>`).join('')}
+      </div>
+      ${!fields.length && !e.extra.length ? '<div class="rail-empty">No fields for this category yet.</div>' : ''}
+    </div>
+    <div class="rail-sec">
+      <div class="rail-h">Source${src ? '' : `<button class="mini" data-cmd="link-src">${I.link}Link source</button>`}</div>
+      ${src ? `<div class="src"><span>${esc(src.title)}</span><span class="st" style="--tone:var(--color-${REF_ST[src.st][0]})"><i></i>${REF_ST[src.st][1]} · ${esc(src.kind)}</span>
+        <div class="src-acts"><a class="mini" href="references.html#${src.id}">${I.open}Open in References</a><button class="mini" data-cmd="link-src">Change</button><button class="mini" data-cmd="unlink-src">Remove</button></div></div>`
+        : '<div class="rail-empty">Link the book, article or page this came from, so quotes from it get copyright checks.</div>'}
+    </div>
+    <div class="rail-sec">
+      <div class="rail-h">Related<button class="mini" data-cmd="add-rel">${I.plus}Link entry</button></div>
+      ${e.related.length ? `<div class="rel">${e.related.map(r => cxChip(r, 'rm-rel')).join('')}</div>` : '<div class="rail-empty">No related entries.</div>'}
+    </div>
+    <div class="rail-sec meta">Created ${esc(e.created)} · Edited ${esc(e.updated)}</div>`;
+}
+
+// ---------- Autosave (same pattern as plan.html: 3s after the first edit, straight away on blur) ----------
+let syncT = null, dirty = false;
+function setSync(s) { const el = $('#sync'); el.dataset.s = s; el.querySelector('.lbl-t').textContent = { editing: 'Unsaved', saving: 'Saving…', saved: 'Saved' }[s]; }
+function markEdited() { dirty = true; const e = cur(); if (e) e.updated = 'just now'; setSync('editing'); if (!syncT) syncT = setTimeout(flush, 3000); }
+function flush() {
+  if (!dirty) return;
+  dirty = false; clearTimeout(syncT); syncT = null; setSync('saving');
+  setTimeout(() => { if (!dirty) setSync('saved'); }, 500);
+}
+
+// ---------- Popover ----------
+const pop = $('#pop');
+let popCtx = null;
+function openPop(anchor, html, cls = '', ctx = {}) {
+  pop.className = 'open ' + cls; pop.innerHTML = html; popCtx = ctx;
+  const r = anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : anchor;
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  let x = Math.min(r.left, innerWidth - w - 8), y = r.bottom + 4;
+  if (y + h > innerHeight - 8) y = Math.max(8, r.top - h - 4);
+  pop.style.left = Math.max(8, x) + 'px'; pop.style.top = y + 'px';
+  pop.querySelector('input')?.focus();
+}
+function closePop(refocus = false) { if (!pop.classList.contains('open')) return; pop.className = ''; pop.innerHTML = ''; const back = popCtx?.back; popCtx = null; if (refocus && back && document.contains(back)) back.focus(); }
+
+function catMenu(btn) {
+  const e = cur();
+  openPop(btn, `<div class="list" style="padding-top:4px">${Object.entries(CATS).map(([k, c]) => `<button class="item" data-pick-cat="${k}"><span class="dot" style="--cat:${cv(k)}"></span>${esc(c.name)}${k === e.cat ? `<span class="ck">${I.check}</span>` : `<span class="k">${ENTRIES.filter(x => x.cat === k).length}</span>`}</button>`).join('')}
+    <div class="sep"></div><button class="item" data-cmd="new-cat">${I.plus}New category…</button></div>`, '', { back: btn });
+}
+function newCatForm(anchor) {
+  const used = new Set(Object.values(CATS).map(c => c.color));
+  const colors = ['blog', 'law', 'story', 'research', 'person'];
+  openPop(anchor, `<div class="form"><b>New category</b><input type="text" id="ncName" placeholder="Name, for example Places" aria-label="Category name">
+    <div class="rail-l" style="margin:0">Colour, used wherever an entry in this category is referenced</div>
+    <div class="swatches">${colors.map((c, ci) => `<button class="sw" data-sw="${c}" style="--cat:var(--category-${c})" aria-pressed="${ci === 0}" title="${used.has(c) ? 'Shared with ' + esc(Object.values(CATS).filter(x => x.color === c).map(x => x.name).join(', ')) : 'Unused'}"></button>`).join('')}</div>
+    <div class="rail-l" style="margin:0" id="ncNote"></div>
+    <div style="display:flex;gap:6px;justify-content:flex-end"><button class="btn ghost" data-cmd="close-pop">Cancel</button><button class="btn primary" data-cmd="create-cat">Create</button></div></div>`, 'wide', { back: kb.querySelector('[data-cmd="cat"]'), color: 'blog' });
+  swNote();
+}
+function swNote() {
+  const c = popCtx.color, sharers = Object.values(CATS).filter(x => x.color === c).map(x => x.name);
+  const n = $('#ncNote'); if (n) n.textContent = sharers.length ? `Shared with ${sharers.join(', ')}. Pick a free colour if you want them told apart at a glance.` : '';
+}
+function moreMenu(btn) {
+  openPop(btn, `<div class="list" style="padding-top:4px">
+    <button class="item" data-cmd="copy-id">${I.copy}Copy reference<span class="k">e:${esc(cur().id)}</span></button>
+    <button class="item" data-cmd="dup">${I.dup}Duplicate</button>
+    <div class="sep"></div>
+    <button class="item danger" data-cmd="del-ask">${I.trash}Delete entry…</button></div>`, '', { back: btn });
+}
+function deleteAsk(anchor) {
+  const e = cur(), n = usage(e.id), adds = additions(e.id).length;
+  openPop(anchor, `<div class="card-in"><h4>Delete ${esc(e.name || 'this entry')}?</h4>
+    <p>${n ? `It is used in ${n} ${n === 1 ? 'scene' : 'scenes'}. Mentions turn into plain text, links and beat context are removed${adds ? `, and ${adds} ${adds === 1 ? 'timeline note is' : 'timeline notes are'} deleted` : ''}.` : 'It is not used anywhere in the book.'}</p>
+    <div class="acts" style="justify-content:flex-end"><button class="btn ghost" data-cmd="close-pop">Cancel</button><button class="btn danger" data-cmd="del">Delete</button></div></div>`, 'wide', { back: kb.querySelector('[data-cmd="more"]') });
+}
+function entryPicker(anchor, title, exclude, cmd) {
+  const render = q => Object.entries(CATS).map(([cat, c]) => {
+    const items = ENTRIES.filter(x => x.cat === cat && !exclude.has(x.id) && x.name && x.name.toLowerCase().includes(q));
+    return items.length ? `<div class="cat-h" style="--cat:${cv(cat)}"><i></i>${esc(c.name)}</div>` + items.map(x => `<button class="item" data-pick-e="${x.id}"><span class="dot" style="--cat:${cv(cat)}"></span>${esc(x.name)}</button>`).join('') : '';
+  }).join('') || '<div class="item" style="cursor:default;color:var(--color-muted)">No matching entries</div>';
+  openPop(anchor, `<label class="search">${I.search}<input placeholder="${esc(title)}" data-filter="entries" aria-label="${esc(title)}"></label><div class="list">${render('')}</div>`, '', { cmd, render, back: popBack(anchor) });
+}
+const popBack = a => a instanceof Element ? a : null;
+function scenePicker(anchor) {
+  const render = q => allChapters().map(c => {
+    const n = chapterNo(c.id), items = c.scenes.map((s, si) => ({ s, si })).filter(({ s }) => !q || (c.title + ' ' + plain(s.summary)).toLowerCase().includes(q));
+    return items.length ? `<div class="grp">Chapter ${n} · ${esc(c.title)}</div>` + items.map(({ s, si }) => `<button class="item two" data-pick-s="${s.id}"><span>Scene ${si + 1}</span><span class="sub" style="max-width:280px">${esc(plain(s.summary)) || 'No summary yet'}</span></button>`).join('') : '';
+  }).join('') || '<div class="item" style="cursor:default;color:var(--color-muted)">No matching scenes</div>';
+  openPop(anchor, `<label class="search">${I.search}<input placeholder="Find a chapter or scene" data-filter="scenes" aria-label="Find a scene"></label><div class="list">${render('')}</div>`, 'wide', { cmd: 'pick-scene', render, back: anchor });
+}
+function srcPicker(anchor) {
+  openPop(anchor, `<div class="grp">Sources in References</div><div class="list">${REFS.map(r => `<button class="item two" data-pick-src="${r.id}"><span>${esc(r.title)}</span><span class="sub">${esc(r.kind)} · ${REF_ST[r.st][1]}</span></button>`).join('')}
+    <div class="sep"></div><a class="item" href="references.html#new">${I.plus}Add a new source in References</a></div>`, 'wide', { back: anchor });
+}
+function importForm(anchor) {
+  openPop(anchor, `<div class="form"><b>Import from URL</b><input type="url" id="impUrl" placeholder="https://…" aria-label="Page address">
+    <div class="rail-l" style="margin:0">Fetches the article text into Content and keeps the address in the URL field. The page is archived, the same as a web source in References.</div>
+    <div style="display:flex;gap:6px;justify-content:flex-end"><button class="btn ghost" data-cmd="close-pop">Cancel</button><button class="btn primary" data-cmd="do-import">Import</button></div></div>`, 'wide', { back: anchor });
+}
+
+// ---------- Toast + undo ----------
+let toastT;
+function toast(html, undo) {
+  const t = $('#toast');
+  t.innerHTML = `<span>${html}</span>${undo ? '<button id="undo">Undo</button>' : ''}`;
+  t.classList.add('show'); clearTimeout(toastT);
+  toastT = setTimeout(() => t.classList.remove('show'), undo ? 6000 : 2400);
+  if (undo) $('#undo').onclick = () => { undo(); t.classList.remove('show'); };
+}
+const snap = () => JSON.stringify({ entries: ENTRIES, acts: state.acts });
+function restore(s) {
+  const d = JSON.parse(s);
+  ENTRIES.splice(0, ENTRIES.length, ...d.entries); state.acts = d.acts;
+  buildAuto(); renderDoc(); renderSide(); if (state.kb.open && cur()) renderKB();
+}
+function commit(msg, before) {
+  markEdited(); flush(); buildAuto(); renderDoc(); renderSide(); if (state.kb.open && cur()) renderKB();
+  if (msg) toast(msg, before ? () => restore(before) : null);
+}
+
+// ---------- Data changes ----------
+function deleteEntry(e) {
+  const tok = new RegExp(`\\[\\[e:${reEsc(e.id)}\\]\\]`, 'g'), name = e.name;
+  allScenes().forEach(s => {
+    s.summary = s.summary.replace(tok, name);
+    s.codex = s.codex.filter(x => x !== e.id);
+    s.blocks = s.blocks.filter(b => !(b.kind === 'addition' && b.entry === e.id));
+    s.blocks.forEach(b => { if (b.text) b.text = b.text.replace(tok, name); if (b.prose) b.prose = b.prose.replace(tok, name); if (b.body) b.body = b.body.replace(tok, name); if (b.context) b.context = b.context.filter(x => x !== e.id); });
+    if (!s.blocks.length) s.blocks.push(P(''));
+  });
+  ENTRIES.forEach(x => { x.related = x.related.filter(r => r !== e.id); x.body = x.body.replace(tok, name); x.summary = x.summary.replace(tok, name); });
+  ENTRIES.splice(ENTRIES.indexOf(e), 1);
+  if (state.highlight === e.id) state.highlight = null;
+}
+// Replace the first plain-text use of the entry's name in a scene with a mention token
+function replaceFirst(t, e) {
+  const parts = (t || '').split(/(\[\[(?:e|ch|r):[\w-]+\]\])/), re = aliasRe(e);
+  for (let i = 0; i < parts.length; i += 2) if (re.test(parts[i])) { parts[i] = parts[i].replace(re, `[[e:${e.id}]]`); return parts.join(''); }
+  return null;
+}
+function makeMention(s, e) {
+  for (const b of s.blocks) {
+    if (b.kind === 'prose') { const r = replaceFirst(b.text, e); if (r) { b.text = r; return true; } }
+    if (b.kind === 'beat') { const r = replaceFirst(b.prose, e); if (r) { b.prose = r; return true; } }
+  }
+  const r = replaceFirst(s.summary, e); if (r) { s.summary = r; return true; }
+  for (const b of s.blocks) if (b.kind === 'beat') { const r2 = replaceFirst(b.body, e); if (r2) { b.body = r2; return true; } }
+  return false;
+}
+function gotoScene(sid, eid) {
+  state.highlight = eid;
+  closeKB(); applyHighlight();
+  const el = document.getElementById(sid); if (!el) return;
+  el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+}
+function step(d) {
+  const list = sideOrder(), i = list.indexOf(cur()), next = list[i + d];
+  if (next) openKB(next.id);
+}
+
+// ---------- Caret helpers + "@" mentions ----------
+function placeCaret(el) { el.focus(); const r = document.createRange(); r.selectNodeContents(el); r.collapse(false); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+let savedRange = null;
+function caretRect() {
+  const s = getSelection(); if (!s.rangeCount) return null;
+  const r = s.getRangeAt(0).cloneRange(); r.collapse(true);
+  const rects = r.getClientRects(); if (rects.length) return rects[0];
+  const n = r.startContainer.nodeType === 1 ? r.startContainer : r.startContainer.parentElement; return n.getBoundingClientRect();
+}
+function startMention(field) {
+  const s = getSelection(); if (!s.rangeCount) return;
+  savedRange = s.getRangeAt(0).cloneRange();
+  const rect = caretRect() || field.getBoundingClientRect();
+  entryPicker(rect, 'Mention an entry', new Set([cur().id]), 'insert-mention');
+  popCtx.field = field; popCtx.back = field;
+}
+function insertMention(eid) {
+  const field = popCtx?.field; closePop();
+  if (!field || !savedRange) return;
+  field.focus();
+  const s = getSelection(); s.removeAllRanges(); s.addRange(savedRange);
+  const tmp = document.createElement('span'); tmp.innerHTML = mention(eid);
+  const node = tmp.firstChild, space = document.createTextNode(' ');
+  savedRange.deleteContents(); savedRange.insertNode(space); savedRange.insertNode(node);
+  const r = document.createRange(); r.setStartAfter(space); r.collapse(true); s.removeAllRanges(); s.addRange(r);
+  savedRange = null;
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+// ---------- Events ----------
+document.addEventListener('click', ev => {
+  const t = ev.target;
+  if (pop.classList.contains('open') && !pop.contains(t) && !t.closest('[data-cmd="cat"],[data-cmd="more"]')) closePop();
+
+  // Theme / density review aid
+  const th = t.closest('[data-theme-set]'); if (th) { const v = th.dataset.themeSet; v === 'system' ? document.documentElement.removeAttribute('data-theme') : document.documentElement.setAttribute('data-theme', v); return syncPreview(); }
+  const dn = t.closest('[data-dens-set]'); if (dn) { document.documentElement.setAttribute('data-density', dn.dataset.densSet); return syncPreview(); }
+
+  // Sidebar
+  const en = t.closest('[data-entry]');
+  if (en) { const eid = en.dataset.entry; return state.kb.open && state.kb.id === eid ? closeKB() : openKB(eid, { returnTo: en }); }
+
+  // Popover picks
+  const pc = t.closest('[data-pick-cat]');
+  if (pc) { const e = cur(), before = snap(), old = CATS[e.cat].name; e.cat = pc.dataset.pickCat; closePop(); return commit(`Moved to <b>${esc(CATS[e.cat].name)}</b> from ${esc(old)}`, before); }
+  const sw = t.closest('[data-sw]');
+  if (sw) { popCtx.color = sw.dataset.sw; pop.querySelectorAll('[data-sw]').forEach(b => b.setAttribute('aria-pressed', b === sw)); return swNote(); }
+  const pe = t.closest('[data-pick-e]');
+  if (pe) {
+    const eid = pe.dataset.pickE, e = cur();
+    if (popCtx?.cmd === 'insert-mention') return insertMention(eid);
+    if (popCtx?.cmd === 'add-rel') { const before = snap(), o = entry(eid); e.related.push(eid); if (!o.related.includes(e.id)) o.related.push(e.id); closePop(); return commit(`Linked <b>${esc(o.name)}</b> both ways`, before); }
+    return;
+  }
+  const ps = t.closest('[data-pick-s]');
+  if (ps) {
+    const e = cur(), before = snap(), s = where(ps.dataset.pickS).s, b = A(e.id, '');
+    s.blocks.unshift(b); closePop(); state.kb.tab = 'prog';
+    commit(`Timeline note added at ${at(s.id)}, as a Codex Addition at the start of the scene`, before);
+    const el = kb.querySelector(`[data-b="${b.id}"].prog-t`); if (el) { el.scrollIntoView({ block: 'nearest' }); placeCaret(el); }
+    return;
+  }
+  const psr = t.closest('[data-pick-src]');
+  if (psr) { const e = cur(), before = snap(); e.source = psr.dataset.pickSrc; closePop(); return commit(`Source linked: <b>${esc(ref(e.source).title)}</b>`, before); }
+
+  // Tabs inside the entry window
+  const kt = t.closest('[data-tab]');
+  if (kt) { state.kb.tab = kt.dataset.tab; renderKB(); return kb.querySelector(`[data-tab="${state.kb.tab}"]`).focus(); }
+  const fm = t.closest('[data-fmt]');
+  if (fm) {
+    const ed = kb.querySelector('.kb-ed'); if (!ed) return;
+    if (!ed.contains(getSelection().anchorNode)) placeCaret(ed);
+    const f = fm.dataset.fmt;
+    if (f === 'at') return startMention(ed);
+    if (f === 'ul') document.execCommand('insertUnorderedList');
+    else { const n = getSelection().anchorNode, blk = (n?.nodeType === 1 ? n : n?.parentElement)?.closest('h3, blockquote, p, li'); document.execCommand('formatBlock', false, `<${blk && blk.nodeName.toLowerCase() === f ? 'p' : f}>`); }
+    return ed.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  // Mentions and chips open their entry (in the manuscript, the entry window and the rail)
+  const mk = t.closest('.mention[data-e], .auto[data-e], .cx[data-e]');
+  if (mk && !t.closest('.x') && !t.closest('#pop')) return openKB(mk.dataset.e);
+
+  const c = t.closest('[data-cmd]'); if (!c) { if (t.id === 'scrim') closeKB(); return; }
+  const cmd = c.dataset.cmd, e = cur();
+  switch (cmd) {
+    case 'new-entry': return newEntry(c.dataset.cat);
+    case 'open-entry': return openKB(c.dataset.e);
+    case 'clear-hl': state.highlight = null; return applyHighlight();
+    case 'close': return closeKB();
+    case 'close-pop': return closePop(true);
+    case 'prev': return step(-1);
+    case 'next': return step(1);
+    case 'expand': state.kb.expanded = !state.kb.expanded; renderKB(); return kb.querySelector('[data-cmd="expand"]').focus();
+    case 'cat': return pop.classList.contains('open') && popCtx?.back === c ? closePop() : catMenu(c);
+    case 'more': return pop.classList.contains('open') && popCtx?.back === c ? closePop() : moreMenu(c);
+    case 'new-cat': return newCatForm(kb.querySelector('[data-cmd="cat"]'));
+    case 'create-cat': {
+      const name = $('#ncName').value.trim(); if (!name) return $('#ncName').focus();
+      const before = snap(), k = slugify(name); CATS[k] = { name, color: popCtx.color }; FIELDS[k] = []; e.cat = k; closePop();
+      return commit(`Category <b>${esc(name)}</b> created; ${esc(e.name || 'this entry')} moved into it`, null);
+    }
+    case 'copy-id': closePop(); navigator.clipboard?.writeText(`e:${e.id}`).catch(() => {}); return toast(`Copied <code>e:${esc(e.id)}</code>. Paste it anywhere a Codex mention goes.`);
+    case 'dup': {
+      closePop(); finishNew(e);
+      const before = snap(), d = JSON.parse(JSON.stringify(e)); d.name = `${e.name} (copy)`; d.aliases = []; d.related = [...e.related]; d.created = 'Today'; d.updated = 'just now';
+      let nid = slugify(d.name), i = 2; const base = nid; while (entry(nid)) nid = `${base}-${i++}`; d.id = nid;
+      ENTRIES.splice(ENTRIES.indexOf(e) + 1, 0, d);
+      commit(); openKB(d.id, { focusName: true });
+      return toast('Duplicated. Aliases are not copied, so the text still only matches the original.', () => { restore(before); openKB(e.id); });
+    }
+    case 'del-ask': return deleteAsk(kb.querySelector('[data-cmd="more"]'));
+    case 'del': {
+      const before = snap(), name = e.name, eid = e.id; closePop(); deleteEntry(e); state.kb.open = false;
+      kb.classList.remove('open'); $('#scrim').classList.remove('open'); history.replaceState(null, '', location.pathname);
+      commit();
+      return toast(`Deleted <b>${esc(name)}</b>`, () => { restore(before); openKB(eid); });
+    }
+    case 'add-alias': {
+      const inp = document.createElement('input'); inp.className = 'alias-in'; inp.placeholder = 'Another name, then Enter'; inp.setAttribute('aria-label', 'New alias');
+      c.replaceWith(inp); inp.focus();
+      const done = keep => { const v = inp.value.trim(); if (keep && v && !namesOf(e).some(n => n.toLowerCase() === v.toLowerCase())) { e.aliases.push(v); commit(`Alias added. “${esc(v)}” in the text now counts as ${esc(e.name)}.`); } else renderKB(); };
+      inp.addEventListener('keydown', k => { if (k.key === 'Enter') { k.preventDefault(); done(true); } if (k.key === 'Escape') { k.preventDefault(); k.stopPropagation(); done(false); } });
+      inp.addEventListener('blur', () => inp.isConnected && done(true));
+      return;
+    }
+    case 'rm-alias': { const before = snap(), a = e.aliases.splice(+c.dataset.i, 1)[0]; return commit(`Alias “${esc(a)}” removed`, before); }
+    case 'add-field': { e.extra.push({ k: '', v: '' }); renderKB(); return placeCaret(kb.querySelector(`[data-extra-k="${e.extra.length - 1}"]`)); }
+    case 'link-src': return srcPicker(c);
+    case 'unlink-src': { const before = snap(); e.source = null; return commit('Source removed from this entry. It stays in References.', before); }
+    case 'add-rel': return entryPicker(c, 'Link a related entry', new Set([e.id, ...e.related]), 'add-rel');
+    case 'rm-rel': { const before = snap(), o = entry(c.dataset.e); e.related = e.related.filter(r => r !== o.id); o.related = o.related.filter(r => r !== e.id); return commit(`Unlinked <b>${esc(o.name)}</b>`, before); }
+    case 'highlight': return gotoScene(allScenes().find(s => sceneRefs(s).has(e.id))?.id, e.id);
+    case 'goto': return gotoScene(c.dataset.s, e.id);
+    case 'unlink': { const before = snap(), s = where(c.dataset.s).s; s.codex = s.codex.filter(x => x !== e.id); return commit(`Unlinked from ${at(s.id)}`, before); }
+    case 'make-mention': { const before = snap(), s = where(c.dataset.s).s; return makeMention(s, e) ? commit(`Now a mention in ${at(s.id)}`, before) : null; }
+    case 'add-prog': return scenePicker(c);
+    case 'rm-add': { const before = snap(), loc = allScenes().find(s => s.blocks.some(b => b.id === c.dataset.b)); loc.blocks = loc.blocks.filter(b => b.id !== c.dataset.b); if (!loc.blocks.length) loc.blocks.push(P('')); return commit(`Timeline note removed from ${at(loc.id)}`, before); }
+    case 'import-url': return importForm(c);
+    case 'do-import': {
+      const url = $('#impUrl').value.trim(); if (!url) return $('#impUrl').focus();
+      const before = snap(), host = url.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+      closePop();
+      e.body = [`> Imported from ${url} and archived.`, '## Imported text', `The article text from ${host} appears here, with its headings, lists and quotes kept. Edit it like any other entry content.`].join('\n\n');
+      if (FIELDS[e.cat]?.some(f => f[0] === 'url')) e.fields.url = url.replace(/^https?:\/\//, ''); else e.extra.push({ k: 'URL', v: url.replace(/^https?:\/\//, '') });
+      return commit(`Imported from <b>${esc(host)}</b>`, before);
+    }
+  }
+});
+
+// Inline edits inside the entry window
+kb.addEventListener('input', ev => {
+  const el = ev.target.closest('[contenteditable="true"]'); const e = cur(); if (!el || !e) return;
+  const f = el.dataset.f;
+  if (f === 'name') { e.name = el.textContent.replace(/\s+/g, ' ').trimStart(); renderSide(); renderDocSoon(); }
+  else if (f === 'summary') { e.summary = inlineText(el).trim(); renderDocSoon(); }
+  else if (f === 'body') {
+    e.body = blockText(el); el.classList.toggle('empty', !el.textContent.trim() && !el.querySelector('.mention, li'));
+    const w = countWords(e.body), wEl = $('#kbWords'); if (wEl) wEl.textContent = `${w.toLocaleString()} ${w === 1 ? 'word' : 'words'}`;
+  }
+  else if (f === 'add') { const b = allScenes().flatMap(s => s.blocks).find(x => x.id === el.dataset.b); if (b) { b.body = inlineText(el).trim(); renderDocSoon(); } }
+  else if (el.dataset.field) e.fields[el.dataset.field] = el.textContent.trim();
+  else if (el.dataset.extraK) e.extra[+el.dataset.extraK].k = el.textContent.trim();
+  else if (el.dataset.extraV) e.extra[+el.dataset.extraV].v = el.textContent.trim();
+  markEdited();
+});
+kb.addEventListener('keydown', ev => {
+  const el = ev.target.closest('[contenteditable="true"]'); if (!el) return;
+  const single = el.dataset.f === 'name' || el.classList.contains('fv') || el.classList.contains('fk');
+  if (ev.key === 'Enter' && el.dataset.f === 'name') { ev.preventDefault(); return placeCaret(kb.querySelector('[data-f="summary"]') || el); }
+  if (ev.key === 'Enter' && single) { ev.preventDefault(); el.blur(); }
+  if (ev.key === 'Enter' && el.dataset.f === 'summary' && !ev.shiftKey) { ev.preventDefault(); el.blur(); }
+  if (ev.key === '@' && !single) { ev.preventDefault(); startMention(el); }
+});
+kb.addEventListener('focusout', ev => {
+  const el = ev.target.closest('[contenteditable="true"]'); if (!el) return;
+  if (pop.contains(ev.relatedTarget)) return;
+  const e = cur();
+  if (el.dataset.f === 'name' && e) {
+    if (e.fresh && e.name.trim()) {
+      const next = ev.relatedTarget?.dataset?.f;
+      finishNew(e); renderKB(); renderSide(); history.replaceState(null, '', '#' + e.id);
+      if (next) placeCaret(kb.querySelector(`[data-f="${next}"]`));
+    }
+    else if (!e.fresh) { if (!e.name.trim()) { e.name = 'Untitled entry'; el.textContent = e.name; } buildAuto(); renderDoc(); renderSide(); }
+  }
+  if ((el.dataset.f === 'summary' || el.dataset.f === 'add') && e) renderDoc();
+  flush();
+});
+kb.addEventListener('paste', ev => {
+  const el = ev.target.closest('[contenteditable="true"]'); if (!el) return;
+  ev.preventDefault();
+  const text = ev.clipboardData.getData('text/plain');
+  document.execCommand('insertText', false, el.dataset.f === 'body' ? text : text.replace(/\s*\n\s*/g, ' '));
+});
+
+// Sidebar search, popover filters
+document.addEventListener('input', ev => {
+  if (ev.target.id === 'sideQ') { state.sideQ = ev.target.value; renderSide(); if (state.kb.open) renderKB(); return; }
+  if (ev.target.dataset.filter && popCtx?.render) pop.querySelector('.list').innerHTML = popCtx.render(ev.target.value.trim().toLowerCase());
+});
+
+document.addEventListener('keydown', ev => {
+  if (ev.key === 'Escape') {
+    if (pop.classList.contains('open')) { ev.preventDefault(); return closePop(true); }
+    if (state.kb.open) { ev.preventDefault(); return closeKB(); }
+  }
+  if (state.kb.open && ev.altKey && (ev.key === 'ArrowUp' || ev.key === 'ArrowDown')) { ev.preventDefault(); step(ev.key === 'ArrowUp' ? -1 : 1); }
+  if (pop.classList.contains('open') && ev.key === 'Enter' && ev.target.matches('#pop input[data-filter]')) { ev.preventDefault(); pop.querySelector('.list .item:not(:disabled)')?.click(); }
+  if (pop.classList.contains('open') && ev.key === 'Enter' && ev.target.id === 'ncName') { ev.preventDefault(); pop.querySelector('[data-cmd="create-cat"]').click(); }
+  if (pop.classList.contains('open') && ev.key === 'Enter' && ev.target.id === 'impUrl') { ev.preventDefault(); pop.querySelector('[data-cmd="do-import"]').click(); }
+});
+document.addEventListener('mousedown', ev => { if (ev.target.closest('[data-fmt]')) ev.preventDefault(); });
+
+$('#sideToggle').addEventListener('click', () => { state.side = !state.side; $('#ws').classList.toggle('no-side', !state.side); });
+
+function syncPreview() {
+  const th = document.documentElement.getAttribute('data-theme') || 'system', dn = document.documentElement.getAttribute('data-density') || 'compact';
+  document.querySelectorAll('[data-theme-set]').forEach(b => b.setAttribute('aria-pressed', b.dataset.themeSet === th));
+  document.querySelectorAll('[data-dens-set]').forEach(b => b.setAttribute('aria-pressed', b.dataset.densSet === dn));
+}
+
+// ---------- Start ----------
+buildAuto(); renderSide(); renderDoc(); syncPreview();
+function fromHash() {
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (h === 'new') newEntry();
+  else if (entry(h)) openKB(h);
+}
+if (!location.hash) openKB('goodhart'); else fromHash();
+addEventListener('hashchange', fromHash);
+</script>
+</body>
+</html>

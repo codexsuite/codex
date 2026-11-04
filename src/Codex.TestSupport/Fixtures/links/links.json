@@ -1,0 +1,23 @@
+{
+  "_comment": "open_url parity (D8): the same (builder, id, args) through CodexLinks (C#, CodexLinksTests) and links.ts (links.test.ts) must give url.",
+  "cases": [
+    { "builder": "plan", "id": "0199c0de-0000-7000-8000-00030000000a", "args": {}, "url": "/books/0199c0de-0000-7000-8000-00030000000a/plan" },
+    { "builder": "plan", "id": "0199c0de-0000-7000-8000-00030000000a", "args": { "chapter": "5" }, "url": "/books/0199c0de-0000-7000-8000-00030000000a/plan#chapter=5" },
+    { "builder": "plan", "id": "0199c0de-0000-7000-8000-00030000000a", "args": { "scene": "5.2" }, "url": "/books/0199c0de-0000-7000-8000-00030000000a/plan#scene=5.2" },
+    { "builder": "plan", "id": "0199c0de-0000-7000-8000-00030000000a", "args": { "entry": "0199c0de-0000-7000-8000-000b00000005" }, "url": "/books/0199c0de-0000-7000-8000-00030000000a/plan#entry=0199c0de-0000-7000-8000-000b00000005" },
+    { "builder": "plan", "id": "0199c0de-0000-7000-8000-00030000000a", "args": { "kb": "0199c0de-0000-7000-8000-000b00000005" }, "url": "/books/0199c0de-0000-7000-8000-00030000000a/plan#kb=0199c0de-0000-7000-8000-000b00000005" },
+    { "builder": "plan", "id": "0199c0de-0000-7000-8000-00030000000a", "args": { "scene": "5.2", "chapter": "5", "kb": "0199c0de-0000-7000-8000-000b00000005", "entry": "0199c0de-0000-7000-8000-000b00000005" }, "url": "/books/0199c0de-0000-7000-8000-00030000000a/plan#scene=5.2&chapter=5&kb=0199c0de-0000-7000-8000-000b00000005&entry=0199c0de-0000-7000-8000-000b00000005" },
+    { "builder": "write", "id": "0199c0de-0000-7000-8000-00030000000a", "args": {}, "url": "/books/0199c0de-0000-7000-8000-00030000000a/write" },
+    { "builder": "write", "id": "0199c0de-0000-7000-8000-00030000000a", "args": { "scene": "5.2" }, "url": "/books/0199c0de-0000-7000-8000-00030000000a/write#scene=5.2" },
+    { "builder": "write", "id": "0199c0de-0000-7000-8000-00030000000a", "args": { "scene": "5.2", "kb": "0199c0de-0000-7000-8000-000b00000005" }, "url": "/books/0199c0de-0000-7000-8000-00030000000a/write#scene=5.2&kb=0199c0de-0000-7000-8000-000b00000005" },
+    { "builder": "write", "id": "0199c0de-0000-7000-8000-00030000000a", "args": { "chapter": "5", "entry": "0199c0de-0000-7000-8000-000b00000005" }, "url": "/books/0199c0de-0000-7000-8000-00030000000a/write#chapter=5&entry=0199c0de-0000-7000-8000-000b00000005" },
+    { "builder": "write", "id": "0199c0de-0000-7000-8000-00030000000a", "args": { "scene": "6.1", "ref": "0199c0de-0000-7000-8000-000d00000004" }, "url": "/books/0199c0de-0000-7000-8000-00030000000a/write#scene=6.1&ref=0199c0de-0000-7000-8000-000d00000004" },
+    { "builder": "references", "id": "0199c0de-0000-7000-8000-00030000000a", "args": {}, "url": "/books/0199c0de-0000-7000-8000-00030000000a/references" },
+    { "builder": "references", "id": "0199c0de-0000-7000-8000-00030000000a", "args": { "source": "0199c0de-0000-7000-8000-000d00000004" }, "url": "/books/0199c0de-0000-7000-8000-00030000000a/references#0199c0de-0000-7000-8000-000d00000004" },
+    { "builder": "settings", "id": "0199c0de-0000-7000-8000-00030000000a", "args": {}, "url": "/books/0199c0de-0000-7000-8000-00030000000a/settings" },
+    { "builder": "settings", "id": "0199c0de-0000-7000-8000-00030000000a", "args": { "section": "citations" }, "url": "/books/0199c0de-0000-7000-8000-00030000000a/settings#citations" },
+    { "builder": "layout", "id": "0199c0de-0000-7000-8000-00030000000a", "args": {}, "url": "/books/0199c0de-0000-7000-8000-00030000000a/layout" },
+    { "builder": "layout", "id": "0199c0de-0000-7000-8000-00030000000a", "args": { "scene": "5.2", "chapter": "5" }, "url": "/books/0199c0de-0000-7000-8000-00030000000a/layout#scene=5.2&chapter=5" },
+    { "builder": "series", "id": "0199c0de-0000-7000-8000-000200000001", "args": {}, "url": "/#series=0199c0de-0000-7000-8000-000200000001" }
+  ]
+}

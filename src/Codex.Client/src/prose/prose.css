@@ -1,0 +1,317 @@
+.prose-editor .ProseMirror {
+  outline: none;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: var(--text-md, 14px);
+  line-height: var(--leading-prose, 1.7);
+  color: var(--color-text, #1c2638);
+}
+.prose-summary-editor .ProseMirror {
+  font-size: var(--text-sm, 12px);
+  line-height: var(--leading, 1.45);
+}
+.prose-editor .ProseMirror p {
+  margin: 0 0 0.8em;
+}
+.prose-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--color-muted, #52627c);
+}
+.prose-editor .ProseMirror h1,
+.prose-editor .ProseMirror h2,
+.prose-editor .ProseMirror h3,
+.prose-editor .ProseMirror h4,
+.prose-editor .ProseMirror h5,
+.prose-editor .ProseMirror h6 {
+  margin: 1.1em 0 0.35em;
+  font-size: var(--text-md, 14px);
+  font-weight: var(--weight-semibold, 600);
+  line-height: 1.4;
+}
+.prose-editor .ProseMirror h1:first-child,
+.prose-editor .ProseMirror h2:first-child,
+.prose-editor .ProseMirror h3:first-child {
+  margin-top: 0;
+}
+.prose-editor .ProseMirror ul,
+.prose-editor .ProseMirror ol {
+  margin: 0 0 0.8em;
+  padding-left: 1.3em;
+}
+.prose-editor .ProseMirror ul {
+  list-style: disc;
+}
+.prose-editor .ProseMirror ol {
+  list-style: decimal;
+}
+.prose-editor .ProseMirror li + li {
+  margin-top: 0.15em;
+}
+.prose-editor .ProseMirror li > p {
+  margin: 0;
+}
+.prose-editor .ProseMirror blockquote {
+  margin: 0 0 0.8em;
+  padding-left: var(--space-3, 12px);
+  border-left: 3px solid var(--color-border, #cdd9ea);
+  color: var(--color-muted, #52627c);
+}
+.prose-editor .ProseMirror code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.92em;
+  background: var(--color-surface-2, #dfe7f3);
+  border-radius: var(--radius-xs, 3px);
+  padding: 0 3px;
+}
+.prose-mention {
+  border-bottom: 2px solid var(--color-accent, #2563c9);
+  border-radius: 2px;
+  padding: 0 2px;
+  background: var(--color-accent-soft, #dae6fb);
+}
+.prose-ref {
+  background: color-mix(in srgb, var(--color-warn, #b7701b) 18%, transparent);
+  border-radius: 2px;
+}
+.prose-chapter-link {
+  color: var(--color-accent, #2563c9);
+}
+.prose-ref-marker {
+  color: var(--color-warn, #b7701b);
+  font-weight: 600;
+}
+.prose-card {
+  margin: 0 0 0.8em;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  border: 1px solid var(--color-border, #cdd9ea);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--color-surface, #f7f9fd);
+  font-size: var(--text-sm, 12px);
+  line-height: var(--leading, 1.45);
+  user-select: none;
+}
+.prose-card-label {
+  color: var(--color-accent, #2563c9);
+  font-weight: var(--weight-semibold, 600);
+}
+.prose-card-id {
+  margin-left: var(--space-2, 8px);
+  color: var(--color-muted, #52627c);
+  font-family: var(--font-mono, monospace);
+}
+.prose-card-source {
+  margin: var(--space-1, 4px) 0 0;
+  white-space: pre-wrap;
+  font-family: var(--font-mono, monospace);
+}
+.prose-container {
+  margin: 0 0 0.8em;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  border-left: 3px solid var(--color-accent, #2563c9);
+  background: var(--color-surface, #f7f9fd);
+  border-radius: var(--radius-sm, 6px);
+}
+.prose-popup {
+  z-index: 50;
+  min-width: 220px;
+  max-height: 280px;
+  overflow: auto;
+  margin: 0;
+  padding: var(--space-1, 4px);
+  list-style: none;
+  background: var(--color-surface, #f7f9fd);
+  border: 1px solid var(--color-border, #cdd9ea);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: var(--shadow-raised, 0 4px 12px -6px rgb(16 24 40 / 0.2));
+  font-size: var(--text-sm, 12px);
+  color: var(--color-text, #1c2638);
+}
+.prose-popup-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  padding: 4px var(--space-2, 8px);
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+}
+.prose-popup-item[aria-selected='true'] {
+  background: var(--color-accent-soft, #dae6fb);
+}
+.prose-popup-item[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.prose-popup-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.prose-popup-meta {
+  margin-left: auto;
+  color: var(--color-muted, #52627c);
+}
+.prose-popup-group {
+  padding: 4px var(--space-2, 8px) 2px;
+  font-size: var(--text-2xs, 10.5px);
+  text-transform: uppercase;
+  color: var(--color-muted, #52627c);
+}
+.prose-popup-empty {
+  padding: 4px var(--space-2, 8px);
+  color: var(--color-muted, #52627c);
+}
+.prose-editor .ProseMirror li > ul,
+.prose-editor .ProseMirror li > ol {
+  margin-top: 0.15em;
+  margin-bottom: 0;
+}
+.prose-editor .ProseMirror hr {
+  margin: 1.2em 0;
+  border: 0;
+  border-top: 1px solid var(--color-border, #cdd9ea);
+}
+.prose-editor .ProseMirror a {
+  color: var(--color-accent, #2563c9);
+  text-decoration: underline;
+}
+.prose-editor .ProseMirror table {
+  margin: 0 0 0.8em;
+  border-collapse: collapse;
+}
+.prose-editor .ProseMirror th,
+.prose-editor .ProseMirror td {
+  min-width: 4em;
+  padding: 2px var(--space-2, 8px);
+  border: 1px solid var(--color-border, #cdd9ea);
+  vertical-align: top;
+}
+.prose-editor .ProseMirror th {
+  background: var(--color-surface, #f7f9fd);
+  font-weight: var(--weight-semibold, 600);
+  text-align: left;
+}
+.prose-editor .ProseMirror td > p,
+.prose-editor .ProseMirror th > p {
+  margin: 0;
+}
+.prose-editor .ProseMirror .selectedCell {
+  background: var(--color-accent-soft, #dae6fb);
+}
+.prose-raw-latex-inline {
+  padding: 0 4px;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--color-surface, #f7f9fd);
+  border: 1px dashed var(--color-border, #cdd9ea);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.9em;
+}
+
+/* The Rich / Source toggle (MarkdownSurface). In Rich it floats over the top-right corner, shown on hover or focus, so
+   it adds no height to the page; in Source it sits above the editor, always shown. */
+.prose-surface {
+  position: relative;
+}
+.prose-mode-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  gap: 1px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.prose-surface:hover .prose-mode-toggle,
+.prose-surface:focus-within .prose-mode-toggle {
+  opacity: 1;
+}
+.prose-surface[data-mode='source'] .prose-mode-toggle {
+  position: static;
+  justify-content: flex-end;
+  margin-bottom: var(--space-1, 4px);
+  opacity: 1;
+}
+.prose-mode-toggle button {
+  border: 1px solid var(--color-border, #cdd9ea);
+  background: var(--color-surface, #f7f9fd);
+  color: var(--color-muted, #52627c);
+  font: inherit;
+  font-size: var(--text-2xs, 10.5px);
+  line-height: 1;
+  padding: 3px 7px;
+  cursor: pointer;
+}
+.prose-mode-toggle button:first-child {
+  border-radius: var(--radius-sm, 6px) 0 0 var(--radius-sm, 6px);
+}
+.prose-mode-toggle button:last-child {
+  border-radius: 0 var(--radius-sm, 6px) var(--radius-sm, 6px) 0;
+}
+.prose-mode-toggle button[aria-pressed='true'] {
+  background: var(--color-accent-soft, #dae6fb);
+  color: var(--color-text, #1c2638);
+  font-weight: var(--weight-medium, 500);
+}
+.prose-source-editor {
+  max-width: 100%;
+}
+
+/* The table toolbar floats above the table the caret is in. */
+.prose-table-toolbar {
+  z-index: 40;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: var(--color-surface, #f7f9fd);
+  border: 1px solid var(--color-border, #cdd9ea);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: var(--shadow-raised, 0 4px 12px -6px rgb(16 24 40 / 0.2));
+  font-size: var(--text-xs, 11px);
+}
+.prose-table-toolbar-button {
+  padding: 2px var(--space-2, 8px);
+  border: 0;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--color-text, #1c2638);
+  font: inherit;
+  cursor: pointer;
+}
+.prose-table-toolbar-button:hover:not(:disabled),
+.prose-table-toolbar-button[aria-pressed='true'] {
+  background: var(--color-accent-soft, #dae6fb);
+}
+.prose-table-toolbar-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.prose-table-toolbar-sep {
+  align-self: stretch;
+  width: 1px;
+  margin: 0 2px;
+  background: var(--color-border, #cdd9ea);
+}
+
+/* Raw LaTeX: the block holds a CodeMirror editor, the inline chip an input while it is edited. */
+.prose-card-editor {
+  margin-top: var(--space-1, 4px);
+  user-select: text;
+}
+.prose-card-editor .cm-editor {
+  background: var(--color-bg, #fff);
+}
+.prose-raw-latex-inline {
+  cursor: text;
+}
+.prose-raw-latex-inline-input {
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}

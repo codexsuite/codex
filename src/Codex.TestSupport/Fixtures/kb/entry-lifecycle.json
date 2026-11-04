@@ -1,0 +1,16 @@
+{
+  "addRelated": { "entryId": "0199c0de-0000-7000-8000-000b00000004" },
+  "makeMention": { "sceneId": "0199c0de-0000-7000-8000-000500000001" },
+  "impact": { "mentions": 5, "scenes": 2, "notes": 1, "links": 1 },
+  "undo": {
+    "entryId": "0199c0de-0000-7000-8000-000b00000003",
+    "name": "Goodhart's Law",
+    "scenes": [{ "sceneId": "0199c0de-0000-7000-8000-000500000001", "version": 3, "body": "Text [Goodhart's Law](kb:0199c0de-0000-7000-8000-000b00000003)." }],
+    "summaries": [{ "sceneId": "0199c0de-0000-7000-8000-000500000002", "summary": "About [Goodhart's Law](kb:0199c0de-0000-7000-8000-000b00000003)." }],
+    "beats": [{ "beatId": "0199c0de-0000-7000-8000-000700000001", "body": "Explain [Goodhart's Law](kb:0199c0de-0000-7000-8000-000b00000003)." }],
+    "entries": [{ "entryId": "0199c0de-0000-7000-8000-000b00000004", "summary": null, "body": "See [Goodhart's Law](kb:0199c0de-0000-7000-8000-000b00000003)." }],
+    "related": ["0199c0de-0000-7000-8000-000b00000004"],
+    "sceneLinks": ["0199c0de-0000-7000-8000-000500000002"],
+    "beatContexts": ["0199c0de-0000-7000-8000-000700000001"]
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "limit": 300,
+  "riskCount": 1,
+  "sources": [
+    { "referenceId": "0199c0de-0000-7000-8000-000d00000004", "title": "The Velocity Trap", "number": 4, "quotedWords": 342, "reason": "quote_over_limit", "atRisk": true, "why": "342 of 300 words quoted" },
+    { "referenceId": "0199c0de-0000-7000-8000-000d00000005", "title": "Conway", "number": 5, "quotedWords": 0, "reason": null, "atRisk": false, "why": null }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "owner": { "id": "0199c0de-0000-7000-8000-000100000001", "displayName": "Joel Dickson", "email": "jd@codex.local" },
+  "role": "owner",
+  "book": [
+    {
+      "user": { "id": "0199c0de-0000-7000-8000-000100000002", "displayName": "Ana Kowalczyk", "email": "ana@codex.local" },
+      "role": "view"
+    }
+  ],
+  "series": {
+    "id": "0199c0de-0000-7000-8000-000200000001",
+    "title": "The Forsaken Gods",
+    "grants": [
+      {
+        "user": { "id": "0199c0de-0000-7000-8000-0000000000b4", "displayName": "Bo Lindqvist", "email": "bo@example.test" },
+        "role": "write"
+      }
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+[
+  {
+    "sourceId": "0199c0de-0000-7000-8000-000d00000001",
+    "status": "cleared",
+    "csl": {
+      "id": "beck1999",
+      "type": "book",
+      "title": "Extreme Programming Explained",
+      "author": [{ "family": "Beck", "given": "Kent" }],
+      "issued": { "date-parts": [[1999]] }
+    },
+    "creditLine": null
+  }
+]

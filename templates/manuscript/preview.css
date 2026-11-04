@@ -1,0 +1,12 @@
+/* Manuscript: Paged.js approximation of standard manuscript format for Quick preview. */
+@page { size: 8.5in 11in; margin: 1in; }
+body { background: #ffffff; color: #000000; font-family: "Courier New", Courier, monospace; font-size: 12pt; line-height: 2; }
+h1, h2 { font-size: 12pt; font-weight: normal; text-align: center; break-before: page; margin-top: 2.5in; }
+p { margin: 0; text-indent: 0.5in; }
+.scene-break::before { content: "#"; display: block; text-align: center; }
+.readaloud, .sidebar, .aside, .spell, .statblock { margin-left: 0.5in; }
+.pagebreak { break-after: page; }
+figure img { display: none; }
+.raw-latex { border: 1px dashed currentColor; padding: 0 0.4em; font-style: italic; font-size: 0.85em; opacity: 0.75; }
+table { border-collapse: collapse; width: 100%; margin: 0.8em 0; }
+th, td { border-bottom: 1px solid currentColor; padding: 0.15em 0.4em; text-align: left; }

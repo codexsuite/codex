@@ -1,0 +1,37 @@
+{
+  "slug": "fantasy-rpg",
+  "name": "Fantasy RPG (5e style)",
+  "version": "1.0.0",
+  "engine": "tectonic",
+  "trims": ["us-letter", "a4"],
+  "page": {
+    "columns": 2,
+    "columnGap": 0.33,
+    "margins": { "top": 0.46, "bottom": 0.8, "inner": 0.75, "outer": 0.75 }
+  },
+  "citations": "footnote",
+  "rawLatex": true,
+  "filters": ["filters/codex.lua"],
+  "options": {
+    "drop-caps": { "type": "boolean", "default": true, "label": "Drop cap on each chapter's first paragraph" },
+    "background": { "type": "choice", "choices": ["full", "print", "none"], "default": "full", "label": "Page background" },
+    "justified": { "type": "boolean", "default": false, "label": "Justified text" },
+    "toc": { "type": "boolean", "default": true, "label": "Table of contents" }
+  },
+  "directives": {
+    "readaloud": "DndReadAloud box",
+    "sidebar": "DndSidebar box with its title",
+    "aside": "DndComment box",
+    "spell": "DndSpellHeader from the entry's level-school, casting-time, range, components and duration fields",
+    "statblock": "DndSidebar box with the entry's fields",
+    "pagebreak": "\\clearpage",
+    "figure": "column figure; page, spread and float-top span both columns"
+  },
+  "files": {
+    "wrapper.tex": { "description": "dndbook wrapper (pandoc template)" },
+    "filters/codex.lua": { "description": "Codex directives drawn with the rpgtex environments" },
+    "preview.css": { "description": "Preview styles" },
+    "sample.md": { "description": "Picker thumbnail source" },
+    "tex/dndbook.cls": { "description": "rpgtex DND-5e-LaTeX-Template v0.8.0 (MIT, tex/LICENSE)" }
+  }
+}

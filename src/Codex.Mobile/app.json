@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "Codex",
+    "slug": "codex",
+    "scheme": "codex",
+    "version": "0.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-sqlite",
+      "expo-status-bar",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Codex records your voice on this phone to turn it into text. The audio is not uploaded.",
+          "recordAudioAndroid": true,
+          "enableBackgroundRecording": false,
+          "enableBackgroundPlayback": false
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "ios": {
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
+    },
+    "android": {
+      "permissions": ["android.permission.RECORD_AUDIO"]
+    }
+  }
+}

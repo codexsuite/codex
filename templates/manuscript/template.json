@@ -1,0 +1,32 @@
+{
+  "slug": "manuscript",
+  "name": "Manuscript",
+  "version": "1.0.0",
+  "engine": "tectonic",
+  "trims": ["us-letter", "a4"],
+  "page": {
+    "columns": 1,
+    "columnGap": 0,
+    "margins": { "top": 1, "bottom": 1, "inner": 1, "outer": 1 }
+  },
+  "citations": "author-date",
+  "rawLatex": false,
+  "filters": ["filters/codex.lua"],
+  "options": {
+    "font": { "type": "choice", "choices": ["courier", "times"], "default": "courier", "label": "Typeface" }
+  },
+  "directives": {
+    "readaloud": "indented block",
+    "sidebar": "indented block with its title",
+    "aside": "indented block",
+    "pagebreak": "\\clearpage",
+    "scene-break": "centred #",
+    "figure": "[Figure: caption] placeholder line"
+  },
+  "files": {
+    "wrapper.tex": { "description": "Standard manuscript format wrapper (pandoc template)" },
+    "filters/codex.lua": { "description": "Codex directives in manuscript form" },
+    "preview.css": { "description": "Preview styles" },
+    "sample.md": { "description": "Picker thumbnail source" }
+  }
+}

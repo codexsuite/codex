@@ -1,0 +1,21 @@
+/* Fantasy RPG (5e style): Paged.js approximation of the rpgtex look for Quick preview. The page stays paper-coloured
+   in light and dark UI. */
+@page { size: 8.5in 11in; margin: 0.46in 0.75in 0.8in 0.75in; }
+body { background: #eee5ce; color: #1a1a1a; font-family: "Bookman Old Style", Georgia, serif; font-size: 9.5pt; line-height: 1.25; }
+.codex-body { column-count: 2; column-gap: 0.33in; }
+h1, h2, h3, h4 { color: #58180d; font-family: "Palatino Linotype", Georgia, serif; font-variant: small-caps; break-after: avoid; }
+h1 { column-span: all; font-size: 28pt; text-align: center; }
+h2 { column-span: all; font-size: 22pt; border-bottom: 2px solid #c9ad6a; }
+h3 { font-size: 14pt; border-bottom: 1px solid #c9ad6a; }
+.readaloud { background: #faf7ea; border-left: 3px solid #58180d; padding: 0.5em 0.8em; margin: 0.8em 0; }
+.sidebar, .statblock { background: #e0e5c1; border-top: 3px solid #1a1a1a; border-bottom: 3px solid #1a1a1a; padding: 0.5em 0.8em; margin: 0.8em 0; }
+.sidebar::before, .statblock::before, .aside::before { content: attr(title); display: block; font-weight: bold; font-variant: small-caps; }
+.aside { background: #e5efe2; padding: 0.5em 0.8em; margin: 0.8em 0; }
+.spell .entry-heading { color: #58180d; font-variant: small-caps; }
+.pagebreak { break-after: page; }
+figure.page, figure.spread, figure.float-top { column-span: all; }
+figure img { width: 100%; }
+.missing-figure { border: 1px dashed #58180d; padding: 1em; text-align: center; font-style: italic; }
+.raw-latex { border: 1px dashed currentColor; padding: 0 0.4em; font-style: italic; font-size: 0.85em; opacity: 0.75; }
+table { border-collapse: collapse; width: 100%; margin: 0.8em 0; }
+th, td { border-bottom: 1px solid currentColor; padding: 0.15em 0.4em; text-align: left; }

@@ -1,0 +1,12 @@
+{
+  "template": {
+    "name": "Novel (6 x 9)",
+    "description": "A single column book block with classic running heads.",
+    "isUserTemplate": false,
+    "pinnedVersion": "1.0.0",
+    "latestVersion": "1.1.0",
+    "trimSize": "6x9",
+    "trims": ["6x9", "5.5x8.5"]
+  },
+  "riskCount": 3
+}

@@ -1,0 +1,12 @@
+{
+  "bookId": "0199a000-0000-7000-8000-000000000011",
+  "seriesName": "The Ashen Crown",
+  "style": { "value": "apa", "inherited": true },
+  "rulesName": "Default",
+  "quoteWordLimit": { "value": 250, "inherited": false },
+  "publisher": { "value": "", "inherited": false },
+  "plannedYear": { "value": 2027, "inherited": true },
+  "formats": { "value": ["print", "ebook"], "inherited": true },
+  "printRun": { "value": null, "inherited": false },
+  "territory": { "value": "World English", "inherited": true }
+}

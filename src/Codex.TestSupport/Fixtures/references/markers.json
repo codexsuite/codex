@@ -1,0 +1,32 @@
+[
+  {
+    "useId": "0197a3c0-0000-7000-8000-000000000021",
+    "number": 1,
+    "status": "risk",
+    "sourceId": "0197a3c0-0000-7000-8000-000000000031",
+    "sourceTitle": "The Mythical Man-Month",
+    "reason": "quote_over_limit",
+    "kind": "quote",
+    "quotedWords": 412,
+    "limit": 300,
+    "sceneId": "0197a3c0-0000-7000-8000-000000000041",
+    "chapterNumber": 2,
+    "sceneNumber": 1,
+    "generationId": null
+  },
+  {
+    "useId": "0197a3c0-0000-7000-8000-000000000022",
+    "number": 2,
+    "status": "needs_check",
+    "sourceId": "0197a3c0-0000-7000-8000-000000000032",
+    "sourceTitle": "Accelerate",
+    "reason": "ready_to_sign_off",
+    "kind": "paraphrase",
+    "quotedWords": 0,
+    "limit": 300,
+    "sceneId": "0197a3c0-0000-7000-8000-000000000042",
+    "chapterNumber": null,
+    "sceneNumber": 3,
+    "generationId": "0197a3c0-0000-7000-8000-000000000051"
+  }
+]

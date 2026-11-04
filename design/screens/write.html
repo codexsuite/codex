@@ -1,0 +1,1864 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Codex · Write (reference)</title>
+<!--
+  Reference implementation of the Write screen (#6) inside the book workspace chrome.
+  Open directly in a browser. Uses ../tokens.css only; no build step.
+  Working: drag beats and Codex additions within a scene or into any scene in any chapter,
+  continuous manuscript editing with simulated websocket autosave, "/" command menu,
+  "@" Codex mentions, Scene Beat blocks (length, + Context, prompt template and model, streamed
+  AI draft with Apply / Retry / Discard), Codex Addition blocks, chapter references by ch:slug (#4),
+  source reference markers (#2), the scene gutter (summary shared with Plan), the minimap,
+  scope selector, Format and Focus, the Knowledge base entry panel, and deep links
+  (?book=, #scene=5.2, #chapter=5, #scene=4.1&ref=velocity, #kb=, #entry=, and the return from
+  References' Add source: #scene=7.1&sel=…&cite=…&title=…).
+  Your access (#80): ?role=owner|write|comment|view, or the Preview panel's Role control, opens the book as someone with
+  that role. Below write the manuscript, beats, gutters, chapter titles and the entry panel are read-only, buttons that
+  change things are hidden, and the bookbar shows a quiet View only / Comment only chip in place of the save status
+  (click it, or hover, for why typing does nothing). Books shared with you (?book=glass-orchard, paper-saints,
+  lamplighter, wick-and-ember, moth-hour, salt-king) open at your role. Switching role while the tab is open shows the
+  toast an AccessChanged event would.
+  The "Preview" panel bottom-right is a review aid, not part of the design.
+-->
+<link rel="stylesheet" href="../tokens.css">
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--color-bg); color: var(--color-text); font: var(--text-base)/var(--leading) var(--font-sans); -webkit-font-smoothing: antialiased; display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+button, input { font: inherit; color: inherit; }
+svg { flex: none; }
+.spacer { flex: 1; }
+.dim-t { color: var(--color-muted); }
+
+/* Shared controls (same as plan.html) */
+.btn { display: inline-flex; align-items: center; gap: 5px; height: var(--control-height); padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: var(--color-surface); font-size: var(--text-sm); font-weight: var(--weight-medium); cursor: pointer; white-space: nowrap; }
+.btn:hover { background: var(--color-surface-2); }
+.btn.primary { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-accent-fg); }
+.btn.primary:hover { filter: brightness(1.07); }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--color-surface-2); }
+.btn.ghost[aria-pressed="true"] { background: var(--color-accent-soft); }
+.btn svg, .seg svg, .ib svg, .mini svg, .split svg { width: 13px; height: 13px; }
+.btn:focus-visible, .seg button:focus-visible, .ib:focus-visible, .mini:focus-visible, .grip:focus-visible, .tab:focus-visible, .search:focus-within, .entry:focus-visible, .split > button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.search { display: flex; align-items: center; gap: 6px; height: var(--control-height); width: 200px; max-width: 100%; padding: 0 var(--space-2); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); }
+.search svg { width: 13px; height: 13px; color: var(--color-muted); }
+.search input { flex: 1; min-width: 0; border: 0; background: transparent; outline: 0; font-size: var(--text-sm); }
+.search input::placeholder { color: var(--color-muted); }
+.search .cnt { font-size: var(--text-2xs); color: var(--color-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sel { display: inline-flex; align-items: center; gap: 4px; height: var(--control-height); padding: 0 var(--space-2); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); font-size: var(--text-sm); white-space: nowrap; cursor: pointer; min-width: 0; }
+.sel em { font-style: normal; color: var(--color-muted); }
+.sel svg { width: 11px; height: 11px; color: var(--color-muted); }
+.sel .t { overflow: hidden; text-overflow: ellipsis; }
+.seg { display: inline-flex; height: var(--control-height); border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; background: var(--color-surface); }
+.seg button { display: inline-flex; align-items: center; gap: 4px; padding: 0 9px; border: 0; border-right: 1px solid var(--color-border); background: transparent; color: var(--color-muted); font-size: var(--text-sm); cursor: pointer; font-variant-numeric: tabular-nums; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--color-accent-soft); color: var(--color-text); font-weight: var(--weight-semibold); }
+.overline { font-size: var(--text-2xs); font-weight: var(--weight-medium); color: var(--color-muted); text-transform: uppercase; letter-spacing: .02em; }
+.ib { display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--color-muted); cursor: pointer; }
+.ib:hover { background: var(--color-surface-2); color: var(--color-text); }
+.cover.thumb { width: 20px; aspect-ratio: 2 / 3; border-radius: 2px; background: linear-gradient(160deg, #05070d, #0d1a2b); box-shadow: 0 0 0 1px rgb(0 0 0 / .15); flex: none; }
+.mini { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 6px; border: 0; border-radius: var(--radius-xs); background: none; color: var(--color-muted); font-size: var(--text-xs); font-weight: var(--weight-medium); cursor: pointer; white-space: nowrap; }
+.mini:hover { background: var(--color-surface-2); color: var(--color-text); }
+.mini svg { width: 11px; height: 11px; }
+.split { display: inline-flex; height: var(--control-height); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); overflow: hidden; min-width: 0; }
+.split > button { display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; border: 0; border-right: 1px solid var(--color-border); background: none; font-size: var(--text-sm); font-weight: var(--weight-medium); cursor: pointer; color: var(--color-text); white-space: nowrap; min-width: 0; }
+.split > button:last-child { border-right: 0; }
+.split > button:hover { background: var(--color-surface-2); }
+.split > button.primary { background: var(--color-accent); color: var(--color-accent-fg); border-color: color-mix(in srgb, var(--color-accent-fg) 25%, var(--color-accent)); }
+.split > button.primary:hover { filter: brightness(1.07); }
+.split .t { overflow: hidden; text-overflow: ellipsis; color: var(--color-muted); font-weight: var(--weight-regular); }
+
+/* Book header (#6 shared chrome, same as plan.html) */
+.bookbar { height: var(--bar-height); flex: none; display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); background: var(--color-surface); border-bottom: 1px solid var(--color-border); min-width: 0; transition: opacity .2s; }
+.book-id { display: flex; align-items: center; gap: 7px; min-width: 0; padding-right: var(--space-2); border-right: 1px solid var(--color-border); height: 100%; }
+.book-id .t { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+.book-id b { font-size: var(--text-sm); font-weight: var(--weight-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+.book-id span { font-size: var(--text-2xs); color: var(--color-muted); white-space: nowrap; }
+.tabs { display: flex; align-items: center; height: 100%; }
+.tab { position: relative; display: inline-flex; align-items: center; gap: 5px; height: 100%; padding: 0 10px; border: 0; background: none; color: var(--color-muted); font-size: var(--text-sm); font-weight: var(--weight-medium); cursor: pointer; text-decoration: none; white-space: nowrap; }
+.tab:hover { color: var(--color-text); }
+.tab[aria-selected="true"] { color: var(--color-text); font-weight: var(--weight-semibold); }
+.tab[aria-selected="true"]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--color-accent); }
+.tabs .vr { width: 1px; height: 16px; margin: 0 4px; background: var(--color-border); }
+.badge { display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: color-mix(in srgb, var(--tone) 16%, transparent); color: var(--tone); font-size: var(--text-2xs); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+a.btn { color: var(--color-text); text-decoration: none; }
+.scope { display: flex; align-items: center; gap: var(--space-2); min-width: 0; font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.scope .sel { max-width: 240px; }
+.sync { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; }
+.sync i { width: 6px; height: 6px; border-radius: 50%; background: var(--color-ok); }
+.sync[data-s="editing"] i { background: var(--color-warn); }
+.sync[data-s="saving"] i { background: var(--color-accent); animation: pulse .7s ease-in-out infinite alternate; }
+@keyframes pulse { to { opacity: .25; } }
+.avatar { width: 22px; height: 22px; border-radius: 50%; background: var(--color-accent-soft); color: var(--color-accent); font-size: 10px; font-weight: 700; display: grid; place-items: center; flex: none; }
+
+/* Workspace */
+.ws { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); }
+.ws.no-side { grid-template-columns: minmax(0, 1fr); }
+.ws.no-side .side { display: none; }
+.ws.has-panel { grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--panel-width); }
+.ws.no-side.has-panel { grid-template-columns: minmax(0, 1fr) var(--panel-width); }
+.ws:not(.has-panel) .kbp { display: none; }
+
+/* Knowledge base entry panel (G9): same look as the References detail panel; Plan builds the same one */
+.kbp { min-height: 0; overflow: auto; border-left: 1px solid var(--color-border); background: var(--color-surface); }
+.p-h { position: sticky; top: 0; z-index: 3; padding: var(--space-3) var(--space-3) var(--space-2); background: var(--color-surface); border-bottom: 1px solid var(--color-border); }
+.p-top { display: flex; align-items: center; gap: 6px; }
+.p-top .dot { width: 7px; height: 7px; }
+.p-h h2 { flex: 1; min-width: 0; margin: 0; padding: 1px 4px; font-size: var(--text-md); font-weight: var(--weight-semibold); line-height: 1.3; border-radius: var(--radius-xs); outline: 0; overflow-wrap: anywhere; }
+.p-h h2:hover { background: color-mix(in srgb, var(--color-surface-2) 60%, transparent); }
+.p-h h2:focus { background: var(--color-bg); box-shadow: 0 0 0 2px var(--color-accent); }
+.p-h h2:empty::before { content: attr(data-placeholder); color: var(--color-muted); font-weight: var(--weight-regular); }
+.p-h .by { margin: 2px 0 0 17px; font-size: var(--text-xs); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.sec { padding: var(--space-3); border-bottom: 1px solid var(--color-border); }
+.sec:last-child { border-bottom: 0; }
+.sec-h { display: flex; align-items: center; gap: 6px; margin-bottom: var(--space-2); }
+.sec-h h3 { margin: 0; flex: 1; font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.sec-h .k { font-size: var(--text-xs); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.fields { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 6px 10px; align-items: center; font-size: var(--text-sm); }
+.fields > label { font-size: var(--text-xs); color: var(--color-muted); }
+.fields > label.top { align-self: start; padding-top: 5px; }
+.fld { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+.fld input, .fld textarea, .fld select { min-width: 0; padding: 0 7px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: inherit; font: inherit; font-size: var(--text-sm); }
+.fld input { flex: 1; height: 24px; min-width: 80px; }
+.fld select { height: 26px; border-color: var(--color-border); background: var(--color-surface); cursor: pointer; }
+.fld textarea { flex: 1; width: 100%; min-height: 64px; padding: 4px 7px; line-height: var(--leading); resize: vertical; }
+.fld input:hover, .fld textarea:hover { border-color: var(--color-border); }
+.fld input:focus, .fld textarea:focus, .fld select:focus { outline: 0; border-color: var(--color-accent); background: var(--color-bg); box-shadow: 0 0 0 1px var(--color-accent); }
+.fld input::placeholder, .fld textarea::placeholder { color: var(--color-muted); }
+.alias { display: inline-flex; align-items: center; gap: 2px; height: 20px; padding: 0 2px 0 7px; border-radius: 10px; background: color-mix(in srgb, var(--cat) 14%, transparent); font-size: var(--text-xs); font-weight: var(--weight-medium); white-space: nowrap; }
+.alias button { display: grid; place-items: center; width: 16px; height: 16px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--color-muted); cursor: pointer; }
+.alias button:hover { background: var(--color-surface-2); color: var(--color-text); }
+.alias svg { width: 9px; height: 9px; }
+.tgl { position: relative; width: 28px; height: 16px; flex: none; padding: 0; border: 0; border-radius: 8px; background: var(--color-border); cursor: pointer; transition: background .15s; }
+.tgl::after { content: ""; position: absolute; left: 2px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--color-surface); box-shadow: 0 1px 2px rgb(0 0 0 / .25); transition: transform .15s; }
+.tgl[aria-checked="true"] { background: var(--color-accent); }
+.tgl[aria-checked="true"]::after { transform: translateX(12px); }
+.tgl:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.fld .hint { font-size: var(--text-xs); color: var(--color-muted); }
+.uses { display: grid; gap: 2px; margin: 0 -6px; }
+.use-row { display: block; width: 100%; padding: 5px 6px; border: 0; border-radius: var(--radius-sm); background: none; text-align: left; cursor: pointer; }
+.use-row:hover { background: var(--color-surface-2); }
+.use-row:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.use-row .overline { display: block; }
+.use-row .snip { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: var(--text-sm); color: var(--color-muted); line-height: var(--leading); }
+.use-row .snip i { font-style: italic; }
+.adds { display: grid; gap: var(--space-2); }
+.add-x { padding: 4px 10px 6px; border-left: 3px solid var(--cat); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; background: var(--color-bg); }
+.add-x .use-row { padding: 0; margin-bottom: 2px; }
+.add-x .use-row:hover { background: none; color: var(--color-text); }
+.add-x p { margin: 0; font-size: var(--text-sm); line-height: var(--leading); }
+.p-empty { font-size: var(--text-xs); color: var(--color-muted); }
+.p-foot { padding: var(--space-2) var(--space-3) var(--space-4); }
+.btn.danger-t { border-color: transparent; background: none; color: var(--color-danger); padding: 0 6px; }
+.btn.danger-t:hover { background: color-mix(in srgb, var(--color-danger) 10%, transparent); }
+.p-acts { display: flex; justify-content: flex-end; gap: 6px; margin-top: var(--space-3); }
+
+/* Sidebar: Knowledge base (same as plan.html) */
+.side { min-height: 0; display: flex; flex-direction: column; background: var(--color-surface); border-right: 1px solid var(--color-border); }
+.side-h { padding: 10px var(--space-3) 0; font-size: var(--text-md); font-weight: var(--weight-semibold); }
+.side-tools { display: flex; gap: 6px; padding: var(--space-2); }
+.side-tools .search { width: auto; flex: 1; }
+.side-new { padding: 0 var(--space-2) var(--space-2); }
+.side-new .btn { width: 100%; justify-content: center; }
+.side-list { flex: 1; overflow: auto; padding: 0 var(--space-1) var(--space-3); }
+.cat-h { display: flex; align-items: center; gap: 6px; padding: 10px 6px 4px; font-size: var(--text-2xs); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .04em; color: var(--color-muted); }
+.cat-h i, .dot { width: 7px; height: 7px; border-radius: 2px; background: var(--cat); flex: none; }
+.entry { width: 100%; display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 6px; border: 0; border-radius: var(--radius-sm); background: none; font-size: var(--text-sm); text-align: left; cursor: pointer; }
+.entry:hover { background: var(--color-surface-2); }
+.entry[aria-pressed="true"] { background: var(--color-accent-soft); font-weight: var(--weight-medium); }
+.entry .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.entry .u { font-size: var(--text-2xs); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+/* Entry row: the row highlights; the hover pencil opens the entry panel in place of the count */
+.erow { position: relative; }
+.erow .e-edit { position: absolute; right: 3px; top: 3px; }
+.erow.open .entry { box-shadow: inset 2px 0 0 var(--color-accent); }
+@media (hover: hover) {
+  .erow .e-edit { opacity: 0; }
+  .erow:hover .e-edit, .erow:focus-within .e-edit { opacity: 1; }
+  .erow:hover .entry .u, .erow:focus-within .entry .u { visibility: hidden; }
+}
+@media (hover: none) { .erow .entry { padding-right: 28px; } }
+.side-empty { padding: var(--space-5) var(--space-3); text-align: center; color: var(--color-muted); font-size: var(--text-sm); }
+
+/* Write toolbar */
+.main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.toolbar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--space-2); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--color-border); }
+.chnav { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
+.chnav .sel { max-width: 300px; }
+.crumb { font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hl-chip { display: inline-flex; align-items: center; gap: 6px; height: var(--control-height); padding: 0 4px 0 9px; border-radius: var(--radius-sm); background: var(--color-accent-soft); font-size: var(--text-sm); white-space: nowrap; }
+.hl-chip .dim-t { font-size: var(--text-xs); }
+
+/* Manuscript area: document + minimap */
+.area { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) var(--minimap-width); }
+.doc { position: relative; min-height: 0; overflow: auto; container-type: inline-size; --pw: var(--prose-width); }
+.doc[data-width="narrow"] { --pw: calc(var(--prose-width) * .82); }
+.doc[data-width="wide"] { --pw: calc(var(--prose-width) * 1.2); }
+.page { padding: var(--space-5) var(--space-5) 40vh; }
+.empty-scope { padding: 80px var(--space-4); text-align: center; color: var(--color-muted); }
+
+/* Each row: prose column + scene gutter (#6 right-hand gutter) */
+.row { display: grid; grid-template-columns: minmax(0, var(--pw)) minmax(180px, var(--gutter-width)); gap: 0 40px; justify-content: center; }
+.doc.no-gutter .row { grid-template-columns: minmax(0, var(--pw)); }
+.doc.no-gutter .gutter { display: none; }
+
+.act-mark { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-5) 0 var(--space-2); font-size: var(--text-2xs); font-weight: var(--weight-semibold); color: var(--color-muted); text-transform: uppercase; letter-spacing: .06em; }
+.act-mark::after { content: ""; flex: 1; height: 1px; background: var(--color-border); }
+.chapter { padding-top: var(--space-5); }
+.chapter + .chapter, .act-mark + .chapter { border-top: 1px dashed var(--color-border); margin-top: var(--space-5); }
+.act-mark + .chapter { border-top: 0; margin-top: 0; }
+.ch-h { padding: var(--space-3) 0 var(--space-4); }
+.ch-h h2 { margin: 2px 0 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); line-height: 1.3; }
+.ch-h h2[data-part] { padding: 0 3px; margin-left: -3px; }
+.g-ch { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding-top: 2px; font-size: var(--text-xs); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.g-ch code { font-family: var(--font-mono); font-size: var(--text-2xs); }
+
+/* Prose editor */
+.ed { position: relative; outline: 0; font-size: var(--text-md); line-height: var(--leading-prose); overflow-wrap: break-word; border-radius: var(--radius-xs); }
+.ed p, .ed blockquote, .draft-body p, .draft-body blockquote { margin: 0 0 .85em; }
+.ed blockquote, .draft-body blockquote { padding-left: var(--space-3); border-left: 3px solid var(--color-border); color: var(--color-muted); }
+.doc[data-para="indent"] .ed p, .doc[data-para="indent"] .draft-body p { margin: 0; }
+.doc[data-para="indent"] .ed p + p, .doc[data-para="indent"] .draft-body p + p { text-indent: 1.6em; }
+.ed.empty::before { content: attr(data-placeholder); position: absolute; left: 0; top: 0; color: var(--color-muted); pointer-events: none; }
+.blk + .blk { margin-top: var(--space-3); }
+.blk.prose .ed { min-height: 1.7em; }
+.beat-prose { margin-top: var(--space-3); }
+
+/* Inline marks: Codex mention (explicit), Codex alias match (auto), chapter ref (#4), source ref (#2) */
+.mention, .cx { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: 4px; background: color-mix(in srgb, var(--cat) 14%, transparent); color: var(--color-text); font-size: .92em; font-weight: var(--weight-medium); line-height: 1.55; white-space: nowrap; cursor: pointer; vertical-align: baseline; }
+.mention { display: inline; box-shadow: inset 0 -1.5px 0 var(--cat); border-radius: 3px 3px 0 0; padding: 0 3px; font-size: 1em; }
+.cx { height: 19px; font-size: var(--text-2xs); }
+.cx i { width: 6px; height: 6px; border-radius: 2px; background: var(--cat); }
+.cx b { font-weight: inherit; }
+.cx svg { width: 10px; height: 10px; }
+.cx .x { display: none; margin-right: -3px; padding: 0; border: 0; background: none; color: var(--color-muted); cursor: pointer; font-size: 12px; line-height: 1; }
+.cx:hover .x { display: inline; }
+button.cx { border: 0; font-family: inherit; }
+.auto { text-decoration: underline dotted var(--cat); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.doc[data-cxhl="off"] .auto { text-decoration: none; }
+.mention.hl, .auto.hl { background: color-mix(in srgb, var(--cat) 30%, transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--cat) 30%, transparent); border-radius: 3px; }
+.chref { display: inline; padding: 0 4px; border-radius: 3px; background: var(--color-surface-2); color: var(--color-accent); font-weight: var(--weight-medium); cursor: pointer; white-space: nowrap; }
+.chref::before { content: "§ "; color: var(--color-muted); font-weight: var(--weight-regular); }
+.chref.missing { color: var(--color-danger); }
+.refm { display: inline-block; min-width: 14px; padding: 0 3px; margin-left: 1px; border-radius: 3px; background: color-mix(in srgb, var(--tone) 16%, transparent); color: var(--tone); font-size: var(--text-2xs); font-weight: var(--weight-semibold); line-height: 1.4; text-align: center; vertical-align: super; cursor: pointer; font-variant-numeric: tabular-nums; }
+.refm.flash { animation: flash 1.6s ease-out; }
+mark { background: color-mix(in srgb, var(--color-warn) 30%, transparent); color: inherit; border-radius: 2px; }
+mark.cur { background: color-mix(in srgb, var(--color-warn) 60%, transparent); box-shadow: 0 0 0 2px var(--color-warn); }
+
+/* Block cards: Scene Beat, Codex Addition */
+.card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-raised); }
+.blk-h { display: flex; align-items: center; gap: 4px; min-height: 30px; padding: 3px 4px 3px 2px; min-width: 0; }
+.kind { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-2xs); font-weight: var(--weight-semibold); color: var(--color-muted); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+.kind svg { width: 13px; height: 13px; }
+.beat .kind { color: var(--color-accent); }
+.bt { min-width: 40px; font-size: var(--text-sm); font-weight: var(--weight-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 3px; }
+.bt:empty::before { content: attr(data-placeholder); color: var(--color-muted); font-weight: var(--weight-regular); }
+.beat-body, .add-body { margin: 0 10px; padding: 2px 0 8px; font-size: var(--text-base); line-height: var(--leading); }
+.beat-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px; border-top: 1px solid var(--color-border); }
+.beat-row .seg { height: 24px; }
+.beat-row .seg button { padding: 0 8px; font-size: var(--text-xs); }
+.beat-row .vr { width: 1px; height: 16px; background: var(--color-border); margin: 0 2px; }
+.beat-f { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px 8px; border-top: 1px solid var(--color-border); }
+.beat.min { display: flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 4px 0 2px; border-style: dashed; box-shadow: none; background: transparent; }
+.beat.min .bsum { flex: 1; min-width: 0; font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.beat.min .bsum b { color: var(--color-text); font-weight: var(--weight-medium); }
+.addition { border-left: 3px solid var(--cat); }
+.addition .kind { color: var(--cat); }
+.add-note { padding: 0 10px 8px; font-size: var(--text-xs); color: var(--color-muted); }
+
+/* AI draft (pending ai_generation) */
+.draft { margin-top: var(--space-2); border: 1px solid color-mix(in srgb, var(--color-accent) 45%, var(--color-border)); border-radius: var(--radius-md); background: color-mix(in srgb, var(--color-accent) 5%, var(--color-surface)); overflow: hidden; }
+.draft-h { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 5px 6px 5px 10px; border-bottom: 1px solid color-mix(in srgb, var(--color-accent) 25%, var(--color-border)); }
+.draft-h .overline { color: var(--color-accent); font-weight: var(--weight-semibold); }
+.draft-h .meta { font-size: var(--text-xs); color: var(--color-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.draft-h .btn { height: 24px; padding: 0 8px; }
+.draft-body { padding: 10px 12px 2px; font-size: var(--text-md); line-height: var(--leading-prose); }
+.draft-note { padding: 0 12px 8px; font-size: var(--text-xs); color: var(--color-muted); }
+.caret { display: inline-block; width: 7px; height: 1em; margin-left: 2px; vertical-align: -2px; background: var(--color-accent); animation: pulse .5s steps(2) infinite alternate; }
+
+/* Scene gutter: summary from Plan, labels, Codex, words */
+.gutter { min-width: 0; font-size: var(--text-sm); }
+.g-in { position: sticky; top: var(--space-3); padding-top: 2px; }
+.g-h { display: flex; align-items: center; gap: 2px; min-height: 22px; }
+.g-h .overline { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.g-labels { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 4px; }
+.g-sum { padding: 2px 4px; margin: 0 -4px; color: var(--color-muted); white-space: pre-wrap; overflow-wrap: anywhere; line-height: var(--leading); min-height: 1.45em; }
+.g-sum:empty::before { content: attr(data-placeholder); font-style: italic; }
+.g-sum:focus { color: var(--color-text); }
+.g-links { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.g-f { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin: 4px 0 0 -6px; }
+.words { font-size: var(--text-2xs); color: var(--color-muted); font-variant-numeric: tabular-nums; white-space: nowrap; padding-left: 4px; }
+.words.none { font-style: italic; }
+.lbl { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; height: 17px; border-radius: 9px; background: var(--color-surface-2); font-size: var(--text-2xs); font-weight: var(--weight-medium); white-space: nowrap; }
+.lbl i { width: 6px; height: 6px; border-radius: 50%; background: var(--tone); }
+.scene.hit .g-in { box-shadow: -2px 0 0 var(--color-accent); padding-left: 8px; }
+.scene.drop-target .g-in { outline: 2px solid var(--color-accent); outline-offset: 4px; border-radius: var(--radius-sm); }
+.scene.flash .scene-main { animation: flash 1.2s ease-out; border-radius: var(--radius-sm); }
+@keyframes flash { from { box-shadow: 0 0 0 4px var(--color-accent-soft); background: var(--color-accent-soft); } }
+
+/* Scene divider (◇) with "New scene here" */
+.divider { position: relative; display: grid; place-items: center; height: 56px; color: var(--color-muted); }
+.divider svg { width: 120px; height: 12px; }
+.divider .mini { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--color-surface); border: 1px solid var(--color-border); opacity: 0; }
+.divider:hover .mini, .divider .mini:focus-visible { opacity: 1; }
+.ch-end { display: flex; justify-content: center; padding: var(--space-3) 0; }
+
+/* Editable fields: hover and focus treatment */
+[data-part] { outline: 0; }
+.ch-h [data-part]:hover, .g-sum:hover, .bt:hover { background: color-mix(in srgb, var(--color-surface-2) 60%, transparent); border-radius: var(--radius-xs); }
+.ch-h [data-part]:focus, .g-sum:focus, .bt:focus { background: var(--color-surface); box-shadow: 0 0 0 2px var(--color-accent); border-radius: var(--radius-xs); }
+.beat-body:focus-within, .add-body:focus-within { box-shadow: inset 0 -1px 0 var(--color-accent); }
+
+/* Hover-revealed icons (always visible on touch) */
+@media (hover: hover) {
+  .blk-h .grip, .g-h .ib, .beat.min .grip { opacity: 0; }
+  .card:hover .grip, .card:focus-within .grip, .grip:focus-visible, .scene:hover .g-h .ib, .scene:focus-within .g-h .ib { opacity: 1; }
+}
+.grip { display: inline-grid; place-items: center; width: 18px; height: 22px; padding: 0; border: 0; border-radius: var(--radius-xs); background: none; color: var(--color-muted); cursor: grab; flex: none; }
+.grip:hover { background: var(--color-surface-2); color: var(--color-text); }
+.grip svg { width: 10px; height: 14px; }
+.blk.moved > .card { animation: flash 1s ease-out; }
+.blk.dragging { opacity: .35; }
+.scene.drop-scene .scene-main { box-shadow: 0 0 0 1px var(--color-border); border-radius: var(--radius-sm); }
+#dropline { position: fixed; z-index: 30; height: 2px; pointer-events: none; background: var(--color-accent); border-radius: 2px; display: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 25%, transparent); }
+#dropline span { position: absolute; left: 0; bottom: 4px; padding: 0 6px; border-radius: var(--radius-xs); background: var(--color-accent); color: var(--color-accent-fg); font-size: var(--text-2xs); font-weight: var(--weight-semibold); white-space: nowrap; }
+
+/* Minimap: scene ticks, chapter marks, viewport */
+.map { position: relative; min-height: 0; border-left: 1px solid var(--color-border); background: var(--color-surface); cursor: pointer; touch-action: none; }
+.mm-ch { position: absolute; left: 3px; right: 3px; height: 2px; border-radius: 1px; background: var(--color-text); opacity: .55; }
+.mm-s { position: absolute; left: 7px; right: 7px; border-radius: 1px; background: var(--color-muted); opacity: .45; }
+.mm-s.empty { background: none; box-shadow: inset 0 0 0 1px var(--color-muted); opacity: .35; right: 12px; }
+.mm-s.pending { background: var(--color-accent); opacity: .9; }
+.mm-s.hit { background: var(--color-accent); opacity: 1; }
+.mm-s.cur { opacity: .9; }
+.mm-view { position: absolute; left: 1px; right: 1px; border-radius: 3px; background: color-mix(in srgb, var(--color-accent) 12%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 50%, transparent); pointer-events: none; }
+
+/* Popover menu / picker (same as plan.html, plus the "/" menu and model picker) */
+#pop { position: fixed; z-index: 40; width: 236px; max-height: 360px; display: none; flex-direction: column; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-raised), 0 12px 32px -12px rgb(0 0 0 / .35); overflow: hidden; }
+#pop.open { display: flex; }
+#pop.wide { width: 320px; }
+#pop.model { width: 470px; max-width: calc(100vw - 16px); }
+#pop .search { width: auto; margin: 6px; }
+#pop .list { overflow: auto; padding: 0 4px 4px; }
+#pop .item { width: 100%; display: flex; align-items: center; gap: 7px; min-height: 28px; padding: 0 8px; border: 0; border-radius: var(--radius-sm); background: none; font-size: var(--text-sm); text-align: left; cursor: pointer; }
+#pop .item:hover, #pop .item.on { background: var(--color-accent-soft); }
+#pop .item .k { margin-left: auto; font-size: var(--text-2xs); color: var(--color-muted); font-family: var(--font-mono); white-space: nowrap; }
+#pop a.item { color: inherit; text-decoration: none; }
+#pop .item.danger { color: var(--color-danger); }
+#pop .item:disabled { color: var(--color-muted); cursor: default; background: none; }
+#pop .item.cmd { align-items: flex-start; gap: 9px; padding: 6px 8px; }
+#pop .item.cmd .ico { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg); flex: none; }
+#pop .item.cmd .ico svg { width: 14px; height: 14px; }
+#pop .item.cmd b { display: block; font-weight: var(--weight-medium); }
+#pop .item.cmd small { display: block; font-size: var(--text-xs); color: var(--color-muted); line-height: 1.35; }
+#pop .sep { height: 1px; margin: 4px 0; background: var(--color-border); }
+#pop .cat-h { padding: 6px 8px 2px; }
+#pop .grp { padding: 8px 8px 2px; font-size: var(--text-2xs); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .04em; color: var(--color-muted); }
+#pop .card-in { padding: 10px 12px; font-size: var(--text-sm); }
+#pop .card-in h4 { margin: 0 0 2px; display: flex; align-items: center; gap: 6px; font-size: var(--text-md); font-weight: var(--weight-semibold); }
+#pop .card-in p { margin: 6px 0 0; color: var(--color-muted); }
+#pop .card-in .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+#pop .st { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-xs); font-weight: var(--weight-medium); }
+#pop .st i { width: 6px; height: 6px; border-radius: 50%; background: var(--tone); }
+#pop .cols2 { display: grid; grid-template-columns: 1fr 1fr; min-height: 0; overflow: hidden; }
+#pop .cols2 > .list { border-right: 1px solid var(--color-border); padding-top: 4px; }
+#pop .cols2 > .list:last-child { border-right: 0; }
+#pop .item .sub { display: block; font-size: var(--text-2xs); color: var(--color-muted); }
+#pop .item.tpl { justify-content: space-between; }
+#pop .item.tpl.cur { background: var(--color-surface-2); }
+#pop .item .ck { margin-left: auto; color: var(--color-accent); }
+#pop .fmt { padding: 8px 10px; display: grid; grid-template-columns: auto 1fr; gap: 8px 10px; align-items: center; font-size: var(--text-sm); }
+#pop .fmt .seg { justify-self: start; height: 26px; }
+#pop .foot { border-top: 1px solid var(--color-border); padding: 4px; }
+#pop .numin { display: flex; gap: 6px; padding: 8px; }
+#pop .numin input { flex: 1; min-width: 0; height: var(--control-height); padding: 0 8px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg); font-size: var(--text-sm); }
+
+/* Toast */
+#toast { position: fixed; left: 50%; bottom: 16px; z-index: 50; transform: translateX(-50%) translateY(20px); opacity: 0; pointer-events: none; display: flex; align-items: center; gap: var(--space-3); max-width: calc(100vw - 32px); padding: 7px 8px 7px 12px; border-radius: var(--radius-md); background: var(--color-text); color: var(--color-bg); font-size: var(--text-sm); box-shadow: var(--shadow-raised); transition: .18s; }
+#toast.show { opacity: 1; transform: translateX(-50%); pointer-events: auto; }
+#toast code { font-family: var(--font-mono); font-size: var(--text-xs); opacity: .8; }
+#toast button { border: 0; background: none; color: inherit; font-weight: var(--weight-semibold); text-decoration: underline; cursor: pointer; font-size: var(--text-sm); }
+
+/* Focus mode: only the prose */
+body.focus .side, body.focus .toolbar, body.focus .map, body.focus .gutter, body.focus .preview, body.focus .kbp { display: none; }
+body.focus .ws, body.focus .ws.has-panel { grid-template-columns: minmax(0, 1fr); }
+body.focus .area { grid-template-columns: minmax(0, 1fr); }
+body.focus .row { grid-template-columns: minmax(0, var(--pw)); }
+body.focus .bookbar { opacity: .3; }
+body.focus .bookbar:hover, body.focus .bookbar:focus-within { opacity: 1; }
+
+/* Your access (#80): the quiet chip in the #26 F-06 style, then read-only Write for view and comment */
+.role-chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border: 0; border-radius: 11px; background: var(--color-surface-2); color: var(--color-muted); font-size: var(--text-2xs); font-weight: var(--weight-medium); white-space: nowrap; cursor: help; flex: none; }
+.role-chip svg { width: 11px; height: 11px; }
+.role-chip:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.role-chip[hidden], .sync[hidden] { display: none; }
+body[data-ro] .draft { display: none; }   /* a pending AI draft belongs to whoever ran it; readers see the book's text */
+body[data-ro] :is([data-grip], .divider .mini, .ch-end, .beat-row, .beat-f, .draft-h .btn, .draft-note, .g-f .mini, .cx .x, [data-menu], .side-new, .p-foot, #kbAlias, .alias button, [data-cmd="hide-beat"], [data-cmd="link-entry"]) { display: none !important; }
+body[data-ro] .divider { pointer-events: none; }
+body[data-ro] .ed.empty::before, body[data-ro] [data-placeholder]:empty::before { content: none !important; }
+body[data-ro] [contenteditable="false"][data-part] { cursor: text; }
+body[data-ro] #kbp :is(select, textarea):disabled { opacity: 1; color: var(--color-text); -webkit-text-fill-color: var(--color-text); cursor: default; }
+body[data-ro] #kbp .tgl:disabled { opacity: .6; cursor: default; }
+
+/* Review aid (not part of the design) */
+.preview { position: fixed; right: calc(var(--minimap-width) + 12px); bottom: 12px; z-index: 20; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); box-shadow: var(--shadow-raised); font-size: var(--text-xs); }
+.preview > b { color: var(--color-muted); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .05em; }
+
+/* Narrow document: the gutter moves above its scene */
+@container (max-width: 760px) {
+  .row { grid-template-columns: minmax(0, 1fr); }
+  .gutter { order: -1; margin-bottom: var(--space-2); }
+  .g-in { position: static; padding: 6px 10px; border-radius: var(--radius-sm); background: var(--color-surface); border: 1px solid var(--color-border); }
+  .g-sum { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .g-sum:focus { display: block; }
+  .ch-h .gutter { order: 0; margin: 4px 0 0; }
+  .ch-h .g-in { padding: 0; border: 0; background: none; }
+  .page { padding-left: var(--space-4); padding-right: var(--space-4); }
+}
+@media (max-width: 900px) {
+  .scope .stat, .sync .lbl-t, .book-id .t, .crumb { display: none; }
+}
+/* Narrower screens: the entry panel becomes a sheet over the manuscript (as References' detail panel) */
+@media (max-width: 860px) {
+  .ws.has-panel { grid-template-columns: var(--sidebar-width) minmax(0, 1fr); }
+  .ws.no-side.has-panel { grid-template-columns: minmax(0, 1fr); }
+  .kbp { position: fixed; z-index: 26; top: var(--bar-height); right: 0; bottom: 0; width: min(var(--panel-width), 100vw); box-shadow: var(--shadow-raised), -12px 0 32px -12px rgb(0 0 0 / .3); }
+}
+@media (max-width: 720px) {
+  .ws:not(.no-side) { grid-template-columns: minmax(0, 1fr); }
+  .ws:not(.no-side) .side { position: fixed; z-index: 25; top: var(--bar-height); bottom: 0; left: 0; width: min(300px, 86vw); box-shadow: var(--shadow-raised); }
+  .bookbar .hide-sm { display: none; }
+  .role-chip .lbl-t { display: none; }
+  .role-chip { padding: 0 6px; }
+  .area { grid-template-columns: minmax(0, 1fr); }
+  .map { display: none; }
+  .toolbar .search { flex: 1; width: auto; }
+  .chnav .sel { max-width: 46vw; }
+  .preview { left: 12px; right: auto; }
+}
+</style>
+</head>
+<body>
+<header class="bookbar">
+  <a class="ib" id="back" href="library.html" aria-label="Back to Library" title="Back to Library"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3 5 8l5 5"/></svg></a>
+  <a class="ib" href="settings.html" data-tab="settings" aria-label="Book settings" title="Book settings"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg></a>
+  <div class="book-id">
+    <div class="cover thumb" id="bookCover"></div>
+    <div class="t"><b id="bookTitle">Product Engineering</b><span id="bookAuthor">Joel Dickson</span></div>
+    <button class="ib" id="sideToggle" aria-label="Toggle sidebar" title="Toggle sidebar"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M6 3v10"/></svg></button>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="Mode">
+    <a class="tab" role="tab" aria-selected="false" href="plan.html" data-tab="plan">Plan</a>
+    <button class="tab" role="tab" aria-selected="true">Write</button>
+    <button class="tab hide-sm" role="tab" aria-selected="false">Chat</button>
+    <button class="tab hide-sm" role="tab" aria-selected="false">Review</button>
+    <span class="vr" aria-hidden="true"></span>
+    <a class="tab" role="tab" aria-selected="false" href="references.html" data-tab="references" title="Sources, permissions and the bibliography for this book (#2)">References <span id="tabBadge"></span></a>
+  </nav>
+  <div class="scope hide-sm">
+    <button class="sel" data-cmd="scope"><em>Scope</em> <span class="t" id="scopeName">Full manuscript</span> <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6 4 4 4-4"/></svg></button>
+    <span class="stat" id="stats"></span>
+  </div>
+  <span class="spacer"></span>
+  <button class="role-chip" id="roChip" hidden data-testid="write-role-chip"></button>
+  <span class="sync" id="sync" data-s="saved" role="status" aria-live="polite"><i></i><span class="lbl-t">Saved</span></span>
+  <button class="btn ghost hide-sm" data-cmd="format" aria-haspopup="menu">Format</button>
+  <button class="btn ghost hide-sm" data-cmd="focus-mode" id="focusBtn" aria-pressed="false" title="Focus (Esc to leave)">Focus</button>
+  <span class="avatar" id="meAvatar">JD</span>
+</header>
+
+<div class="ws" id="ws">
+  <aside class="side" aria-label="Book sidebar">
+    <div class="side-h">Knowledge base</div>
+    <div id="sideBody"></div>
+  </aside>
+  <main class="main">
+    <div class="toolbar">
+      <div class="chnav">
+        <button class="ib" data-cmd="ch-prev" aria-label="Previous chapter" title="Previous chapter"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3 5 8l5 5"/></svg></button>
+        <button class="sel" data-cmd="ch-jump" aria-haspopup="menu"><span class="t" id="chName">Chapter</span> <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6 4 4 4-4"/></svg></button>
+        <button class="ib" data-cmd="ch-next" aria-label="Next chapter" title="Next chapter"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m6 3 5 5-5 5"/></svg></button>
+      </div>
+      <span class="crumb" id="crumb"></span>
+      <span id="hl"></span>
+      <span class="spacer"></span>
+      <label class="search"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><input id="q" placeholder="Find in manuscript…" aria-label="Find in manuscript"><span class="cnt" id="qn"></span></label>
+    </div>
+    <div class="area">
+      <div class="doc" id="doc" data-width="medium" data-para="spaced" data-cxhl="on"><div class="page" id="page"></div></div>
+      <div class="map" id="map" aria-label="Minimap: click to jump" title="Click or drag to jump"></div>
+    </div>
+  </main>
+  <aside class="kbp" id="kbp" aria-label="Knowledge base entry"></aside>
+</div>
+
+<div id="dropline"><span></span></div>
+<div id="pop" role="menu"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<div class="preview" aria-label="Preview controls (review aid)">
+  <b>Preview</b>
+  <div class="seg"><button data-theme-set="system">System</button><button data-theme-set="light">Light</button><button data-theme-set="dark">Dark</button></div>
+  <div class="seg"><button data-dens-set="compact">Compact</button><button data-dens-set="comfortable">Comfortable</button></div>
+  <div class="seg" role="group" aria-label="Role" id="roleSeg"></div>
+</div>
+
+
+<script>
+// ---------- Sample data (same book as plan.html) ----------
+const CATS = { blog: 'Blog Posts', law: 'Laws', story: 'Stories', research: 'Research', person: 'People' };
+const ENTRIES = [
+  { id: 'bad-scrum', cat: 'blog', name: 'Signs of Bad Scrum', aliases: ['Bad Scrum'], summary: 'Blog post: the rituals survive, the feedback loop does not. Twelve warning signs.' },
+  { id: 'feature-factory', cat: 'blog', name: 'Feature Factory', aliases: ['feature factories', 'feature factory'], summary: 'Blog post: teams measured by output shipped rather than outcomes changed.' },
+  { id: 'no-estimates', cat: 'blog', name: 'Why We Stopped Estimating', aliases: [], summary: 'Blog post: what replaced story points on the payments team, and what it cost.' },
+  { id: 'conway', cat: 'law', name: "Conway's Law", aliases: ['Conway'], summary: 'Organisations design systems that mirror their own communication structure.' },
+  { id: 'goodhart', cat: 'law', name: "Goodhart's Law", aliases: ['Goodhart'], summary: 'When a measure becomes a target, it ceases to be a good measure.' },
+  { id: 'brooks', cat: 'law', name: "Brooks's Law", aliases: [], summary: 'Adding people to a late software project makes it later.' },
+  { id: 'payments', cat: 'story', name: 'The Payments Rewrite', aliases: ['payments rewrite'], summary: 'Story: an 18-month rewrite that nobody had validated with a merchant.' },
+  { id: 'atlas', cat: 'story', name: 'Team Atlas Offsite', aliases: ['Team Atlas'], summary: 'Story: engineers run customer interviews for the first time.' },
+  { id: 'dora', cat: 'research', name: 'DORA Four Keys', aliases: ['DORA'], summary: 'Deployment frequency, lead time, change failure rate, time to restore.' },
+  { id: 'manifesto', cat: 'research', name: 'Agile Manifesto (2001)', aliases: ['Agile Manifesto'], summary: 'Four values and twelve principles, written at Snowbird in 2001.' },
+  { id: 'beck', cat: 'person', name: 'Kent Beck', aliases: ['Kent Beck'], summary: 'Creator of Extreme Programming; co-author of the Agile Manifesto.' },
+  { id: 'cagan', cat: 'person', name: 'Marty Cagan', aliases: ['Cagan'], summary: 'Author of Inspired and Empowered; product discovery advocate.' },
+];
+const LABELS = [
+  { id: 'ready', name: 'Ready to write', tone: 'ok' },
+  { id: 'drafting', name: 'Drafting', tone: 'info' },
+  { id: 'research', name: 'Needs research', tone: 'warn' },
+  { id: 'cut', name: 'Maybe cut', tone: 'danger' },
+];
+// Source references (#2): status drives the marker colour. Ids, statuses and reasons match references.html
+const REFS = [
+  { id: 'xp', title: 'Extreme Programming Explained (Beck, 1999)', kind: 'Book', st: 'ok', note: 'Cleared · JD, 9 Oct' },
+  { id: 'manifesto', title: 'Manifesto for Agile Software Development (2001)', kind: 'Web page', st: 'warn', note: 'Quote · fair use not decided' },
+  { id: 'goodhart', title: 'Problems of Monetary Management (Goodhart, 1975)', kind: 'Paper', st: 'warn', note: 'Ready to sign off' },
+  { id: 'velocity', title: 'The Velocity Trap (Whitlock, 2021)', kind: 'Book', st: 'danger', note: 'Quoted prose: 342 of 300 words · no permission request' },
+  { id: 'conway', title: 'How Do Committees Invent? (Conway, 1968)', kind: 'Paper', st: 'ok', note: 'Cleared · JD, 10 Oct' },
+  { id: 'empowered', title: 'Empowered (Cagan & Jones, 2020)', kind: 'Book', st: 'ok', note: 'Cleared · JD, 9 Oct' },
+  { id: 'dora', title: '2024 State of DevOps Report (DORA)', kind: 'Report', st: 'warn', note: 'Licence not recorded · URL redirects · accessed date missing' },
+  { id: 'accelerate', title: 'Accelerate (Forsgren, Humble & Kim, 2018)', kind: 'Book', st: 'warn', note: '1 new use since cleared' },
+  { id: 'topologies', title: 'Team Topologies (Skelton & Pais, 2019)', kind: 'Book', st: 'danger', note: 'Figure · permission asked 3 Oct, no reply' },
+  { id: 'brooks', title: 'The Mythical Man-Month (Brooks, 1995)', kind: 'Book', st: 'ok', note: 'Cleared · JD, 10 Oct' },
+  { id: 'friday', title: 'Ship It Friday (The Retros, 2012)', kind: 'Song', st: 'danger', note: 'Lyric · no permission request' },
+  { id: 'lean', title: 'Lean Software Development (Poppendieck, 2003)', kind: 'Book', st: 'warn', note: 'Not cited yet · needs a check once cited' },
+];
+const REF_ST = { ok: ['ok', 'Cleared'], warn: ['warn', 'Needs check'], danger: ['danger', 'Copyright risk'] };
+const TEMPLATES = [
+  { id: 'general', name: 'General purpose', sys: true },
+  { id: 'nonfiction', name: 'General purpose (Nonfiction)', sys: true },
+  { id: 'article', name: 'Article writer' },
+  { id: 'voice', name: "Write in Joel's voice" },
+];
+const MODELS = [
+  { id: 'opus', name: 'Claude Opus 5.5', note: 'Best for long, careful prose' },
+  { id: 'sonnet', name: 'Claude Sonnet 5.5', note: 'Balanced · default' },
+  { id: 'haiku', name: 'Claude Haiku 5.5', note: 'Fastest, cheapest' },
+  { id: 'local', name: 'Local model', note: 'Runs on this machine' },
+];
+// Library catalogue, so ?book= can show any book's header and back link. Only 'pe' has content.
+const SERIES_NAMES = { fg: 'Forsaken Gods', ac: 'The Ashen Crown', td: 'Tidewater Chronicles' };
+const BOOKS = {
+  'pe': { title: 'Product Engineering', cover: ['#05070d', '#0d1a2b'] },
+  'pe-v1': { title: 'Product Engineering (v1)', cover: ['#d9cfc0', '#b9ab97'] },
+  'quiet-algorithm': { title: 'The Quiet Algorithm', cover: ['#0e0f1a', '#283a7a'] },
+  'saltwater-ledger': { title: 'Saltwater Ledger', cover: ['#e8e2d6', '#cbbfa9'] },
+  'northbound': { title: 'Northbound', cover: ['#f1f5f9', '#94a3b8'] },
+  'hymns-for-machines': { title: 'Hymns for Machines', cover: ['#3b0d1f', '#9d174d'] },
+  'players-guide': { title: 'Players Guide', series: 'fg', n: 1, cover: ['#3a3a3a', '#555'] },
+  'gamemasters-codex': { title: "Gamemaster's Codex", series: 'fg', n: 2, cover: ['#2a1d12', '#5c3b1e'] },
+  'bestiary-of-the-fallen': { title: 'Bestiary of the Fallen', series: 'fg', n: 3, cover: ['#1b2320', '#3d4f45'] },
+  'ember-oath': { title: 'Ember Oath', series: 'ac', n: 1, cover: ['#2b0b0b', '#7a1d14'] },
+  'iron-litany': { title: 'Iron Litany', series: 'ac', n: 2, cover: ['#1d1d2b', '#45306b'] },
+  'hollow-throne': { title: 'Hollow Throne', series: 'ac', n: 3, cover: ['#141414', '#3b3b3b'] },
+  'last-cinder': { title: 'Last Cinder', series: 'ac', n: 4, cover: ['#3a1406', '#a3410f'] },
+  'saltmarsh': { title: 'Saltmarsh', series: 'td', n: 1, cover: ['#08263a', '#155e75'] },
+  'undertow': { title: 'Undertow', series: 'td', n: 2, cover: ['#0b3b3a', '#14706b'] },
+  // Shared with you (#80): owner, and your role (the higher of the book and the series grant)
+  'glass-orchard': { title: 'Glass Orchard', cover: ['#1f3a2c', '#5f8f6a'], owner: 'Mara Lind', role: 'view' },
+  'paper-saints': { title: 'Paper Saints', cover: ['#3d2a14', '#b7791f'], owner: 'Sam Okafor', role: 'write' },
+  'lamplighter': { title: "The Lamplighter's Debt", series: 'la', n: 1, cover: ['#1a1408', '#8a6d1f'], owner: 'Mara Lind', role: 'write' },
+  'wick-and-ember': { title: 'Wick and Ember', series: 'la', n: 2, cover: ['#24120b', '#a1461f'], owner: 'Mara Lind', role: 'write' },
+  'moth-hour': { title: 'The Moth Hour', series: 'la', n: 3, cover: ['#15131f', '#4c4470'], owner: 'Mara Lind', role: 'write' },
+  'salt-king': { title: 'The Salt King', series: 'nr', n: 2, cover: ['#0f1c24', '#4a6b7d'], owner: 'Kofi Mensah', role: 'comment' },
+};
+SERIES_NAMES.la = 'The Lantern Archive'; SERIES_NAMES.nr = 'Northern Rites';
+const bookId = new URLSearchParams(location.search).get('book') || 'pe';
+const BOOK = BOOKS[bookId] || BOOKS.pe;
+let bookQ = '?book=' + encodeURIComponent(bookId);   // + &role= while previewing another role, so tab links keep it
+// Your access (#80). Your own books open as Owner; a book shared with you at your grant. ?role= previews another role.
+const OWNER_NAME = BOOK.owner || 'Joel Dickson';
+const defaultRole = BOOK.role || 'owner';
+let ROLE = ['owner', 'write', 'comment', 'view'].includes(new URLSearchParams(location.search).get('role')) ? new URLSearchParams(location.search).get('role') : defaultRole;
+if (BOOK.owner && ROLE === 'owner') ROLE = defaultRole;   // someone else's book is never yours to own
+if (ROLE !== defaultRole) bookQ += '&role=' + ROLE;
+const canWrite = () => ROLE === 'owner' || ROLE === 'write';
+// Who you are when previewing your own book at a lower role (the people settings.html shares Product Engineering with)
+const VIEWER = { owner: 'JD', write: 'SO', comment: 'AK', view: 'TI' };
+const ROLE_CHIP = {
+  view: { label: 'View only', icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg>',
+    why: () => `${OWNER_NAME} shared this book with you to read. Every tab opens, but typing and changes are turned off.` },
+  comment: { label: 'Comment only', icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/></svg>',
+    why: () => `You can read this book and comment on it, but not change the text. Ask ${OWNER_NAME} for edit access.` },
+};
+// Browser storage: kv(area, key) reads, kv(area, key, value) writes, null removes. Blocked storage is ignored.
+function kv(area, k, v) {
+  try { const s = window[area]; if (v === undefined) return s.getItem(k); v === null ? s.removeItem(k) : s.setItem(k, v); } catch { return null; }
+}
+const HL_KEY = `codex.hl.${bookId}`;
+kv('localStorage', `codex.last.${bookId}`, 'write'); // Library opens the book on the screen it was last left on (G2)
+
+let uid = 0;
+const id = p => p + (++uid);
+const slugify = s => s.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) || 'untitled';
+const para = t => Array.isArray(t) ? t.join('\n\n') : t;
+const P = text => ({ id: id('b'), kind: 'prose', text: para(text) });
+const B = (title, body, o = {}) => ({ id: id('b'), kind: 'beat', title, body, target: o.target || 400, context: o.context || [], template: o.template || 'nonfiction', model: o.model || 'sonnet', hidden: !!o.hidden, prose: para(o.prose || ''), draft: o.draft || null });
+const A = (entry, body) => ({ id: id('b'), kind: 'addition', entry, body });
+const sc = (summary, blocks = [], o = {}) => ({ id: id('s'), summary, codex: o.codex || [], labels: o.labels || [], blocks: blocks.length ? blocks : [P('')] });
+const ch = (title, scenes) => ({ id: id('c'), title, slug: slugify(title), scenes });
+const act = (title, chapters) => ({ id: id('a'), title, chapters });
+
+const DRAFT_OUTCOMES = [
+  'Every metric starts honest. Story points began as a way for a team to talk about size. Within a year they were on a slide in the leadership review, and within two they were a target. That is [[e:goodhart]] doing what it always does: the number stays put while the thing it measured drifts away.[[r:goodhart]]',
+  'The [[e:dora]] metrics[[r:dora]] hold up better because they measure the system rather than the people in it.[[r:accelerate]] Deployment frequency and lead time describe how quickly a change reaches a customer. Change failure rate and time to restore describe what happens when it goes wrong. None of them improve because someone worked a longer week.',
+  'So look at your own dashboard and ask one question of each chart: if this line went up, would a customer notice?',
+];
+
+const state = {
+  acts: [
+    act('Introduction', [
+      ch('Preface', [sc('Why I wrote this: ten years of watching good teams ship the wrong thing, on time.', [P([
+        'For ten years I watched good teams ship the wrong thing, on time. They had the rituals: stand-ups at nine, two-week sprints, a burndown chart that sloped the right way. What they rarely had was a reason to care whether any of it worked for the people paying for it.',
+        'This book is about closing that gap. It is written for engineers who want to own the result and not only the ticket, and for the leaders who have to make room for them to do it.',
+      ])], { labels: ['ready'] })]),
+      ch('About this book', [sc('Who it is for, how to read it, and what I mean by "product engineering".', [P([
+        'Each chapter stands on its own, but the argument builds. Act 1 explains how we got here, Act 2 describes the product engineer, and Act 3 covers the practices that keep one effective. If you are short on time, read [[ch:owning-outcomes]] and [[ch:shipping-small]] first.',
+        'When I say product engineering, I mean engineers who are accountable for an outcome a customer would recognise, not for an estimate a manager would.',
+      ])], { labels: ['ready'] })]),
+      ch('A Brief History of Software Practice', [
+        sc('The beginnings in Agile (80s–00s): XP, [[e:beck]] and the shift to short feedback loops.', [
+          B('The early agile years.', 'Short history: XP, [[e:beck]], why feedback loops shortened. Keep it under 300 words.', { target: 200, hidden: true, prose: [
+            'In the late nineties Kent Beck and a handful of others started writing down what the better teams already did: test first, release often, and sit with the customer. Extreme Programming read like a list of habits rather than a methodology, and that was the point.',
+            'The common thread was feedback. Every practice shortened the time between making a decision and finding out whether it was right.[[r:xp]]',
+          ] }),
+        ]),
+        sc('The [[e:manifesto]] and the rise of Scrum.', [P('By 2001 those habits had a name. The Agile Manifesto fitted on a single page and preferred individuals and interactions over processes and tools.[[r:manifesto]] Within a decade, Scrum had turned that page into a certification.')]),
+        sc('The gaining popularity of Scrum and the rise of "Scrum as a methodology", or "Bad Scrum".\n[[e:bad-scrum]]', [
+          B('Bad Scrum.', 'Describe the drift from Scrum as a framework to Scrum as a methodology. Use [[e:bad-scrum]] for the warning signs. Wry, not bitter.', { target: 600 }),
+        ], { labels: ['research'] }),
+      ]),
+      ch('What Went Wrong', [
+        sc('Feature factories: measuring output because outcomes are hard. [[e:goodhart]]', [
+          A('goodhart', "The reader meets Goodhart's Law for the first time here. Define it in one sentence before leaning on it."),
+          P([
+            'Goodhart put it more drily than anyone since:',
+            '> “Any observed statistical regularity will tend to collapse once pressure is placed upon it for control purposes.”[[r:goodhart]]',
+            'Whitlock’s account of the same pattern is worth reading in full:',
+            '> “A velocity chart is a confession, not a forecast. It tells you what a team was willing to promise, and nothing at all about what anyone needed. …”[[r:velocity]]',
+          ]),
+          B('Measuring output.', 'Feature factories measure what is easy to count. Tie velocity targets to [[e:goodhart]].', { context: ['feature-factory'] }),
+        ], { codex: ['feature-factory'], labels: ['research'] }),
+        sc('Org charts that ship themselves.', [P([
+          'Conway’s 1968 paper ends with the line everyone remembers:',
+          '> “Any organization that designs a system (defined broadly) will produce a design whose structure is a copy of the organization’s communication structure.”[[r:conway]]',
+        ])], { codex: ['conway'] }),
+      ]),
+    ]),
+    act('The Product Engineer', [
+      ch('Owning Outcomes', [
+        sc('Engineers in discovery, with [[e:payments]] as the cautionary tale.', [
+          B('Engineers in discovery.', 'Open with the moment the team realised nobody had talked to a merchant in six months. Use [[e:payments]].', { prose: [
+            'Eighteen months into the payments rewrite, someone asked a simple question at the quarterly review: when did any of us last talk to a merchant? Nobody could remember. We had a roadmap, a velocity chart and a migration plan with forty-one steps. We did not have a customer.',
+            '[[e:cagan]] describes the alternative as empowered teams: give engineers a problem to solve rather than a feature to build.[[r:empowered]] We had read the book. We had not changed how we worked.',
+          ] }),
+          B('What changed.', 'Two engineers join the next round of merchant interviews. Short, concrete, no lessons yet.', { target: 200, prose:
+            'The change was small. Two engineers joined the next round of merchant interviews, with no slides and no agenda. They came back with eleven complaints. Nine were about a screen we had planned to leave alone. The rest of this act is about what we did with that list, and [[ch:shipping-small]] picks up how we shipped it.',
+          }),
+        ], { codex: ['cagan'], labels: ['drafting'] }),
+        sc("Outcome metrics that don't rot.", [
+          B("Outcome metrics that don't rot.", 'Explain why output metrics decay. Contrast with [[e:dora]]. End on the question the reader should ask of their own dashboard.', { context: ['goodhart'], model: 'opus',
+            draft: { status: 'pending', text: DRAFT_OUTCOMES.join('\n\n'), attempt: 1, model: 'opus', template: 'nonfiction' } }),
+        ], { codex: ['dora', 'goodhart'], labels: ['research'] }),
+      ]),
+      ch("Discovery is Everyone's Job", [
+        sc('What happened at [[e:atlas]] when the engineers ran the customer interviews.', [P([
+          'The engineers on Team Atlas ran the customer interviews themselves for the first time at the spring offsite. It was not comfortable. One of them asked a store manager to rate a feature from one to five and got a long silence in reply.',
+          'By the third interview they had stopped asking about features altogether. They asked what the manager had done that morning, and wrote down everything.',
+        ])], { labels: ['drafting'] }),
+        sc(''),
+      ]),
+      ch('Shipping Small', [sc('Thin slices, feature flags, and why batch size is the strategy.', [P([
+        'Batch size is the strategy. A team that releases once a quarter has four chances a year to be wrong in public. A team that releases every working day has about two hundred and fifty, and each one costs almost nothing.[[r:accelerate]]',
+        'The merchant complaints from [[ch:owning-outcomes]] went out as eleven separate releases over three weeks, each behind a feature flag. Two were rolled back within an hour. Nobody outside the team noticed.',
+      ])], { codex: ['dora'], labels: ['drafting'] })]),
+    ]),
+    act('Practices', [
+      ch('Estimation Without Theatre', [sc('[[e:no-estimates]]: what we did instead, and what it cost us.', [
+        B('What we did instead.', 'Walk through [[e:no-estimates]]: slicing to similar sizes, counting throughput, and the one stakeholder who never forgave us.', { target: 600 }),
+      ], { labels: ['cut'] })]),
+      ch('Teams and Topology', [sc('[[e:conway]] in practice: design the teams for the architecture you want.', [], { codex: ['brooks'] })]),
+      ch('Where to From Here', [sc('Closing: a reading list and an invitation.')]),
+    ]),
+  ],
+  scope: null, side: true, highlight: null, q: '', sideQ: '', gutter: true, beats: true,
+};
+
+// ---------- Helpers ----------
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const kw = n => n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : String(n);
+const entry = eid => ENTRIES.find(e => e.id === eid);
+const label = lid => LABELS.find(l => l.id === lid);
+const ref = rid => REFS.find(r => r.id === rid);
+const tpl = tid => TEMPLATES.find(t => t.id === tid);
+const model = mid => MODELS.find(m => m.id === mid);
+const TOKEN = /\[\[(e|ch|r):([\w-]+)\]\]/g;
+const allChapters = () => state.acts.flatMap(a => a.chapters);
+const allScenes = () => allChapters().flatMap(c => c.scenes);
+const chapterBySlug = slug => allChapters().find(c => c.slug === slug);
+function chapterNo(cid) { return allChapters().findIndex(c => c.id === cid) + 1; }
+// Scenes are addressed across screens by display number "chapter.scene" (5.2), as in Plan's #scene= deep links
+function sceneNo(sid) { const l = locate('scene', sid); return `${chapterNo(l.c.id)}.${l.si + 1}`; }
+function sceneByNo(n) { const [c, s] = String(n).split('.').map(Number), C = allChapters()[c - 1], S = C?.scenes[(s || 1) - 1]; return S && locate('scene', S.id); }
+function locate(kind, xid) {
+  for (const [ai, a] of state.acts.entries()) {
+    if (kind === 'act' && a.id === xid) return { a, ai };
+    for (const [ci, c] of a.chapters.entries()) {
+      if (kind === 'chapter' && c.id === xid) return { a, ai, c, ci };
+      for (const [si, s] of c.scenes.entries()) {
+        if (kind === 'scene' && s.id === xid) return { a, ai, c, ci, s, si };
+        for (const [bi, b] of s.blocks.entries()) if (kind === 'block' && b.id === xid) return { a, ai, c, ci, s, si, b, bi };
+      }
+    }
+  }
+}
+// Plain text of stored Markdown-ish text: tokens become their display text
+const plain = t => (t || '').replace(TOKEN, (_, k, v) => k === 'e' ? entry(v)?.name || '' : k === 'ch' ? `Chapter ${chapterNo(chapterBySlug(v)?.id)}` : '').replace(/^> /gm, '');
+const countWords = t => plain(t).split(/\s+/).filter(Boolean).length;
+const sceneText = s => s.blocks.map(b => b.kind === 'prose' ? b.text : b.kind === 'beat' ? b.prose : '').join('\n\n');
+const sceneWords = s => countWords(sceneText(s));
+const wordsOf = scenes => scenes.reduce((t, s) => t + sceneWords(s), 0);
+// Every Codex entry a scene touches: links, mentions, alias matches, beat context, additions
+function sceneRefs(s) {
+  const set = new Set(s.codex);
+  const text = [s.summary, sceneText(s), ...s.blocks.map(b => b.body || '')].join('\n');
+  for (const m of text.matchAll(TOKEN)) if (m[1] === 'e') set.add(m[2]);
+  const p = plain(text);
+  ENTRIES.forEach(e => { if (aliasRe(e).test(p)) set.add(e.id); });
+  s.blocks.forEach(b => { (b.context || []).forEach(x => set.add(x)); if (b.entry) set.add(b.entry); });
+  return set;
+}
+const usage = eid => allScenes().filter(s => sceneRefs(s).has(eid)).length;
+const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const aliasRe = e => new RegExp(`\\b(${[e.name, ...e.aliases].map(reEsc).join('|')})\\b`, 'i');
+// Alias matcher for every entry name and alias; rebuilt when the entry panel changes names or aliases
+let AUTO;
+function buildAuto() {
+  const pairs = ENTRIES.flatMap(e => [e.name, ...e.aliases].filter(Boolean).map(n => [n, e.id])).sort((x, y) => y[0].length - x[0].length);
+  AUTO = { re: pairs.length ? new RegExp(`\\b(${pairs.map(p => reEsc(esc(p[0]))).join('|')})\\b`, 'gi') : /(?!)/g, map: new Map(pairs.map(([n, eid]) => [esc(n).toLowerCase(), eid])) };
+}
+buildAuto();
+function chaptersInScope() {
+  const out = [];
+  state.acts.forEach((a, ai) => a.chapters.forEach(c => {
+    if (!state.scope || (state.scope.act && state.scope.act === a.id) || (state.scope.ch && state.scope.ch === c.id)) out.push({ a, ai, c });
+  }));
+  return out;
+}
+// Marker numbers: order of first use in the book, the same count References uses. A pending AI draft's
+// markers count too, since References already lists those uses (Ch 5 · Sc 2).
+let refOrder = new Map();
+function computeRefOrder() {
+  refOrder = new Map();
+  allScenes().forEach(s => {
+    const t = s.blocks.map(b => b.kind === 'prose' ? b.text : b.kind === 'beat' ? `${b.prose}\n${b.draft?.text || ''}` : '').join('\n');
+    for (const m of t.matchAll(TOKEN)) if (m[1] === 'r' && !refOrder.has(m[2])) refOrder.set(m[2], refOrder.size + 1);
+  });
+}
+
+const I = {
+  grip: '<svg viewBox="0 0 10 14" fill="currentColor"><circle cx="3" cy="3" r="1.2"/><circle cx="7" cy="3" r="1.2"/><circle cx="3" cy="7" r="1.2"/><circle cx="7" cy="7" r="1.2"/><circle cx="3" cy="11" r="1.2"/><circle cx="7" cy="11" r="1.2"/></svg>',
+  more: '<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="3.5" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="8" cy="12.5" r="1.3"/></svg>',
+  plus: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3v10M3 8h10"/></svg>',
+  tag: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.5 2.5h5l6 6-5 5-6-6z"/><circle cx="5.5" cy="5.5" r="1"/></svg>',
+  chev: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6 4 4 4-4"/></svg>',
+  pen: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M10.5 2.5 13.5 5.5 6 13H3v-3z"/></svg>',
+  beat: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8.5h3l2-5 3 9 2-4h3"/></svg>',
+  db: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><ellipse cx="8" cy="3.8" rx="5" ry="1.8"/><path d="M3 3.8v8.4c0 1 2.2 1.8 5 1.8s5-.8 5-1.8V3.8M3 8c0 1 2.2 1.8 5 1.8s5-.8 5-1.8"/></svg>',
+  play: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6"/><path d="M6.6 5.6v4.8L10.4 8z" fill="currentColor"/></svg>',
+  spark: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1.5 9.4 6.6 14.5 8 9.4 9.4 8 14.5 6.6 9.4 1.5 8 6.6 6.6z"/></svg>',
+  clear: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8M4.5 6.5 8 10l3.5-3.5M2.5 13.5h11" stroke-dasharray="0"/></svg>',
+  eyeOff: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 8s2.2-4.5 6-4.5S14 8 14 8s-2.2 4.5-6 4.5S2 8 2 8z"/><path d="M2.5 13.5l11-11"/></svg>',
+  eye: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 8s2.2-4.5 6-4.5S14 8 14 8s-2.2 4.5-6 4.5S2 8 2 8z"/><circle cx="8" cy="8" r="1.8"/></svg>',
+  at: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.5"/><path d="M10.5 8v1.2a1.8 1.8 0 0 0 3.5 0V8a6 6 0 1 0-2.4 4.8"/></svg>',
+  link: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6.5 9.5l3-3M7 4.5l1-1a2.8 2.8 0 0 1 4 4l-1 1M9 11.5l-1 1a2.8 2.8 0 0 1-4-4l1-1"/></svg>',
+  book: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 2.5h7.5a2 2 0 0 1 2 2v9H5a2 2 0 0 1-2-2z"/><path d="M3 11.5a2 2 0 0 1 2-2h7.5"/></svg>',
+  cut: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.5 8h13" stroke-dasharray="2 2"/><path d="M5 4.5 8 2l3 2.5M5 11.5 8 14l3-2.5"/></svg>',
+  quote: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v10M6.5 5h7M6.5 8h7M6.5 11h4"/></svg>',
+  stop: '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="4" y="4" width="8" height="8" rx="1.5"/></svg>',
+  check: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 8.5 3 3 7-7"/></svg>',
+  retry: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 8a5 5 0 1 1-1.5-3.5M13 2.5v3h-3"/></svg>',
+  x: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 4 8 8M12 4l-8 8"/></svg>',
+  up: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 10 4-4 4 4"/></svg>',
+};
+const ORNAMENT = '<svg viewBox="0 0 120 12" fill="none" stroke="currentColor" stroke-width="1"><path d="M2 6h44M74 6h44"/><circle cx="50" cy="6" r="1.6" fill="currentColor"/><circle cx="70" cy="6" r="1.6" fill="currentColor"/><path d="M60 1.5 64.5 6 60 10.5 55.5 6z"/></svg>';
+
+// ---------- Rendering: inline text ----------
+const mention = eid => { const e = entry(eid); return e ? `<span class="mention" contenteditable="false" data-e="${eid}" style="--cat:var(--category-${e.cat})" title="${esc(CATS[e.cat])} (Ctrl+click to open the entry)">${esc(e.name)}</span>` : ''; };
+function chref(slug) {
+  const c = chapterBySlug(slug);
+  return c ? `<span class="chref" contenteditable="false" data-ch="${slug}" title="ch:${slug} · ${esc(c.title)}">Chapter ${chapterNo(c.id)}</span>`
+    : `<span class="chref missing" contenteditable="false" data-ch="${slug}" title="ch:${slug} no longer exists">Missing chapter</span>`;
+}
+function refMark(rid) {
+  const r = ref(rid); if (!r) return '';
+  return `<sup class="refm" contenteditable="false" data-r="${rid}" style="--tone:var(--color-${REF_ST[r.st][0]})" title="${esc(r.title)} · ${REF_ST[r.st][1]}">${refOrder.get(rid) || '?'}</sup>`;
+}
+const autoMark = t => t.replace(AUTO.re, m => { const eid = AUTO.map.get(m.toLowerCase()), e = entry(eid); return `<span class="auto" data-e="${eid}" style="--cat:var(--category-${e.cat})" title="${esc(e.name)} · ${esc(CATS[e.cat])} (Ctrl+click to open)">${m}</span>`; });
+function inline(s, auto = true) {
+  let out = '', last = 0;
+  const seg = t => auto ? autoMark(esc(t)) : esc(t);
+  for (const m of (s || '').matchAll(TOKEN)) {
+    out += seg(s.slice(last, m.index));
+    out += m[1] === 'e' ? mention(m[2]) : m[1] === 'ch' ? chref(m[2]) : refMark(m[2]);
+    last = m.index + m[0].length;
+  }
+  return out + seg((s || '').slice(last));
+}
+const proseHTML = t => (t ? t.split(/\n{2,}/) : ['']).map(p => p.startsWith('> ') ? `<blockquote>${inline(p.slice(2))}</blockquote>` : `<p>${inline(p) || '<br>'}</p>`).join('');
+const editor = (text, part, ph, cls = '') => `<div class="ed ${cls}${text ? '' : ' empty'}" contenteditable="true" data-part="${part}" data-placeholder="${esc(ph)}">${proseHTML(text)}</div>`;
+const cxChip = (eid, cmd) => { const e = entry(eid); return `<span class="cx" data-e="${eid}" style="--cat:var(--category-${e.cat})" title="${esc(CATS[e.cat])}"><i></i><b>${esc(e.name)}</b>${cmd ? `<button class="x" data-cmd="${cmd}" data-e="${eid}" aria-label="Remove ${esc(e.name)}">×</button>` : ''}</span>`; };
+const lblChip = lid => { const l = label(lid); return `<span class="lbl" style="--tone:var(--color-${l.tone})"><i></i>${esc(l.name)}</span>`; };
+
+// ---------- Rendering: blocks ----------
+function draftHTML(b) {
+  const d = b.draft; if (!d) return '';
+  const streaming = d.status === 'streaming';
+  const m = model(d.model)?.name || d.model;
+  return `<div class="draft" data-st="${d.status}">
+    <div class="draft-h"><span class="overline">${streaming ? 'Generating…' : 'AI draft'}</span><span class="meta" data-draft-meta>${m} · ${countWords(d.text)} words${d.attempt > 1 ? ` · attempt ${d.attempt}` : ''}</span><span class="spacer"></span>
+      ${streaming ? `<button class="btn" data-cmd="stop">${I.stop}Stop</button>`
+        : `<button class="btn primary" data-cmd="apply">${I.check}Apply</button><button class="btn" data-cmd="retry">${I.retry}Retry</button><button class="btn ghost" data-cmd="discard">Discard</button>`}</div>
+    <div class="draft-body" data-draft-body>${proseHTML(d.text)}${streaming ? '<span class="caret"></span>' : ''}</div>
+    ${!streaming && b.prose ? `<div class="draft-note">Apply replaces the ${countWords(b.prose)} words below. The current text is kept in history.</div>` : ''}
+  </div>`;
+}
+function beatHTML(b) {
+  const hidden = b.hidden || !state.beats;
+  const preset = [200, 400, 600].includes(b.target);
+  const head = hidden
+    ? `<section class="beat card min"><button class="grip" data-grip aria-label="Move beat (drag, or Alt+arrow keys)">${I.grip}</button><span class="kind">${I.beat}Beat</span>
+        <span class="bsum"><b>${esc(b.title || 'Untitled')}</b> ${esc(plain(b.body))}</span><span class="words">${b.target}w</span>
+        <button class="mini" data-cmd="show-beat">${I.eye}Show</button></section>`
+    : `<section class="beat card">
+        <header class="blk-h"><button class="grip" data-grip aria-label="Move beat (drag, or Alt+arrow keys)">${I.grip}</button><span class="kind">${I.beat}Scene beat</span>
+          <span class="bt" contenteditable="true" data-part="beattitle" data-placeholder="Title (optional)" spellcheck="false">${esc(b.title)}</span>
+          <span class="spacer"></span><button class="mini" data-cmd="hide-beat" title="Hide the beat; its prose stays">${I.eyeOff}Hide</button><button class="ib" data-menu="block" aria-label="Beat actions">${I.more}</button></header>
+        <div class="beat-body ed${b.body ? '' : ' empty'}" contenteditable="true" data-part="beatbody" data-placeholder="Describe what happens in this beat… (@ to mention Codex, Ctrl+Enter to generate)">${inline(b.body)}</div>
+        <div class="beat-row">
+          <div class="seg" role="group" aria-label="Target length">${[200, 400, 600].map(n => `<button data-len="${n}" aria-pressed="${b.target === n}">${n}</button>`).join('')}<button data-cmd="len-custom" aria-pressed="${!preset}" title="Custom length">${preset ? I.pen : b.target}</button></div>
+          <span class="dim-t" style="font-size:var(--text-xs)">words</span><span class="vr"></span>
+          <button class="mini" data-pick="context" title="Extra Codex entries sent to the model for this beat">${I.plus}Context</button>${b.context.map(e => cxChip(e, 'uncontext')).join('')}
+        </div>
+        <footer class="beat-f">
+          <div class="split"><button class="primary" data-cmd="generate"${b.draft?.status === 'streaming' ? ' disabled' : ''}>${I.play}${b.prose ? 'Regenerate' : 'Generate prose'}</button><button data-cmd="pick-model" aria-haspopup="menu" title="Prompt template and model"><span class="t">${esc(tpl(b.template).name)} · ${esc(model(b.model).name)}</span>${I.chev}</button></div>
+          <span class="spacer"></span><button class="mini" data-cmd="clear-beat" title="Clear the instruction">${I.clear}Clear beat</button>
+        </footer>
+      </section>`;
+  const prose = b.prose || !b.draft ? editor(b.prose, 'beatprose', b.prose ? '' : "Write this beat yourself, or Generate prose. Type '/' for commands…", 'beat-prose') : '';
+  return `<div class="blk beat-wrap" data-block="${b.id}">${head}${draftHTML(b)}${prose}</div>`;
+}
+function blockHTML(b, s) {
+  if (b.kind === 'prose') return `<div class="blk prose" data-block="${b.id}">${editor(b.text, 'prose', s.blocks.length === 1 ? "Start writing, or type '/' for commands…" : 'Keep writing…')}</div>`;
+  if (b.kind === 'beat') return beatHTML(b);
+  const e = entry(b.entry);
+  return `<div class="blk" data-block="${b.id}"><section class="addition card" style="--cat:var(--category-${e.cat})">
+    <header class="blk-h"><button class="grip" data-grip aria-label="Move block (drag, or Alt+arrow keys)">${I.grip}</button><span class="kind">${I.db}Codex addition</span><span class="spacer"></span>
+      <button class="cx" data-pick="addentry" title="Change entry"><i></i><b>${esc(e.name)}</b>${I.chev}</button><button class="ib" data-menu="block" aria-label="Block actions">${I.more}</button></header>
+    <div class="add-body ed${b.body ? '' : ' empty'}" contenteditable="true" data-part="addbody" data-placeholder="What is true about this entry from this point in the story…">${inline(b.body)}</div>
+    <div class="add-note">From here on, the AI reads this as part of <b>${esc(e.name)}</b>.</div>
+  </section></div>`;
+}
+function sceneHTML(s, n, c) {
+  const w = sceneWords(s);
+  return `<section class="scene row" data-scene="${s.id}">
+    <div class="scene-main">${s.blocks.map(b => blockHTML(b, s)).join('')}</div>
+    <aside class="gutter" aria-label="Scene ${n} details"><div class="g-in">
+      <div class="g-h"><span class="overline">Chapter ${chapterNo(c.id)} · Scene ${n}</span><button class="ib" data-menu="scene" aria-label="Scene actions">${I.more}</button></div>
+      ${s.labels.length ? `<div class="g-labels">${s.labels.map(lblChip).join('')}</div>` : ''}
+      <div class="g-sum" contenteditable="true" data-part="summary" data-placeholder="Scene summary (shared with Plan)…">${inline(s.summary, false)}</div>
+      ${s.codex.length ? `<div class="g-links">${s.codex.map(e => cxChip(e, 'unlink')).join('')}</div>` : ''}
+      <div class="g-f"><button class="mini" data-pick="label">${I.tag}Label</button><button class="mini" data-pick="codex">${I.plus}Codex</button><span class="spacer"></span><span class="words${w ? '' : ' none'}" data-words>${w ? w.toLocaleString() + ' words' : 'Not written'}</span></div>
+    </div></aside>
+  </section>`;
+}
+function chapterHTML({ a, ai, c }, i, list) {
+  const n = chapterNo(c.id), w = wordsOf(c.scenes);
+  const actMark = i === 0 || list[i - 1].a !== a ? `<div class="act-mark">Act ${ai + 1} · ${esc(a.title)}</div>` : '';
+  const scenes = c.scenes.map((s, si) => sceneHTML(s, si + 1, c) + (si < c.scenes.length - 1 ? `<div class="row"><div class="divider">${ORNAMENT}<button class="mini" data-cmd="new-scene" data-after="${s.id}">${I.plus}New scene here</button></div></div>` : '')).join('');
+  return `${actMark}<section class="chapter" data-ch="${c.id}">
+    <header class="ch-h row"><div><div class="overline">Chapter ${n}</div><h2 contenteditable="true" data-part="chtitle" spellcheck="false">${esc(c.title)}</h2></div>
+      <aside class="gutter g-ch"><span data-chmeta>${c.scenes.length} ${c.scenes.length === 1 ? 'scene' : 'scenes'} · ${kw(w)} words</span><span class="spacer"></span>
+        <button class="mini" data-cmd="copyref" title="Copy a reference that survives reorders (#4)"><code>ch:${esc(c.slug)}</code></button><button class="ib" data-menu="chapter" aria-label="Chapter actions">${I.more}</button></aside></header>
+    ${scenes}
+    <div class="row"><div class="ch-end"><button class="btn ghost" data-cmd="new-scene" data-after="${c.scenes.at(-1)?.id || ''}" data-ch-id="${c.id}">${I.plus}New scene</button></div></div>
+  </section>`;
+}
+function renderDoc() {
+  computeRefOrder();
+  const list = chaptersInScope();
+  $('#page').innerHTML = list.map(chapterHTML).join('') || '<div class="empty-scope">Nothing in this scope.</div>';
+  const doc = $('#doc');
+  doc.classList.toggle('no-gutter', !state.gutter);
+  applyHighlight(); applyFind(); renderMap(); onScroll();
+}
+function renderSide() {
+  const body = $('#sideBody');
+  const q = state.sideQ.toLowerCase();
+  const groups = Object.entries(CATS).map(([cat, name]) => {
+    const items = ENTRIES.filter(e => e.cat === cat && e.name.toLowerCase().includes(q));
+    if (!items.length) return '';
+    return `<div class="cat-h" style="--cat:var(--category-${cat})"><i></i>${name}<span class="spacer"></span>${items.length}</div>` +
+      items.map(e => `<div class="erow${entryPanel?.id === e.id ? ' open' : ''}"><button class="entry" draggable="true" data-entry="${e.id}" aria-pressed="${state.highlight === e.id}" title="Click: highlight in the manuscript · Drag into the text to mention, or onto a scene summary to link"><span class="dot" style="--cat:var(--category-${cat})"></span><span class="n">${esc(e.name)}</span><span class="u">${usage(e.id) || ''}</span></button><button class="ib e-edit" data-cmd="open-entry" data-e="${e.id}" aria-label="Edit ${esc(e.name)}" title="Edit entry">${I.pen}</button></div>`).join('');
+  }).join('');
+  if (!body.querySelector('.side-list')) {
+    body.innerHTML = `<div class="side-tools"><label class="search"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><input id="sideQ" placeholder="Search Knowledge base" aria-label="Search Knowledge base"></label>
+      <button class="ib" style="width:28px;height:28px;border:1px solid var(--color-border)" aria-label="Filter"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3.5h12L9.5 9v4l-3 1V9z"/></svg></button></div>
+      <div class="side-new"><button class="btn" data-cmd="new-entry">${I.plus}New Entry</button></div><div class="side-list"></div>`;
+    $('#sideQ').addEventListener('input', e => { state.sideQ = e.target.value; renderSide(); });
+  }
+  body.querySelector('.side-list').innerHTML = groups || '<div class="side-empty">No entries match.</div>';
+}
+function renderStats() {
+  const scenes = chaptersInScope().flatMap(x => x.c.scenes), words = wordsOf(scenes);
+  const mins = Math.round(words / 238);
+  $('#stats').textContent = `${words.toLocaleString()} words · ${Math.ceil(words / 250)} pages · ${mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`} read`;
+  const sc = state.scope, c = sc?.ch && locate('chapter', sc.ch), a = sc?.act && locate('act', sc.act);
+  $('#scopeName').textContent = c ? `Chapter ${chapterNo(c.c.id)}: ${c.c.title}` : a ? `Act ${a.ai + 1}: ${a.a.title}` : 'Full manuscript';
+}
+// Book header from ?book= (G3, G4): title, cover, back link to the series or Library, tab links that keep the book
+function renderBookbar() {
+  $('#bookTitle').textContent = BOOK.title;
+  $('#bookAuthor').textContent = OWNER_NAME;
+  $('#bookCover').style.background = `linear-gradient(160deg, ${BOOK.cover[0]}, ${BOOK.cover[1]})`;
+  const back = $('#back'), sname = SERIES_NAMES[BOOK.series], to = sname ? `Back to ${sname}` : 'Back to Library';
+  back.href = sname ? `library.html#series=${BOOK.series}` : 'library.html';
+  back.title = to; back.setAttribute('aria-label', to);
+  document.querySelectorAll('[data-tab]').forEach(a => a.href = `${a.dataset.tab}.html${bookQ}`);
+  // Same rule as references.html: danger count for copyright risks, otherwise warn for sources to check
+  const risks = REFS.filter(r => r.st === 'danger').length, checks = REFS.filter(r => r.st === 'warn' && refOrder.has(r.id)).length;
+  $('#tabBadge').innerHTML = risks ? `<span class="badge" style="--tone:var(--color-danger)" title="${risks} copyright ${risks === 1 ? 'risk' : 'risks'}">${risks}</span>` : checks ? `<span class="badge" style="--tone:var(--color-warn)" title="${checks} to check">${checks}</span>` : '';
+}
+// Read-only below write: nothing in the manuscript, gutters or entry panel takes typing, and the chip says why
+function applyRole() {
+  const ro = !canWrite(), chip = $('#roChip');
+  document.body.toggleAttribute('data-ro', ro);
+  chip.hidden = !ro; $('#sync').hidden = ro;
+  if (ro) { const c = ROLE_CHIP[ROLE]; chip.innerHTML = `${c.icon}<span class="lbl-t">${c.label}</span>`; chip.title = c.why(); chip.setAttribute('aria-label', `${c.label}. ${c.why()}`); }
+  $('#meAvatar').textContent = BOOK.owner ? 'JD' : VIEWER[ROLE];
+  lockEdits();
+}
+function lockEdits() {
+  const ro = !canWrite();
+  document.querySelectorAll(ro ? '[contenteditable="true"]' : '[contenteditable="false"][data-part], [contenteditable="false"][data-kbf]').forEach(el => { el.contentEditable = ro ? 'false' : 'true'; });
+  document.querySelectorAll('.entry[draggable]').forEach(el => { el.draggable = !ro; });
+  document.querySelectorAll('#kbp select, #kbp textarea, #kbp input, #kbp .tgl').forEach(el => { el.disabled = ro; });
+}
+// Re-renders put contenteditable="true" back; keep read-only while the role is below write
+new MutationObserver(() => { if (!canWrite()) lockEdits(); }).observe(document.body, { childList: true, subtree: true });
+function setRole(r) {
+  const was = canWrite();
+  ROLE = r; bookQ = '?book=' + encodeURIComponent(bookId) + (ROLE !== defaultRole ? '&role=' + ROLE : '');
+  history.replaceState(null, '', location.pathname + bookQ + location.hash);
+  closePop(); renderChrome(); applyRole();
+  // What an AccessChanged event does to an open tab (#80)
+  toast(canWrite() ? (was ? `Your access changed to ${ROLE === 'owner' ? 'Owner' : 'Can edit'}` : 'You can edit this book now. Typing works again.')
+    : `${OWNER_NAME} changed your access to ${ROLE === 'view' ? 'Can view' : 'Can comment'}. This tab is read-only now.`);
+}
+function renderChrome() {
+  renderStats(); renderBookbar();
+  $('#ws').classList.toggle('no-side', !state.side);
+  $('#ws').classList.toggle('has-panel', !!entryPanel);
+  const e = entry(state.highlight);
+  const n = e ? document.querySelectorAll('.scene.hit').length : 0;
+  $('#hl').innerHTML = e ? `<span class="hl-chip"><span class="dot" style="--cat:var(--category-${e.cat})"></span>${esc(e.name)} <span class="dim-t">in ${n} ${n === 1 ? 'scene' : 'scenes'}</span><button class="ib" data-cmd="hl-prev" aria-label="Previous scene">${I.up}</button><button class="ib" data-cmd="hl-next" aria-label="Next scene" style="transform:rotate(180deg)">${I.up}</button><button class="ib" data-cmd="clear-hl" aria-label="Clear highlight">✕</button></span>` : '';
+  $('#focusBtn').setAttribute('aria-pressed', document.body.classList.contains('focus'));
+  const html = document.documentElement;
+  document.querySelectorAll('[data-theme-set]').forEach(b => b.setAttribute('aria-pressed', b.dataset.themeSet === (html.dataset.theme || 'system')));
+  document.querySelectorAll('[data-dens-set]').forEach(b => b.setAttribute('aria-pressed', b.dataset.densSet === (html.dataset.density || 'compact')));
+  $('#roleSeg').innerHTML = [['owner', 'Owner'], ['write', 'Editor'], ['comment', 'Commenter'], ['view', 'Viewer']].filter(([k]) => k !== 'owner' || !BOOK.owner)
+    .map(([k, l]) => `<button data-role-set="${k}" aria-pressed="${ROLE === k}">${l}</button>`).join('');
+}
+function render() { renderDoc(); renderSide(); renderChrome(); if (!$('#kbp').contains(document.activeElement)) renderPanel(); }
+// Re-render one block in place (keeps the rest of the document, and its caret, untouched)
+function renderBlock(bid) {
+  const loc = locate('block', bid), el = document.querySelector(`[data-block="${bid}"]`);
+  if (!loc || !el) return render();
+  el.outerHTML = blockHTML(loc.b, loc.s);
+  applyHighlight(); renderMap();
+}
+// Counts change as you type: refresh numbers only, never the editors
+function refreshCounts() {
+  document.querySelectorAll('[data-scene]').forEach(el => {
+    const s = locate('scene', el.dataset.scene)?.s; if (!s) return;
+    const w = sceneWords(s), t = el.querySelector('[data-words]');
+    t.textContent = w ? w.toLocaleString() + ' words' : 'Not written'; t.classList.toggle('none', !w);
+  });
+  document.querySelectorAll('[data-chmeta]').forEach(el => {
+    const c = locate('chapter', el.closest('[data-ch]').dataset.ch).c;
+    el.textContent = `${c.scenes.length} ${c.scenes.length === 1 ? 'scene' : 'scenes'} · ${kw(wordsOf(c.scenes))} words`;
+  });
+  renderStats(); renderSide(); renderMap();
+}
+
+// ---------- Highlight (sidebar entry) + Find ----------
+// Set or clear the highlighted entry. It carries to Plan and References through sessionStorage (G7).
+function setHighlight(eid) {
+  state.highlight = entry(eid) ? eid : null;
+  kv('sessionStorage', HL_KEY, state.highlight);
+  applyHighlight(); renderSide(); renderChrome(); renderMap();
+}
+function applyHighlight() {
+  document.querySelectorAll('.hl').forEach(x => x.classList.remove('hl'));
+  document.querySelectorAll('.scene.hit').forEach(x => x.classList.remove('hit'));
+  if (!state.highlight) return;
+  document.querySelectorAll(`#page [data-e="${state.highlight}"]`).forEach(x => x.classList.add('hl'));
+  document.querySelectorAll('#page [data-scene]').forEach(el => { if (sceneRefs(locate('scene', el.dataset.scene).s).has(state.highlight)) el.classList.add('hit'); });
+}
+let findIdx = -1;
+function applyFind() {
+  document.querySelectorAll('#page mark').forEach(m => m.replaceWith(...m.childNodes));
+  document.querySelectorAll('#page .ed, #page .draft-body').forEach(el => el.normalize());
+  findIdx = -1;
+  const q = state.q.toLowerCase();
+  if (!q) { $('#qn').textContent = ''; return; }
+  const nodes = [];
+  document.querySelectorAll('#page .ed, #page .draft-body').forEach(root => {
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    while (w.nextNode()) if (w.currentNode.nodeValue.toLowerCase().includes(q)) nodes.push(w.currentNode);
+  });
+  nodes.forEach(n => {
+    let node = n;
+    for (let i = node.nodeValue.toLowerCase().indexOf(q); i >= 0; i = node.nodeValue.toLowerCase().indexOf(q)) {
+      const hit = node.splitText(i); node = hit.splitText(q.length);
+      const m = document.createElement('mark'); hit.replaceWith(m); m.append(hit);
+    }
+  });
+  const n = document.querySelectorAll('#page mark').length;
+  $('#qn').textContent = n ? `${n}` : '0';
+}
+function findNext(d = 1) {
+  const marks = [...document.querySelectorAll('#page mark')]; if (!marks.length) return;
+  marks[findIdx]?.classList.remove('cur');
+  findIdx = (findIdx + d + marks.length) % marks.length;
+  marks[findIdx].classList.add('cur'); marks[findIdx].scrollIntoView({ block: 'center', behavior: 'smooth' });
+  $('#qn').textContent = `${findIdx + 1} of ${marks.length}`;
+}
+
+// ---------- Minimap + scroll position ----------
+const doc = $('#doc'), map = $('#map');
+function renderMap() {
+  const H = map.clientHeight, total = doc.scrollHeight || 1;
+  if (!H) return;
+  const y = el => el.offsetTop / total * H;
+  let html = '';
+  doc.querySelectorAll('.chapter').forEach(el => { const c = locate('chapter', el.dataset.ch).c; html += `<span class="mm-ch" style="top:${y(el)}px" title="Chapter ${chapterNo(c.id)}: ${esc(c.title)}"></span>`; });
+  doc.querySelectorAll('.scene').forEach(el => {
+    const s = locate('scene', el.dataset.scene).s;
+    const cls = s.blocks.some(b => b.draft) ? ' pending' : !sceneWords(s) ? ' empty' : '';
+    html += `<span class="mm-s${cls}${el.classList.contains('hit') ? ' hit' : ''}" data-mm="${s.id}" style="top:${y(el) + 3}px;height:${Math.max(3, el.offsetHeight / total * H - 4)}px"></span>`;
+  });
+  map.innerHTML = html + '<span class="mm-view" id="mmView"></span>';
+  updateView();
+}
+function updateView() {
+  const v = $('#mmView'), H = map.clientHeight, total = doc.scrollHeight || 1;
+  if (!v) return;
+  v.style.top = doc.scrollTop / total * H + 'px'; v.style.height = Math.max(12, doc.clientHeight / total * H) + 'px';
+}
+let current = null;
+function onScroll() {
+  updateView();
+  const top = doc.getBoundingClientRect().top + 60;
+  const scenes = [...doc.querySelectorAll('.scene')];
+  const el = scenes.find(x => x.getBoundingClientRect().bottom > top) || scenes.at(-1);
+  if (!el) { $('#chName').textContent = '—'; $('#crumb').textContent = ''; return; }
+  const loc = locate('scene', el.dataset.scene);
+  current = loc;
+  $('#chName').textContent = `Chapter ${chapterNo(loc.c.id)}: ${loc.c.title}`;
+  $('#crumb').textContent = `Act ${loc.ai + 1} · Scene ${loc.si + 1} of ${loc.c.scenes.length}`;
+  map.querySelectorAll('.mm-s.cur').forEach(x => x.classList.remove('cur'));
+  map.querySelector(`[data-mm="${loc.s.id}"]`)?.classList.add('cur');
+}
+let scrollRaf;
+doc.addEventListener('scroll', () => { cancelAnimationFrame(scrollRaf); scrollRaf = requestAnimationFrame(onScroll); });
+addEventListener('resize', () => renderMap());
+function mapJump(e) {
+  const r = map.getBoundingClientRect();
+  doc.scrollTop = (e.clientY - r.top) / r.height * doc.scrollHeight - doc.clientHeight / 2;
+}
+map.addEventListener('pointerdown', e => { map.setPointerCapture(e.pointerId); mapJump(e); map.onpointermove = mapJump; });
+map.addEventListener('pointerup', () => { map.onpointermove = null; });
+function goTo(el, flash) {
+  if (!el) return;
+  doc.scrollTo({ top: el.offsetTop - 16, behavior: 'smooth' });
+  if (flash) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+}
+
+// ---------- Autosave (simulated websocket): 3s after the first change, and on blur ----------
+const SYNC_MS = 3000;
+const sync = { dirty: false, timer: null, at: Date.now() };
+function setSync(s) {
+  const el = $('#sync'); el.dataset.s = s;
+  const ago = Math.round((Date.now() - sync.at) / 1000);
+  el.querySelector('.lbl-t').textContent = s === 'editing' ? `Unsaved · syncing in ${SYNC_MS / 1000}s` : s === 'saving' ? 'Saving…' : `Saved${ago < 5 ? ' · just now' : ago < 60 ? ` · ${ago}s ago` : ` · ${Math.round(ago / 60)}m ago`}`;
+}
+function markDirty() { sync.dirty = true; setSync('editing'); sync.timer ??= setTimeout(flush, SYNC_MS); }
+function flush() {
+  clearTimeout(sync.timer); sync.timer = null;
+  if (!sync.dirty) return;
+  sync.dirty = false; setSync('saving');
+  setTimeout(() => { sync.at = Date.now(); sync.dirty ? setSync('editing') : setSync('saved'); refreshCounts(); }, 450);
+}
+setInterval(() => { if ($('#sync').dataset.s === 'saved') setSync('saved'); }, 10000);
+
+// ---------- Undo + toast ----------
+let undoSnap = null, toastT;
+const snapshot = () => { stopAllStreams(); undoSnap = structuredClone(state.acts); undoExtra = null; };
+function toast(html, undo) {
+  const t = $('#toast');
+  t.innerHTML = `<span>${html}</span>${undo ? '<button data-cmd="undo">Undo</button>' : ''}`;
+  t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 4200);
+}
+function commit(msg, undo) { markDirty(); flush(); render(); if (msg) toast(msg, undo); }
+
+// ---------- Editing: serialize the DOM back to stored text ----------
+function serInline(node) {
+  let out = '';
+  node.childNodes.forEach(n => {
+    if (n.nodeType === 3) out += n.nodeValue;
+    else if (n.classList?.contains('mention')) out += `[[e:${n.dataset.e}]]`;
+    else if (n.classList?.contains('chref')) out += `[[ch:${n.dataset.ch}]]`;
+    else if (n.classList?.contains('refm')) out += `[[r:${n.dataset.r}]]`;
+    else if (n.classList?.contains('caret') || n.nodeName === 'BR') { /* skip */ }
+    else out += serInline(n);
+  });
+  return out.replace(/ /g, ' ');
+}
+const serPara = n => n.nodeType === 3 ? n.nodeValue : n.nodeName === 'BLOCKQUOTE' ? '> ' + serInline(n).trim() : serInline(n).trim();
+const serialize = ed => [...ed.childNodes].map(serPara).filter(p => p.trim() && p !== '> ').join('\n\n');
+const isEmptyEd = ed => !ed.textContent.trim() && !ed.querySelector('.mention, .chref, .refm');
+function store(f) {
+  const part = f.dataset.part;
+  if (part === 'chtitle') { locate('chapter', f.closest('[data-ch]').dataset.ch).c.title = f.textContent.trim(); return; }
+  if (part === 'summary') { locate('scene', f.closest('[data-scene]').dataset.scene).s.summary = serInline(f).trim(); return; }
+  const b = locate('block', f.closest('[data-block]').dataset.block).b;
+  if (part === 'prose') b.text = serialize(f);
+  if (part === 'beatprose') b.prose = serialize(f);
+  if (part === 'beatbody') b.body = serInline(f).trim();
+  if (part === 'beattitle') b.title = f.textContent.trim();
+  if (part === 'addbody') b.body = serInline(f).trim();
+}
+document.execCommand('defaultParagraphSeparator', false, 'p');
+document.addEventListener('input', e => {
+  const f = e.target.closest?.('[data-part]'); if (!f) return;
+  store(f);
+  if (f.classList.contains('ed')) f.classList.toggle('empty', isEmptyEd(f));
+  markDirty();
+});
+// Leaving a prose editor re-renders it, which refreshes Codex alias highlights
+document.addEventListener('focusout', e => {
+  const f = e.target.closest?.('[data-part]'); if (!f) return;
+  flush();
+  if (popCtx || !['prose', 'beatprose'].includes(f.dataset.part)) return;
+  const b = locate('block', f.closest('[data-block]').dataset.block)?.b; if (!b) return;
+  f.innerHTML = proseHTML(f.dataset.part === 'prose' ? b.text : b.prose);
+  applyHighlight(); if (state.q) applyFind();
+});
+document.addEventListener('paste', e => {
+  if (!e.target.closest?.('[data-part]')) return;
+  e.preventDefault(); document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
+});
+
+// ---------- Popover (menus + pickers) ----------
+const pop = $('#pop');
+let popCtx = null;
+function openPop(anchorRect, html, ctx, cls = '') {
+  popCtx = ctx; pop.className = 'open ' + cls; pop.innerHTML = html;
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  let top = anchorRect.bottom + 4;
+  if (top + h > innerHeight - 8) top = Math.max(8, anchorRect.top - h - 4);
+  pop.style.left = Math.max(8, Math.min(anchorRect.left, innerWidth - w - 8)) + 'px';
+  pop.style.top = top + 'px';
+  pop.querySelector('input')?.focus();
+}
+function closePop(restore) {
+  const ctx = popCtx;
+  pop.className = ''; popCtx = null;
+  if (restore && ctx?.range) { const ed = ctx.ed; ed.focus(); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(ctx.range); }
+}
+const searchBox = ph => `<label class="search"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><input placeholder="${ph}"></label>`;
+function filterable(rect, ph, listFn, ctx, cls) {
+  openPop(rect, `${searchBox(ph)}<div class="list">${listFn('')}</div>`, ctx, cls);
+  pop.querySelector('input').addEventListener('input', ev => { pop.querySelector('.list').innerHTML = listFn(ev.target.value); markFirst(); });
+  markFirst();
+}
+function markFirst() { pop.querySelectorAll('.item.on').forEach(x => x.classList.remove('on')); pop.querySelector('.list .item:not(:disabled)')?.classList.add('on'); }
+function codexList(q, current = new Set()) {
+  const ql = q.toLowerCase();
+  return Object.entries(CATS).map(([cat, name]) => {
+    const items = ENTRIES.filter(e => e.cat === cat && e.name.toLowerCase().includes(ql));
+    return items.length ? `<div class="cat-h" style="--cat:var(--category-${cat})"><i></i>${name}</div>` + items.map(e =>
+      `<button class="item" data-pick-e="${e.id}"><span class="dot" style="--cat:var(--category-${cat})"></span>${esc(e.name)}${current.has(e.id) ? '<span class="k">linked</span>' : ''}</button>`).join('') : '';
+  }).join('') || '<div class="side-empty">No match. Enter creates a new entry.</div>';
+}
+function chapterList(q) {
+  const ql = q.toLowerCase();
+  return state.acts.map((a, ai) => {
+    const items = a.chapters.filter(c => c.title.toLowerCase().includes(ql) || String(chapterNo(c.id)) === ql);
+    return items.length ? `<div class="grp">Act ${ai + 1} · ${esc(a.title)}</div>` + items.map(c => `<button class="item" data-pick-ch="${c.id}"><span class="dim-t" style="width:18px;text-align:right;font-variant-numeric:tabular-nums">${chapterNo(c.id)}</span>${esc(c.title)}<span class="k">${kw(wordsOf(c.scenes))}</span></button>`).join('') : '';
+  }).join('') || '<div class="side-empty">No chapter matches.</div>';
+}
+const refList = q => REFS.filter(r => r.title.toLowerCase().includes(q.toLowerCase())).map(r => `<button class="item" data-pick-r="${r.id}"><span class="lbl" style="--tone:var(--color-${REF_ST[r.st][0]});background:none;padding:0"><i></i></span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.title)}</span></button>`).join('') + '<div class="sep"></div><button class="item" data-pick-r="new">' + I.plus + ' New source…<span class="k">References</span></button>';
+
+// "/" command menu (#6: AI · Codex · Formatting, plus inserts for #2 and #4)
+const SLASH = [
+  { g: 'AI', k: 'beat', t: 'Scene beat', d: 'Describe what happens, then generate prose from it.', i: I.beat },
+  { g: 'AI', k: 'continue', t: 'Continue writing', d: 'Adds a beat that picks up where the text ends, and generates it.', i: I.spark },
+  { g: 'Codex', k: 'addition', t: 'Codex addition', d: 'Record what changes for an entry from this point on.', i: I.db },
+  { g: 'Codex', k: 'mention', t: 'Mention entry', d: 'Insert a Codex mention. Same as typing @.', i: I.at },
+  { g: 'Insert', k: 'chref', t: 'Chapter reference', d: 'Links by ch:slug, so the number stays right when chapters move.', i: I.link },
+  { g: 'Insert', k: 'ref', t: 'Source reference', d: 'Flag a source for the References section.', i: I.book },
+  { g: 'Insert', k: 'split', t: 'New scene from here', d: 'Moves the text after this paragraph into a new scene.', i: I.cut },
+  { g: 'Formatting', k: 'quote', t: 'Block quote', d: 'Toggle a quote on this paragraph.', i: I.quote },
+];
+function slashList(q) {
+  const ql = q.toLowerCase(); let g = '';
+  return SLASH.filter(c => (c.t + ' ' + c.g).toLowerCase().includes(ql)).map(c => {
+    const head = c.g !== g ? `<div class="grp">${(g = c.g)}</div>` : '';
+    return head + `<button class="item cmd" data-slash="${c.k}"><span class="ico">${c.i}</span><span><b>${c.t}</b><small>${c.d}</small></span></button>`;
+  }).join('') || '<div class="side-empty">No command matches.</div>';
+}
+function caretCtx(ed) {
+  const range = getSelection().getRangeAt(0).cloneRange();
+  let rect = range.getBoundingClientRect();
+  if (!rect.width && !rect.height) rect = (range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement).getBoundingClientRect();
+  return { range, rect, ed, blockId: ed.closest('[data-block]')?.dataset.block, sceneId: ed.closest('[data-scene]')?.dataset.scene, part: ed.dataset.part };
+}
+// Paragraph index of the caret inside a prose editor
+function paraIndex(ed, range) {
+  let n = range.startContainer;
+  while (n && n.parentNode !== ed) n = n.parentNode;
+  const i = [...ed.childNodes].indexOf(n);
+  return i < 0 ? ed.childNodes.length - 1 : i;
+}
+// Split a prose editor at the caret paragraph: text up to it stays, the rest moves after the new block
+function splitAt(ctx) {
+  const nodes = [...ctx.ed.childNodes], i = paraIndex(ctx.ed, ctx.range);
+  const cur = nodes[i] ? serPara(nodes[i]) : '';
+  const keep = nodes.slice(0, cur.trim() ? i + 1 : i).map(serPara).filter(p => p.trim()).join('\n\n');
+  const rest = nodes.slice(i + 1).map(serPara).filter(p => p.trim()).join('\n\n');
+  return { keep, rest };
+}
+function insertBlockAt(ctx, nb) {
+  const loc = locate('block', ctx.blockId), { keep, rest } = splitAt(ctx);
+  if (loc.b.kind === 'prose') loc.b.text = keep; else loc.b.prose = keep;
+  const add = [nb]; if (rest) add.push(P(rest));
+  const drop = loc.b.kind === 'prose' && !keep ? 1 : 0;
+  loc.s.blocks.splice(loc.bi + 1 - drop, drop, ...add);
+  return nb;
+}
+function insertInline(ctx, html) {
+  closePop(true);
+  const sel = getSelection(), r = ctx.range;
+  const tpl = document.createElement('template'); tpl.innerHTML = html;
+  const node = tpl.content.firstChild, space = document.createTextNode(' ');
+  r.insertNode(space); r.insertNode(node);
+  r.setStartAfter(space); r.collapse(true); sel.removeAllRanges(); sel.addRange(r);
+  ctx.ed.classList.remove('empty'); store(ctx.ed); markDirty();
+}
+function runSlash(k) {
+  const ctx = popCtx; closePop();
+  if (k === 'mention') return openCodexPicker(ctx.rect, { ...ctx, kind: 'mention' });
+  if (k === 'chref') return filterable(ctx.rect, 'Link to chapter…', chapterList, { ...ctx, kind: 'chref' });
+  if (k === 'ref') return filterable(ctx.rect, 'Find a source…', refList, { ...ctx, kind: 'ref' }, 'wide');
+  if (k === 'addition') return openCodexPicker(ctx.rect, { ...ctx, kind: 'addition' });
+  if (k === 'quote') {
+    const n = ctx.ed.childNodes[paraIndex(ctx.ed, ctx.range)];
+    if (n?.nodeType === 1) { const q = document.createElement(n.nodeName === 'BLOCKQUOTE' ? 'p' : 'blockquote'); q.append(...n.childNodes); n.replaceWith(q); }
+    store(ctx.ed); markDirty(); return;
+  }
+  snapshot();
+  if (k === 'split') {
+    const loc = locate('block', ctx.blockId), { keep, rest } = splitAt(ctx);
+    if (loc.b.kind === 'prose') loc.b.text = keep; else loc.b.prose = keep;
+    const moved = loc.s.blocks.splice(loc.bi + 1);
+    const ns = sc('', [...(rest ? [P(rest)] : []), ...moved]);
+    loc.c.scenes.splice(loc.si + 1, 0, ns);
+    commit(`New Scene ${loc.si + 2} in Chapter ${chapterNo(loc.c.id)} · scenes renumbered`, true);
+    return goTo(document.querySelector(`[data-scene="${ns.id}"]`), true);
+  }
+  const nb = k === 'continue' ? B('', 'Continue from where the text ends, in the same voice.', { target: 200 }) : B('', '');
+  insertBlockAt(ctx, nb); commit();
+  if (k === 'continue') generate(nb);
+  else focusEnd(`[data-block="${nb.id}"] [data-part="beatbody"]`);
+}
+function openCodexPicker(rect, ctx) {
+  const s = ctx.sceneId && locate('scene', ctx.sceneId).s;
+  const current = ctx.kind === 'context' ? new Set(locate('block', ctx.blockId).b.context) : ctx.kind === 'codex' ? sceneRefs(s) : new Set();
+  const ph = { mention: 'Mention Codex entry…', codex: 'Link Codex entry…', context: 'Add to beat context…', addition: 'Codex addition for…', addentry: 'Change entry…' }[ctx.kind];
+  filterable(rect, ph, q => codexList(q, current), ctx);
+}
+function pickCodex(eid) {
+  const ctx = popCtx, e = entry(eid);
+  if (ctx.kind === 'mention') return insertInline(ctx, mention(eid));
+  closePop();
+  if (ctx.kind === 'codex') { const s = locate('scene', ctx.sceneId).s; if (!s.codex.includes(eid)) { s.codex.push(eid); commit(`Linked <b>${esc(e.name)}</b> to the scene`); } return; }
+  const loc = ctx.blockId && locate('block', ctx.blockId);
+  if (ctx.kind === 'context') { if (!loc.b.context.includes(eid)) loc.b.context.push(eid); markDirty(); return renderBlock(loc.b.id); }
+  if (ctx.kind === 'addentry') { loc.b.entry = eid; markDirty(); return renderBlock(loc.b.id); }
+  if (ctx.kind === 'addition') { snapshot(); const nb = insertBlockAt(ctx, A(eid, '')); commit(); focusEnd(`[data-block="${nb.id}"] [data-part="addbody"]`); }
+}
+function openLabelPicker(rect, sceneId) {
+  const s = locate('scene', sceneId).s;
+  openPop(rect, `<div class="list" style="padding-top:4px">${LABELS.map(l => `<button class="item" data-pick-l="${l.id}"><span class="lbl" style="--tone:var(--color-${l.tone});background:none;padding:0"><i></i></span>${esc(l.name)}${s.labels.includes(l.id) ? '<span class="k">✓</span>' : ''}</button>`).join('')}<div class="sep"></div><button class="item" disabled>${I.plus} New label…</button></div>`, { kind: 'label', sceneId });
+}
+// Prompt template → model, side by side (#6 screenshots)
+function openModelPicker(rect, blockId, showTpl) {
+  const b = locate('block', blockId).b, t = showTpl || b.template;
+  openPop(rect, `<div class="cols2"><div class="list"><div class="grp">Prompt</div>${TEMPLATES.map(x => `<button class="item tpl${x.id === t ? ' cur' : ''}" data-tpl="${x.id}"><span>${esc(x.name)}</span>${x.sys ? '<span class="k">System</span>' : ''}</button>`).join('')}</div>
+    <div class="list"><div class="grp">Model</div>${MODELS.map(m => `<button class="item" data-model="${m.id}" style="min-height:38px"><span><span>${esc(m.name)}</span><span class="sub">${esc(m.note)}</span></span>${b.template === t && b.model === m.id ? `<span class="ck">${I.check}</span>` : ''}</button>`).join('')}</div></div>
+    <div class="foot"><button class="item" disabled>Configure prompts…</button></div>`, { kind: 'model', blockId, tpl: t, rect }, 'model');
+}
+function openMenu(rect, kind, el) {
+  let items = [], ctx = { kind: 'menu:' + kind };
+  if (kind === 'block') {
+    const loc = locate('block', el.closest('[data-block]').dataset.block); ctx.blockId = loc.b.id;
+    items = [['up', 'Move up', 'Alt+↑'], ['down', 'Move down', 'Alt+↓']];
+    if (loc.b.kind === 'beat') items.push(['sep'], ['dup', 'Duplicate beat'], ['history', 'Generation history'], ['sep'], ['del-keep', 'Delete beat, keep prose', '', 'danger'], ['del', 'Delete beat and prose', '', 'danger']);
+    else items.push(['sep'], ['del', 'Delete block', '', 'danger']);
+  }
+  if (kind === 'scene') {
+    const loc = locate('scene', el.closest('[data-scene]').dataset.scene); ctx.sceneId = loc.s.id;
+    items = [['plan', 'Open in Plan', '', '', `plan.html${bookQ}#scene=${sceneNo(loc.s.id)}`], ['beat-end', 'Add scene beat at end'], ['sep'], ['del', 'Delete scene', '', 'danger']];
+  }
+  if (kind === 'chapter') {
+    const loc = locate('chapter', el.closest('[data-ch]').dataset.ch); ctx.chId = loc.c.id;
+    items = [['scope', 'Show only this chapter'], ['copyref', 'Copy reference', 'ch:' + loc.c.slug], ['plan', 'Open in Plan', '', '', `plan.html${bookQ}#chapter=${chapterNo(loc.c.id)}`], ['sep'], ['del', 'Delete chapter', '', 'danger']];
+  }
+  // Items with an href are real links (deep links into the other screens, G5)
+  openPop(rect, `<div class="list" style="padding-top:4px">${items.map(([k, t, key, cls, href]) => k === 'sep' ? '<div class="sep"></div>'
+    : href ? `<a class="item" href="${esc(href)}">${esc(t)}<span class="k">${esc(href.split('#')[1])}</span></a>`
+    : `<button class="item ${cls || ''}" data-mi="${k}">${esc(t)}${key ? `<span class="k">${esc(key)}</span>` : ''}</button>`).join('')}</div>`, ctx);
+}
+function menuAction(k) {
+  const ctx = popCtx; closePop();
+  if (ctx.kind === 'menu:block') {
+    const loc = locate('block', ctx.blockId);
+    if (k === 'up' || k === 'down') return moveBlock(loc.b.id, k === 'up' ? -1 : 1);
+    if (k === 'history') return toast(`${loc.b.draft ? 1 : 0} pending · earlier generations open in a history panel (ai_generation, #10)`);
+    snapshot();
+    if (k === 'dup') { loc.s.blocks.splice(loc.bi + 1, 0, { ...structuredClone(loc.b), id: id('b'), prose: '', draft: null }); return commit('Beat duplicated', true); }
+    if (k === 'del-keep') { loc.s.blocks.splice(loc.bi, 1, ...(loc.b.prose ? [P(loc.b.prose)] : [])); return commit('Beat deleted · prose kept', true); }
+    if (k === 'del') { loc.s.blocks.splice(loc.bi, 1); if (!loc.s.blocks.length) loc.s.blocks.push(P('')); return commit('Block deleted', true); }
+  }
+  if (ctx.kind === 'menu:scene') {
+    const loc = locate('scene', ctx.sceneId);
+    if (k === 'beat-end') { const nb = B('', ''); loc.s.blocks.push(nb); commit(); return focusEnd(`[data-block="${nb.id}"] [data-part="beatbody"]`); }
+    if (k === 'del') { snapshot(); loc.c.scenes.splice(loc.si, 1); if (!loc.c.scenes.length) loc.c.scenes.push(sc('')); return commit('Scene deleted · scenes renumbered', true); }
+  }
+  if (ctx.kind === 'menu:chapter') {
+    const loc = locate('chapter', ctx.chId);
+    if (k === 'scope') { state.scope = { ch: loc.c.id }; return render(); }
+    if (k === 'copyref') return copyRef(loc.c);
+    if (k === 'del') { snapshot(); loc.a.chapters.splice(loc.ci, 1); return commit('Chapter deleted · chapters renumbered · references to it now show as missing', true); }
+  }
+}
+function copyRef(c) { navigator.clipboard?.writeText('ch:' + c.slug).catch(() => {}); toast(`Copied <code>ch:${esc(c.slug)}</code> · stays valid after reorder or rename (#4)`); }
+// Move a block to a scene at an index. Empty prose placeholders give way; an emptied scene gets one back.
+function placeBlock(bid, sceneId, index) {
+  const from = locate('block', bid), to = locate('scene', sceneId);
+  let i = index; if (to.s === from.s && from.bi < i) i--;
+  if (to.s === from.s && i === from.bi) return;
+  snapshot();
+  from.s.blocks.splice(from.bi, 1);
+  to.s.blocks.splice(i, 0, from.b);
+  to.s.blocks = to.s.blocks.filter(b => b === from.b || b.kind !== 'prose' || b.text.trim());
+  if (!from.s.blocks.length) from.s.blocks.push(P(''));
+  const what = from.b.kind === 'beat' ? 'Beat' : 'Codex addition';
+  commit(to.s === from.s ? '' : `${what} moved to Chapter ${chapterNo(to.c.id)}, Scene ${to.si + 1}`, to.s !== from.s);
+  const el = document.querySelector(`[data-block="${bid}"]`);
+  el?.classList.add('moved'); el?.querySelector('[data-grip]')?.focus({ preventScroll: true });
+}
+// Alt+↑/↓: within the scene, then across scene and chapter boundaries
+function moveBlock(bid, d) {
+  const loc = locate('block', bid), to = loc.bi + d;
+  if (to >= 0 && to < loc.s.blocks.length) return placeBlock(bid, loc.s.id, d > 0 ? to + 1 : to);
+  const scenes = allScenes(), next = scenes[scenes.indexOf(loc.s) + d];
+  if (!next) return;
+  placeBlock(bid, next.id, d > 0 ? 0 : next.blocks.length);
+  document.querySelector(`[data-block="${bid}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+function entryCard(rect, eid, sceneId) {
+  const e = entry(eid), n = usage(eid);
+  openPop(rect, `<div class="card-in"><h4><span class="dot" style="--cat:var(--category-${e.cat})"></span>${esc(e.name)}</h4><span class="dim-t" style="font-size:var(--text-xs)">${CATS[e.cat]} · used in ${n} ${n === 1 ? 'scene' : 'scenes'}</span>
+    <p>${esc(e.summary)}</p><div class="acts"><button class="btn" data-cmd="hl-entry" data-e="${eid}">Highlight</button>${sceneId ? `<button class="btn" data-cmd="link-entry" data-e="${eid}">Link to scene</button>` : ''}<button class="btn ghost" data-cmd="open-entry" data-e="${eid}">Open entry</button></div></div>`, { kind: 'card', sceneId }, 'wide');
+}
+function chapterCard(rect, slug) {
+  const c = chapterBySlug(slug);
+  openPop(rect, c ? `<div class="card-in"><h4>Chapter ${chapterNo(c.id)}: ${esc(c.title)}</h4><span class="dim-t" style="font-size:var(--text-xs);font-family:var(--font-mono)">ch:${esc(slug)}</span>
+    <p>The number is worked out from the chapter's position, so this reference stays right when chapters move (#4).</p><div class="acts"><button class="btn" data-cmd="goto-ch" data-ch-id="${c.id}">Go to chapter</button></div></div>`
+    : `<div class="card-in"><h4 style="color:var(--color-danger)">Missing chapter</h4><p><code>ch:${esc(slug)}</code> was deleted. Pick a new target or remove the reference.</p></div>`, { kind: 'card' }, 'wide');
+}
+function refCard(rect, rid) {
+  const r = ref(rid), [tone, st] = REF_ST[r.st];
+  openPop(rect, `<div class="card-in"><span class="dim-t" style="font-size:var(--text-xs)">Reference ${refOrder.get(rid)} · ${esc(r.kind)}</span><h4 style="margin-top:2px">${esc(r.title)}</h4>
+    <span class="st" style="--tone:var(--color-${tone})"><i></i>${st}</span><p style="margin-top:4px">${esc(r.note)}</p>
+    <div class="acts"><a class="btn" href="references.html${bookQ}#${encodeURIComponent(rid)}">Open in References</a></div></div>`, { kind: 'card', rid }, 'wide');
+}
+function formatMenu(rect) {
+  const d = doc.dataset, seg = (attr, opts) => `<div class="seg">${opts.map(([v, t]) => `<button data-fmt="${attr}" data-v="${v}" aria-pressed="${String(attr === 'gutter' ? state.gutter : attr === 'beats' ? state.beats : d[attr]) === v}">${t}</button>`).join('')}</div>`;
+  openPop(rect, `<div class="fmt">
+    <span>Text width</span>${seg('width', [['narrow', 'Narrow'], ['medium', 'Medium'], ['wide', 'Wide']])}
+    <span>Paragraphs</span>${seg('para', [['spaced', 'Spaced'], ['indent', 'Indented']])}
+    <span>Scene beats</span>${seg('beats', [['true', 'Show'], ['false', 'Hide']])}
+    <span>Summaries</span>${seg('gutter', [['true', 'Show'], ['false', 'Hide']])}
+    <span>Codex names</span>${seg('cxhl', [['on', 'Underline'], ['off', 'Plain']])}
+  </div>`, { kind: 'format' }, 'wide');
+}
+function scopeMenu(rect) {
+  openPop(rect, `<div class="list" style="padding-top:4px"><button class="item" data-scope="all">Full manuscript${!state.scope ? '<span class="k">✓</span>' : ''}</button><div class="sep"></div>
+    ${state.acts.map((a, ai) => `<button class="item" data-scope="act:${a.id}">Act ${ai + 1}: ${esc(a.title)}${state.scope?.act === a.id ? '<span class="k">✓</span>' : ''}</button>`).join('')}<div class="sep"></div>
+    ${allChapters().map(c => `<button class="item" data-scope="ch:${c.id}"><span class="dim-t" style="width:18px;text-align:right">${chapterNo(c.id)}</span>${esc(c.title)}${state.scope?.ch === c.id ? '<span class="k">✓</span>' : ''}</button>`).join('')}</div>`, { kind: 'scope' }, 'wide');
+}
+
+// ---------- AI generation (simulated stream) ----------
+const GENERIC = [
+  'The meeting ended the way most of them did, with a list of actions and nobody quite sure who owned them. What changed was the next morning, when one of the engineers opened the support queue before opening the backlog.',
+  'It is a small habit, and it is easy to dismiss. But the engineers who form it start to argue about different things. They stop asking how long something will take and start asking how we would know it worked.',
+  'That shift is the subject of the rest of this chapter.',
+];
+const streams = new Map();
+function stopAllStreams() { streams.forEach(t => clearInterval(t)); streams.clear(); allScenes().forEach(s => s.blocks.forEach(b => { if (b.draft?.status === 'streaming') b.draft.status = 'pending'; })); }
+function generate(b) {
+  if (!b.body.trim() && !b.title.trim()) { toast('Describe the beat first, then generate'); return focusEnd(`[data-block="${b.id}"] [data-part="beatbody"]`); }
+  clearInterval(streams.get(b.id));
+  const attempt = (b.draft?.attempt || 0) + 1;
+  const src = b.title.startsWith('Outcome metrics') && attempt === 1 ? DRAFT_OUTCOMES : attempt % 2 ? GENERIC : [...GENERIC].reverse();
+  const words = src.join('\n\n').split(/(?<=\s)/);
+  const full = words.slice(0, Math.max(30, Math.round(b.target * 1.3))).join('').trim();
+  b.draft = { status: 'streaming', text: '', attempt, model: b.model, template: b.template };
+  renderBlock(b.id);
+  const parts = full.split(/(?<=\s)/); let i = 0;
+  streams.set(b.id, setInterval(() => {
+    i = Math.min(parts.length, i + 3);
+    b.draft.text = parts.slice(0, i).join('');
+    if (i >= parts.length) { clearInterval(streams.get(b.id)); streams.delete(b.id); b.draft.status = 'pending'; renderBlock(b.id); return; }
+    const el = document.querySelector(`[data-block="${b.id}"]`); if (!el) return;
+    el.querySelector('[data-draft-body]').innerHTML = proseHTML(b.draft.text) + '<span class="caret"></span>';
+    el.querySelector('[data-draft-meta]').textContent = `${model(b.model).name} · ${countWords(b.draft.text)} words`;
+  }, 40));
+}
+
+// ---------- Clicks ----------
+document.addEventListener('click', e => {
+  const t = e.target;
+  if (popCtx && !pop.contains(t) && !t.closest('[data-menu],[data-pick],[data-cmd="pick-model"],[data-cmd="format"],[data-cmd="scope"],[data-cmd="ch-jump"],[data-cmd="len-custom"]')) closePop();
+  const pe = t.closest('[data-pick-e]'); if (pe) return pickCodex(pe.dataset.pickE);
+  const sl = t.closest('[data-slash]'); if (sl) return runSlash(sl.dataset.slash);
+  const pch = t.closest('[data-pick-ch]');
+  if (pch) {
+    const c = locate('chapter', pch.dataset.pickCh).c;
+    if (popCtx.kind === 'chref') return insertInline(popCtx, chref(c.slug));
+    closePop(); if (state.scope && !chaptersInScope().some(x => x.c === c)) { state.scope = null; render(); }
+    return goTo(document.querySelector(`[data-ch="${c.id}"]`));
+  }
+  const pr = t.closest('[data-pick-r]');
+  if (pr) {
+    if (pr.dataset.pickR === 'new') { const ctx = popCtx; closePop(); flush(); return location.assign(`references.html${bookQ}&return=${sceneNo(ctx.sceneId)}&sel=${encodeSel(ctx)}#new`); }
+    const ctx = popCtx; insertInline(ctx, refMark(pr.dataset.pickR)); computeRefOrder(); return toast('Reference marker added · numbers update on save');
+  }
+  const pl = t.closest('[data-pick-l]');
+  if (pl) { const s = locate('scene', popCtx.sceneId).s, l = pl.dataset.pickL; closePop(); s.labels = s.labels.includes(l) ? s.labels.filter(x => x !== l) : [...s.labels, l]; return commit(); }
+  const tp = t.closest('[data-tpl]'); if (tp) return openModelPicker(popCtx.rect, popCtx.blockId, tp.dataset.tpl);
+  const md = t.closest('[data-model]');
+  if (md) { const b = locate('block', popCtx.blockId).b; b.template = popCtx.tpl; b.model = md.dataset.model; closePop(); markDirty(); return renderBlock(b.id); }
+  const fm = t.closest('[data-fmt]');
+  if (fm) {
+    const k = fm.dataset.fmt, v = fm.dataset.v;
+    if (k === 'gutter') state.gutter = v === 'true'; else if (k === 'beats') state.beats = v === 'true'; else doc.dataset[k] = v;
+    renderDoc(); return formatMenu($('[data-cmd="format"]').getBoundingClientRect());
+  }
+  const scp = t.closest('[data-scope]');
+  if (scp) { const [k, v] = scp.dataset.scope.split(':'); state.scope = k === 'all' ? null : { [k]: v }; closePop(); render(); doc.scrollTop = 0; return; }
+  const mi = t.closest('[data-mi]'); if (mi) return menuAction(mi.dataset.mi);
+  const m = t.closest('[data-menu]'); if (m) return openMenu(m.getBoundingClientRect(), m.dataset.menu, m);
+  const pk = t.closest('[data-pick]');
+  if (pk) {
+    const kind = pk.dataset.pick, rect = pk.getBoundingClientRect(), sceneId = pk.closest('[data-scene]')?.dataset.scene, blockId = pk.closest('[data-block]')?.dataset.block;
+    return kind === 'label' ? openLabelPicker(rect, sceneId) : openCodexPicker(rect, { kind, sceneId, blockId });
+  }
+  const len = t.closest('[data-len]');
+  if (len) { const b = locate('block', len.closest('[data-block]').dataset.block).b; b.target = +len.dataset.len; markDirty(); return renderBlock(b.id); }
+  const en = t.closest('[data-entry]');
+  if (en) return setHighlight(state.highlight === en.dataset.entry ? null : en.dataset.entry);
+  // Inline marks open a card; Codex alias matches need Ctrl/Cmd so plain clicks keep placing the caret
+  const mk = t.closest('.mention, .chref, .refm, .auto, .g-links .cx');
+  if (mk && !t.closest('[data-cmd]') && (!mk.classList.contains('auto') || e.ctrlKey || e.metaKey)) {
+    const r = mk.getBoundingClientRect();
+    if (mk.dataset.e && (e.ctrlKey || e.metaKey)) { e.preventDefault(); closePop(); return openEntry(mk.dataset.e); }
+    if (mk.dataset.e) return entryCard(r, mk.dataset.e, mk.closest('[data-scene]')?.dataset.scene);
+    if (mk.dataset.ch) return chapterCard(r, mk.dataset.ch);
+    if (mk.dataset.r) return refCard(r, mk.dataset.r);
+  }
+  const rs = t.closest('[data-role-set]'); if (rs) return setRole(rs.dataset.roleSet);
+  if (t.closest('#roChip')) return toast(esc(ROLE_CHIP[ROLE].why()));
+  const c = t.closest('[data-cmd],[data-theme-set],[data-dens-set]');
+  if (!c) return;
+  const html = document.documentElement;
+  if (c.dataset.themeSet) { c.dataset.themeSet === 'system' ? delete html.dataset.theme : html.dataset.theme = c.dataset.themeSet; return renderChrome(); }
+  if (c.dataset.densSet) { c.dataset.densSet === 'compact' ? delete html.dataset.density : html.dataset.density = c.dataset.densSet; renderChrome(); return renderMap(); }
+  const cmd = c.dataset.cmd, rect = c.getBoundingClientRect();
+  const bid = c.closest('[data-block]')?.dataset.block, B_ = bid && locate('block', bid)?.b;
+  const cardCtx = popCtx;
+  switch (cmd) {
+    case 'generate': return generate(B_);
+    case 'retry': snapshot(); return generate(B_);
+    case 'stop': clearInterval(streams.get(bid)); streams.delete(bid); B_.draft.status = 'pending'; return renderBlock(bid);
+    case 'apply': { snapshot(); const had = !!B_.prose; B_.prose = B_.draft.text; B_.draft = null; return commit(`Applied ${countWords(B_.prose)} words${had ? ' · previous text kept in history' : ''}`, true); }
+    case 'discard': snapshot(); B_.draft = null; return commit('Draft discarded', true);
+    case 'pick-model': return openModelPicker(rect, bid);
+    case 'hide-beat': B_.hidden = true; markDirty(); return renderBlock(bid);
+    case 'show-beat': B_.hidden = false; if (!state.beats) { state.beats = true; renderDoc(); } else renderBlock(bid); markDirty(); return;
+    case 'clear-beat': snapshot(); B_.body = ''; B_.title = ''; B_.context = []; return commit('Beat cleared', true);
+    case 'uncontext': B_.context = B_.context.filter(x => x !== c.dataset.e); markDirty(); return renderBlock(bid);
+    case 'len-custom': return openPop(rect, `<div class="numin"><input type="number" min="50" max="5000" step="50" value="${B_.target}" aria-label="Target words"><button class="btn primary" data-cmd="len-set">Set</button></div>`, { kind: 'len', blockId: bid });
+    case 'len-set': { const b = locate('block', cardCtx.blockId).b, v = +pop.querySelector('input').value; closePop(); if (v > 0) { b.target = Math.round(v); markDirty(); renderBlock(b.id); } return; }
+    case 'unlink': { const s = locate('scene', c.closest('[data-scene]').dataset.scene).s; s.codex = s.codex.filter(x => x !== c.dataset.e); return commit(); }
+    case 'new-scene': {
+      const after = c.dataset.after && locate('scene', c.dataset.after), C = after ? after.c : locate('chapter', c.dataset.chId).c;
+      const ns = sc(''); C.scenes.splice(after ? after.si + 1 : C.scenes.length, 0, ns); commit(after && after.si < C.scenes.length - 2 ? 'Scene added · scenes renumbered' : '');
+      return focusEnd(`[data-scene="${ns.id}"] [data-part="prose"]`);
+    }
+    case 'copyref': return copyRef(locate('chapter', c.closest('[data-ch]').dataset.ch).c);
+    case 'goto-ch': closePop(); if (state.scope) { state.scope = null; render(); } return goTo(document.querySelector(`[data-ch="${c.dataset.chId}"]`));
+    case 'hl-entry': closePop(); return setHighlight(c.dataset.e);
+    case 'link-entry': { closePop(); const s = locate('scene', cardCtx.sceneId).s; if (!s.codex.includes(c.dataset.e)) { s.codex.push(c.dataset.e); commit(`Linked <b>${esc(entry(c.dataset.e).name)}</b> to the scene`); } return; }
+    case 'open-entry': closePop(); return openEntry(c.dataset.e);
+    case 'new-entry': return openEntry(null);
+    case 'close-entry': return closeEntry();
+    case 'entry-create': return createEntry();
+    case 'entry-del': return deleteEntry(entryPanel.id);
+    case 'entry-always': { const e = entry(entryPanel.id); e.always = !e.always; c.setAttribute('aria-checked', e.always); markDirty(); return; }
+    case 'alias-del': { const e = entry(entryPanel.id); e.aliases = e.aliases.filter(a => a !== c.dataset.a); return entryChanged(); }
+    case 'goto-scene': if (matchMedia('(max-width: 860px)').matches) closeEntry(); return goToScene(c.dataset.s, c.dataset.b);
+    case 'clear-hl': return setHighlight(null);
+    case 'hl-next': case 'hl-prev': {
+      const hits = [...document.querySelectorAll('.scene.hit')]; if (!hits.length) return;
+      const y = doc.scrollTop + 20, d = cmd === 'hl-next';
+      const el = d ? hits.find(h => h.offsetTop > y) || hits[0] : [...hits].reverse().find(h => h.offsetTop < y - 30) || hits.at(-1);
+      return goTo(el, true);
+    }
+    case 'format': return formatMenu(rect);
+    case 'scope': return scopeMenu(rect);
+    case 'ch-jump': return filterable(rect, 'Go to chapter…', chapterList, { kind: 'jump' }, 'wide');
+    case 'ch-prev': case 'ch-next': {
+      const chs = [...doc.querySelectorAll('.chapter')], y = doc.scrollTop + 30;
+      const el = cmd === 'ch-next' ? chs.find(x => x.offsetTop > y) : [...chs].reverse().find(x => x.offsetTop < y - 40);
+      return goTo(el);
+    }
+    case 'focus-mode': return toggleFocus();
+    case 'undo': if (undoSnap) { state.acts = undoSnap; undoSnap = null; undoExtra?.(); undoExtra = null; $('#toast').classList.remove('show'); commit(); } return;
+  }
+});
+function focusEnd(sel) {
+  const f = document.querySelector(sel); if (!f) return;
+  f.scrollIntoView({ block: 'center', behavior: 'smooth' }); f.focus({ preventScroll: true });
+  const r = document.createRange(); r.selectNodeContents(f.lastElementChild || f); r.collapse(false);
+  getSelection().removeAllRanges(); getSelection().addRange(r);
+}
+function toggleFocus(on = !document.body.classList.contains('focus')) {
+  document.body.classList.toggle('focus', on); renderChrome(); requestAnimationFrame(renderMap);
+  if (on) toast('Focus mode · Esc to leave');
+}
+
+// ---------- Keyboard: "/" commands, "@" mentions, Esc, Ctrl+Enter generate, Alt+arrows move blocks ----------
+document.addEventListener('keydown', e => {
+  if (pop.classList.contains('open')) {
+    if (e.key === 'Escape') { e.preventDefault(); closePop(true); return; }
+    if (e.target.closest('#pop')) {
+      const items = [...pop.querySelectorAll('.list .item:not(:disabled)')], cur = items.findIndex(x => x.classList.contains('on'));
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[cur]?.classList.remove('on'); const n = items[(cur + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]; n?.classList.add('on'); n?.scrollIntoView({ block: 'nearest' }); return; }
+      if (e.key === 'Enter') { e.preventDefault(); (pop.querySelector('.item.on') || pop.querySelector('[data-cmd="len-set"]'))?.click(); return; }
+    }
+  }
+  if (e.key === 'Escape' && entryPanel && !e.target.closest?.('[data-part]')) { e.preventDefault(); closeEntry(); return; }
+  if (e.key === 'Escape' && document.body.classList.contains('focus') && !e.target.closest?.('[data-part]')) { toggleFocus(false); return; }
+  const f = e.target.closest?.('[data-part]');
+  if (f) {
+    const part = f.dataset.part;
+    if (e.key === 'Escape') { e.preventDefault(); f.blur(); return; }
+    if (e.key === 'Enter' && ['chtitle', 'beattitle'].includes(part)) { e.preventDefault(); f.blur(); return; }
+    if (e.key === 'Enter' && part === 'beatbody') { e.preventDefault(); if (e.ctrlKey || e.metaKey) generate(locate('block', f.closest('[data-block]').dataset.block).b); return; }
+    if (e.key === 'Enter' && (part === 'summary' || part === 'addbody') && !e.shiftKey) { e.preventDefault(); f.blur(); return; }
+    if (e.key === '@' && part !== 'chtitle' && part !== 'beattitle') { e.preventDefault(); const ctx = caretCtx(f); return openCodexPicker(ctx.rect, { ...ctx, kind: 'mention' }); }
+    if (e.key === '/' && (part === 'prose' || part === 'beatprose')) {
+      const r = getSelection().getRangeAt(0), before = r.startContainer.nodeType === 3 ? r.startContainer.nodeValue.slice(0, r.startOffset) : '';
+      if (before === '' || /\s$/.test(before)) { e.preventDefault(); const ctx = caretCtx(f); return filterable(ctx.rect, 'Type a command…', slashList, { ...ctx, kind: 'slash' }, 'wide'); }
+    }
+  }
+  if (e.key === 'Enter' && e.target.id === 'q') { e.preventDefault(); findNext(e.shiftKey ? -1 : 1); return; }
+  const g = e.target.closest?.('[data-grip]');
+  if (g && e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); moveBlock(g.closest('[data-block]').dataset.block, e.key === 'ArrowUp' ? -1 : 1); }
+});
+
+// ---------- Drag a block by its grip: reorder in its scene, or drop into any scene in any chapter ----------
+let bdrag = null;
+const line = $('#dropline');
+document.addEventListener('pointerdown', e => { const g = e.target.closest('[data-grip]'); if (g) g.closest('[data-block]').draggable = true; });
+document.addEventListener('pointerup', () => document.querySelectorAll('[data-block][draggable="true"]').forEach(el => el.draggable = false));
+function blockDragOver(e) {
+  // Near the top or bottom edge, scroll the manuscript; over the minimap, jump through the book
+  const dr = doc.getBoundingClientRect();
+  if (e.clientY < dr.top + 60) doc.scrollTop -= 20; else if (e.clientY > dr.bottom - 60) doc.scrollTop += 20;
+  if (map.contains(e.target)) { e.preventDefault(); line.style.display = 'none'; bdrag.target = null; return mapJump(e); }
+  document.querySelectorAll('.drop-scene').forEach(x => x.classList.remove('drop-scene'));
+  const scene = e.target.closest?.('.scene');
+  if (!scene) { line.style.display = 'none'; bdrag.target = null; return; }
+  e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+  scene.classList.add('drop-scene');
+  const main = scene.querySelector('.scene-main'), blks = [...main.children].filter(b => !b.classList.contains('dragging')), mr = main.getBoundingClientRect();
+  let i = 0; for (const b of blks) { const r = b.getBoundingClientRect(); if (e.clientY > r.top + r.height / 2) i++; }
+  const y = !blks.length ? mr.top : i < blks.length ? blks[i].getBoundingClientRect().top - 6 : blks.at(-1).getBoundingClientRect().bottom + 6;
+  Object.assign(line.style, { display: 'block', left: mr.left + 'px', top: y + 'px', width: mr.width + 'px' });
+  const loc = locate('scene', scene.dataset.scene);
+  line.firstChild.textContent = `Chapter ${chapterNo(loc.c.id)} · Scene ${loc.si + 1}`;
+  // Index among all blocks, counting the dragged one, so placeBlock can adjust it
+  const all = [...main.children], index = i < blks.length ? all.indexOf(blks[i]) : all.length;
+  bdrag.target = { scene: loc.s.id, index };
+}
+
+// ---------- Drag a Codex entry: into the text = mention, onto a scene gutter = link ----------
+let drag = null;
+document.addEventListener('dragstart', e => {
+  if (e.target.matches?.('[data-block][draggable="true"]')) {
+    bdrag = { id: e.target.dataset.block, el: e.target };
+    e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'block');
+    closePop(); requestAnimationFrame(() => e.target.classList.add('dragging'));
+    return;
+  }
+  const en = e.target.closest?.('[data-entry]'); if (!en) return;
+  drag = en.dataset.entry; e.dataTransfer.effectAllowed = 'copyLink'; e.dataTransfer.setData('text/plain', entry(drag).name);
+});
+document.addEventListener('dragover', e => {
+  if (bdrag) return blockDragOver(e);
+  if (!drag) return;
+  document.querySelectorAll('.drop-target').forEach(x => x.classList.remove('drop-target'));
+  const g = e.target.closest?.('.gutter'), ed = e.target.closest?.('.ed');
+  if (g || ed) e.preventDefault();
+  if (g) g.closest('.scene')?.classList.add('drop-target');
+});
+document.addEventListener('drop', e => {
+  if (bdrag) { e.preventDefault(); const t = bdrag.target; if (t) placeBlock(bdrag.id, t.scene, t.index); return; }
+  if (!drag) return;
+  const g = e.target.closest?.('.gutter'), ed = e.target.closest?.('.ed[data-part]');
+  e.preventDefault();
+  if (g && g.closest('.scene')) { const s = locate('scene', g.closest('.scene').dataset.scene).s; if (!s.codex.includes(drag)) { s.codex.push(drag); commit(`Linked <b>${esc(entry(drag).name)}</b> to the scene`); } }
+  else if (ed) {
+    const r = document.caretRangeFromPoint?.(e.clientX, e.clientY); if (!r || !ed.contains(r.startContainer)) return;
+    ed.focus(); insertInline({ range: r, ed }, mention(drag));
+  }
+});
+document.addEventListener('dragend', () => {
+  document.querySelectorAll('.drop-target, .drop-scene, .dragging').forEach(x => x.classList.remove('drop-target', 'drop-scene', 'dragging'));
+  document.querySelectorAll('[data-block][draggable="true"]').forEach(el => el.draggable = false);
+  line.style.display = 'none'; drag = null; bdrag = null;
+});
+
+// ---------- Knowledge base entry panel (G9): same spec as Plan's ----------
+let entryPanel = null; // { id } to edit an entry, { create: true, cat } for New Entry
+const catSelect = cur => `<select id="kbCat" data-kbf="cat">${Object.entries(CATS).map(([k, n]) => `<option value="${k}"${k === cur ? ' selected' : ''}>${n}</option>`).join('')}</select>`;
+function renderPanel() {
+  const el = $('#kbp');
+  if (!entryPanel) { el.innerHTML = ''; return; }
+  const close = `<button class="ib" data-cmd="close-entry" aria-label="Close entry" title="Close (Esc)">${I.x}</button>`;
+  if (entryPanel.create) {
+    el.innerHTML = `<div class="p-h"><div class="p-top"><span class="dot" style="--cat:var(--category-${entryPanel.cat})"></span><h2 contenteditable="true" data-kbf="name" data-placeholder="Entry name" spellcheck="false"></h2>${close}</div><div class="by">New Knowledge base entry</div></div>
+      <section class="sec"><div class="fields"><label for="kbCat">Category</label><div class="fld">${catSelect(entryPanel.cat)}</div></div>
+        <div class="p-acts"><button class="btn ghost" data-cmd="close-entry">Cancel</button><button class="btn primary" data-cmd="entry-create">Create</button></div></section>`;
+    return;
+  }
+  const e = entry(entryPanel.id);
+  if (!e) { entryPanel = null; el.innerHTML = ''; return; }
+  const scenes = allScenes().filter(s => sceneRefs(s).has(e.id)).map(s => locate('scene', s.id));
+  const adds = scenes.flatMap(l => l.s.blocks.filter(b => b.kind === 'addition' && b.entry === e.id).map(b => ({ l, b })));
+  const where = l => `Chapter ${chapterNo(l.c.id)} · Scene ${l.si + 1}`;
+  el.innerHTML = `<div class="p-h"><div class="p-top"><span class="dot" style="--cat:var(--category-${e.cat})"></span><h2 contenteditable="true" data-kbf="name" data-placeholder="Entry name" spellcheck="false">${esc(e.name)}</h2>${close}</div>
+      <div class="by">${CATS[e.cat]} · used in ${scenes.length} ${scenes.length === 1 ? 'scene' : 'scenes'}</div></div>
+    <section class="sec"><div class="fields">
+      <label for="kbCat">Category</label><div class="fld">${catSelect(e.cat)}</div>
+      <label class="top" for="kbAlias">Aliases</label><div class="fld" style="--cat:var(--category-${e.cat})">${e.aliases.map(a => `<span class="alias">${esc(a)}<button data-cmd="alias-del" data-a="${esc(a)}" aria-label="Remove alias ${esc(a)}">${I.x}</button></span>`).join('')}<input id="kbAlias" data-kbf="alias" placeholder="Add alias…" title="Enter adds the alias"></div>
+      <label class="top" for="kbSum">Summary</label><div class="fld"><textarea id="kbSum" data-kbf="summary" rows="3" placeholder="What the AI should know about this entry…">${esc(e.summary)}</textarea></div>
+      <label>Always in context</label><div class="fld"><button class="tgl" role="switch" data-cmd="entry-always" aria-checked="${!!e.always}" aria-label="Always in context"></button><span class="hint">Sent with every generation</span></div>
+    </div></section>
+    <section class="sec"><div class="sec-h"><h3>Used in</h3><span class="k">${scenes.length}</span></div>
+      ${scenes.length ? `<div class="uses">${scenes.map(l => `<button class="use-row" data-cmd="goto-scene" data-s="${l.s.id}"><span class="overline">${where(l)}</span><span class="snip">${plain(l.s.summary).trim() ? esc(plain(l.s.summary)) : '<i>No summary yet</i>'}</span></button>`).join('')}</div>`
+        : '<p class="p-empty">Not used yet. Mention it with @, or drag it onto a scene.</p>'}</section>
+    <section class="sec"><div class="sec-h"><h3>Additions</h3><span class="k">${adds.length}</span></div>
+      ${adds.length ? `<div class="adds">${adds.map(({ l, b }) => `<div class="add-x" style="--cat:var(--category-${e.cat})"><button class="use-row" data-cmd="goto-scene" data-s="${l.s.id}" data-b="${b.id}"><span class="overline">${where(l)}</span></button><p>${b.body ? inline(b.body, false) : '<i class="dim-t">Empty addition</i>'}</p></div>`).join('')}</div>`
+        : '<p class="p-empty">No additions yet. In the manuscript, type / then Codex addition.</p>'}</section>
+    <div class="p-foot"><button class="btn danger-t" data-cmd="entry-del">Delete entry</button></div>`;
+}
+function openEntry(eid) {
+  entryPanel = eid ? (entry(eid) ? { id: eid } : null) : { create: true, cat: 'blog' };
+  renderPanel(); renderSide(); renderChrome(); requestAnimationFrame(renderMap);
+  $('#kbp').scrollTop = 0;
+  if (entryPanel?.create) $('#kbp [data-kbf="name"]').focus();
+}
+function closeEntry() { entryPanel = null; buildAuto(); render(); requestAnimationFrame(renderMap); }
+// Name, category or aliases changed: alias matches, counts and colours change everywhere
+function entryChanged(refocus) {
+  buildAuto(); markDirty(); renderDoc(); renderSide(); renderChrome(); renderPanel();
+  if (refocus) $(`#kbp ${refocus}`)?.focus();
+}
+function createEntry() {
+  const name = $('#kbp [data-kbf="name"]').textContent.trim();
+  if (!name) { toast('Name the entry first'); return $('#kbp [data-kbf="name"]').focus(); }
+  let eid = slugify(name); while (entry(eid)) eid += '-2';
+  ENTRIES.push({ id: eid, cat: entryPanel.cat, name, aliases: [], summary: '', always: false });
+  entryPanel = { id: eid };
+  entryChanged('[data-kbf="alias"]');
+  toast(`Created <b>${esc(name)}</b> in ${CATS[entry(eid).cat]}`);
+}
+// Delete straight away, with Undo in the toast. Mentions become plain text; links, context and additions go.
+let undoExtra = null;
+function deleteEntry(eid) {
+  const e = entry(eid), before = ENTRIES.map(x => ({ ...x, aliases: [...x.aliases] })), wasHl = state.highlight === eid;
+  snapshot();
+  const un = t => t && t.replaceAll(`[[e:${eid}]]`, e.name);
+  allScenes().forEach(s => {
+    s.summary = un(s.summary); s.codex = s.codex.filter(x => x !== eid);
+    s.blocks = s.blocks.filter(b => b.entry !== eid);
+    s.blocks.forEach(b => { ['text', 'prose', 'body'].forEach(k => { if (b[k]) b[k] = un(b[k]); }); if (b.context) b.context = b.context.filter(x => x !== eid); if (b.draft) b.draft.text = un(b.draft.text); });
+    if (!s.blocks.length) s.blocks.push(P(''));
+  });
+  ENTRIES.splice(ENTRIES.indexOf(e), 1); buildAuto();
+  undoExtra = () => { ENTRIES.splice(0, ENTRIES.length, ...before); buildAuto(); entryPanel = { id: eid }; if (wasHl) { state.highlight = eid; kv('sessionStorage', HL_KEY, eid); } };
+  entryPanel = null;
+  if (wasHl) { state.highlight = null; kv('sessionStorage', HL_KEY, null); }
+  commit(`Deleted <b>${esc(e.name)}</b> · mentions are now plain text`, true);
+}
+// "Used in" and additions jump to the scene (or the block) in the manuscript
+function goToScene(sid, bid) {
+  const loc = locate('scene', sid); if (!loc) return;
+  if (state.scope && !chaptersInScope().some(x => x.c === loc.c)) { state.scope = null; render(); }
+  const el = document.querySelector(`[data-scene="${sid}"]`), blk = bid && document.querySelector(`[data-block="${bid}"]`);
+  if (!blk) return goTo(el, true);
+  blk.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  blk.classList.remove('moved'); void blk.offsetWidth; blk.classList.add('moved');
+}
+const kbp = $('#kbp');
+kbp.addEventListener('input', e => {
+  const k = e.target.dataset.kbf, en = entry(entryPanel?.id);
+  if (k === 'name' && en && e.target.textContent.trim()) { en.name = e.target.textContent.trim(); markDirty(); renderSide(); }
+  if (k === 'summary' && en) { en.summary = e.target.value; markDirty(); }
+});
+kbp.addEventListener('change', e => {
+  if (e.target.dataset.kbf !== 'cat') return;
+  if (entryPanel.create) { entryPanel.cat = e.target.value; kbp.querySelector('.p-top .dot').style.setProperty('--cat', `var(--category-${e.target.value})`); return; }
+  entry(entryPanel.id).cat = e.target.value; entryChanged('[data-kbf="cat"]');
+});
+kbp.addEventListener('keydown', e => {
+  const k = e.target.dataset.kbf;
+  if (k === 'name' && e.key === 'Enter') { e.preventDefault(); return entryPanel.create ? createEntry() : e.target.blur(); }
+  if (k === 'alias' && e.key === 'Enter') {
+    e.preventDefault();
+    const v = e.target.value.trim(), en = entry(entryPanel.id);
+    if (v && !en.aliases.some(a => a.toLowerCase() === v.toLowerCase())) { en.aliases.push(v); entryChanged('[data-kbf="alias"]'); }
+    else e.target.value = '';
+  }
+});
+// Leaving the name re-renders the manuscript, so mentions and alias matches pick up the new name
+kbp.addEventListener('focusout', e => {
+  if (e.target.dataset.kbf !== 'name' || entryPanel?.create) return;
+  const en = entry(entryPanel?.id); if (!en) return;
+  e.target.textContent = en.name; buildAuto(); flush(); renderDoc(); renderChrome();
+});
+
+// ---------- Deep links (G5) and the return from References' Add source (G6) ----------
+// The pending selection for "New source…": block index in the scene, then paragraph and start/end offsets in that
+// paragraph's stored text, as base64url JSON. References passes it back untouched.
+function encodeSel(ctx) {
+  const loc = locate('block', ctx.blockId), ed = ctx.ed, r = ctx.range, end = r.cloneRange(); end.collapse(false);
+  const nodes = [...ed.childNodes], pi = paraIndex(ed, end), para = nodes[pi];
+  const kept = nodes.slice(0, pi).filter(n => { const p = serPara(n); return p.trim() && p !== '> '; }).length;
+  const off = (node, o) => { const x = document.createRange(); try { x.setStart(para, 0); x.setEnd(node, o); } catch { return 0; } const d = document.createElement('div'); d.append(x.cloneContents()); return serInline(d).replace(/^\s+/, '').length; };
+  const e = para ? off(r.endContainer, r.endOffset) : 0, s = para?.contains(r.startContainer) ? off(r.startContainer, r.startOffset) : 0;
+  return btoa(JSON.stringify({ b: loc.bi, p: kept, s, e })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function decodeSel(t) { try { return JSON.parse(atob(t.replace(/-/g, '+').replace(/_/g, '/'))); } catch { return null; } }
+// Back from References with a new source: put its marker at the end of the saved selection (warn: needs check)
+function citeReturn(loc, h) {
+  const rid = h.get('cite'), sel = decodeSel(h.get('sel') || '');
+  let r = ref(rid);
+  if (!r) REFS.push(r = { id: rid, title: h.get('title') || rid, kind: 'Source', st: 'warn', note: 'New source · needs check' });
+  else if (r.st === 'ok') Object.assign(r, { st: 'warn', note: '1 new use since cleared' });
+  snapshot();
+  const textOf = b => b.kind === 'prose' ? 'text' : b.kind === 'beat' ? 'prose' : null;
+  let b = sel && loc.s.blocks[sel.b];
+  if (!b || !textOf(b)) b = [...loc.s.blocks].reverse().find(x => x.kind === 'prose' || x.prose) || (loc.s.blocks.push(P('')), loc.s.blocks.at(-1));
+  const key = textOf(b), paras = b[key] ? b[key].split(/\n{2,}/) : [''];
+  const exact = sel && b === loc.s.blocks[sel.b] && sel.p < paras.length, pi = exact ? sel.p : paras.length - 1;
+  const pre = paras[pi].startsWith('> ') ? 2 : 0, at = Math.min(paras[pi].length, exact ? pre + sel.e : Infinity);
+  const tok = `[[r:${rid}]]`, nth = (paras.slice(0, pi).join('\n') + paras[pi].slice(0, at)).split(tok).length - 1;
+  paras[pi] = paras[pi].slice(0, at) + tok + paras[pi].slice(at);
+  b[key] = paras.join('\n\n');
+  const was = new Map(refOrder);
+  if (state.scope && !chaptersInScope().some(x => x.c === loc.c)) state.scope = null;
+  markDirty(); flush(); render();
+  const moved = [...was].some(([k, n]) => refOrder.get(k) !== n);
+  history.replaceState(null, '', location.pathname + location.search + `#scene=${sceneNo(loc.s.id)}`); // a reload doesn't cite twice
+  const m = document.querySelectorAll(`[data-block="${b.id}"] .refm[data-r="${CSS.escape(rid)}"]`)[nth];
+  if (m) { m.scrollIntoView({ block: 'center' }); m.classList.add('flash'); }
+  toast(`Cited <b>${esc(r.title)}</b> · marker ${refOrder.get(rid)}${moved ? ' · later markers renumbered' : ''}`, true);
+}
+// #scene=5.2 · #chapter=5 · #scene=4.1&ref=velocity · #kb=<entry> · #entry=<entry> · #scene=7.1&sel=…&cite=…&title=…
+function fromHash() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.has('kb')) setHighlight(h.get('kb'));
+  const sloc = h.get('scene') && sceneByNo(h.get('scene')), c = h.get('chapter') && allChapters()[+h.get('chapter') - 1];
+  const target = sloc ? sloc.c : c;
+  if (target && state.scope && !chaptersInScope().some(x => x.c === target)) { state.scope = null; render(); }
+  if (sloc && h.get('cite')) citeReturn(sloc, h);
+  else if (sloc) {
+    const el = document.querySelector(`[data-scene="${sloc.s.id}"]`), rid = h.get('ref');
+    doc.scrollTop = el.offsetTop - 16; el.classList.add('flash');
+    const m = rid && ref(rid) && (el.querySelector(`.refm[data-r="${CSS.escape(rid)}"]`) || document.querySelector(`#page .refm[data-r="${CSS.escape(rid)}"]`));
+    if (m) { m.scrollIntoView({ block: 'center' }); refCard(m.getBoundingClientRect(), rid); }
+  } else if (c) doc.scrollTop = document.querySelector(`[data-ch="${c.id}"]`).offsetTop - 16;
+  if (h.get('entry')) openEntry(h.get('entry'));
+  onScroll();
+  return !!target;
+}
+addEventListener('hashchange', fromHash);
+
+// ---------- Misc wiring ----------
+$('#q').addEventListener('input', e => { state.q = e.target.value.trim(); applyFind(); });
+$('#sideToggle').addEventListener('click', () => { state.side = !state.side; renderChrome(); requestAnimationFrame(renderMap); });
+if (matchMedia('(max-width: 720px)').matches) state.side = false;
+// The highlight carries from Plan and References (G7): #kb= wins, else this tab's last highlight for the book
+const hl0 = new URLSearchParams(location.hash.slice(1)).get('kb') || kv('sessionStorage', HL_KEY);
+if (entry(hl0)) state.highlight = hl0;
+kv('sessionStorage', HL_KEY, state.highlight);
+render(); applyRole();
+// A deep link wins; otherwise resume where the author left off: the scene with the pending AI draft
+requestAnimationFrame(() => {
+  if (fromHash()) return;
+  const el = document.querySelector('.draft')?.closest('.chapter'); if (el) doc.scrollTop = el.offsetTop - 16; onScroll();
+});
+</script>
+</body>
+</html>

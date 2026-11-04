@@ -1,0 +1,24 @@
+[
+  {
+    "id": "0197a3c0-0000-7000-8000-000000000061",
+    "bookId": "0197a3c0-0000-7000-8000-000000000071",
+    "kind": "print",
+    "state": "running",
+    "percent": 40,
+    "message": "Typesetting (pass 2)",
+    "resultUrl": null,
+    "createdAt": "2026-10-19T08:00:00+00:00",
+    "updatedAt": "2026-10-19T08:00:05+00:00"
+  },
+  {
+    "id": "0197a3c0-0000-7000-8000-000000000062",
+    "bookId": "0197a3c0-0000-7000-8000-000000000071",
+    "kind": "source",
+    "state": "done",
+    "percent": 100,
+    "message": null,
+    "resultUrl": "/api/assets/0197a3c0-0000-7000-8000-000000000081",
+    "createdAt": "2026-10-19T08:00:00+00:00",
+    "updatedAt": "2026-10-19T08:00:09+00:00"
+  }
+]

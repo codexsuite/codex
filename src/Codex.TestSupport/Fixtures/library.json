@@ -1,0 +1,98 @@
+{
+  "series": [
+    {
+      "id": "0199a000-0000-7000-8000-000000000001",
+      "name": "Product Engineering",
+      "description": "Field notes on shipping software.",
+      "bookCount": 2,
+      "publishedCount": 1,
+      "wordCount": 98300,
+      "lastEditedAt": "2026-10-19T08:30:00+00:00",
+      "lastEditedLabel": "2h ago",
+      "books": [
+        {
+          "id": "0199a000-0000-7000-8000-000000000011",
+          "title": "The Velocity Trap",
+          "subtitle": "Why fast teams stall",
+          "authorName": "Joel Dickson",
+          "seriesId": "0199a000-0000-7000-8000-000000000001",
+          "seriesName": "Product Engineering",
+          "seriesNumber": 1,
+          "status": "published",
+          "coverPalette": "cover-3",
+          "coverInitials": "VT",
+          "wordCount": 72300,
+          "targetWords": 80000,
+          "progressPct": 90.4,
+          "lastEditedAt": "2026-10-12T10:00:00+00:00",
+          "lastEditedLabel": "1w ago",
+          "lastScreen": null,
+          "archived": false,
+          "coverUrl": null,
+          "editedSincePublication": false,
+          "role": "owner",
+          "owner": {
+            "id": "0199c0de-0000-7000-8000-000100000001",
+            "displayName": "Joel Dickson"
+          }
+        },
+        {
+          "id": "0199a000-0000-7000-8000-000000000012",
+          "title": "Hymns for Machines",
+          "subtitle": null,
+          "authorName": "Joel Dickson",
+          "seriesId": "0199a000-0000-7000-8000-000000000001",
+          "seriesName": "Product Engineering",
+          "seriesNumber": 2,
+          "status": "writing",
+          "coverPalette": "cover-5",
+          "coverInitials": "HM",
+          "wordCount": 26000,
+          "targetWords": null,
+          "progressPct": null,
+          "lastEditedAt": "2026-10-19T08:30:00+00:00",
+          "lastEditedLabel": "2h ago",
+          "lastScreen": "write",
+          "archived": false,
+          "coverUrl": null,
+          "editedSincePublication": false,
+          "role": "owner",
+          "owner": {
+            "id": "0199c0de-0000-7000-8000-000100000001",
+            "displayName": "Joel Dickson"
+          }
+        }
+      ],
+      "partlyShared": false,
+      "archived": false
+    }
+  ],
+  "standalone": [
+    {
+      "id": "0199a000-0000-7000-8000-000000000021",
+      "title": "Northbound",
+      "subtitle": null,
+      "authorName": "Joel Dickson",
+      "seriesId": null,
+      "seriesName": null,
+      "seriesNumber": null,
+      "status": "planning",
+      "coverPalette": "cover-1",
+      "coverInitials": "N",
+      "wordCount": 0,
+      "targetWords": 60000,
+      "progressPct": 0,
+      "lastEditedAt": "2026-10-18T09:00:00+00:00",
+      "lastEditedLabel": "yesterday",
+      "lastScreen": null,
+      "archived": false,
+      "coverUrl": null,
+      "editedSincePublication": false,
+      "role": "write",
+      "owner": {
+        "id": "0199c0de-0000-7000-8000-000100000002",
+        "displayName": "Ana Kowalczyk"
+      }
+    }
+  ]
+}

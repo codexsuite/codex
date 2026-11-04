@@ -1,0 +1,63 @@
+{
+  "categories": [
+    {
+      "id": "0197a3c0-0000-7000-8000-000000000001",
+      "name": "People",
+      "tag": "person",
+      "colour": "category-amber",
+      "position": "a0",
+      "fieldDefs": [
+        { "key": "born", "label": "Born" },
+        { "key": "role", "label": "Role" }
+      ],
+      "fromSeries": false,
+      "seriesName": null
+    },
+    {
+      "id": "0197a3c0-0000-7000-8000-000000000002",
+      "name": "Places",
+      "tag": null,
+      "colour": null,
+      "position": "a1",
+      "fieldDefs": [],
+      "fromSeries": false,
+      "seriesName": null
+    },
+    {
+      "id": "0197a3c0-0000-7000-8000-000000000003",
+      "name": "Factions",
+      "tag": null,
+      "colour": null,
+      "position": "a2",
+      "fieldDefs": [],
+      "fromSeries": true,
+      "seriesName": "The Tide Cycle"
+    }
+  ],
+  "entries": [
+    {
+      "id": "0197a3c0-0000-7000-8000-000000000011",
+      "categoryId": "0197a3c0-0000-7000-8000-000000000001",
+      "name": "Captain Ward",
+      "aliases": ["The Captain", "Ward"],
+      "sceneCount": 3,
+      "useCount": 7,
+      "fromSeries": true,
+      "seriesName": "The Tide Cycle",
+      "alwaysInContext": true,
+      "summaryLine": "Keeps the harbour ledgers."
+    },
+    {
+      "id": "0197a3c0-0000-7000-8000-000000000012",
+      "categoryId": "0197a3c0-0000-7000-8000-000000000002",
+      "name": "Harbour",
+      "aliases": [],
+      "sceneCount": 0,
+      "useCount": 0,
+      "fromSeries": false,
+      "seriesName": null,
+      "alwaysInContext": false,
+      "summaryLine": ""
+    }
+  ]
+}

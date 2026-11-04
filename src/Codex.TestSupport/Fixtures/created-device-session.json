@@ -1,0 +1,23 @@
+{
+  "session": {
+    "id": "0199c0de-0000-7000-8000-000100000a01",
+    "name": "JD's iPhone",
+    "prefix": "cdx_dev_AbCd1234",
+    "current": true,
+    "expiresAt": "2026-10-24T09:00:00+00:00",
+    "expiresLabel": "22 Jan",
+    "lastUsedAt": null,
+    "lastUsedLabel": null,
+    "createdAt": "2026-10-24T09:00:00+00:00",
+    "createdLabel": "just now"
+  },
+  "secret": "cdx_dev_AbCd1234EfGh5678IjKl9012MnOp3456QrSt7890UvW",
+  "me": {
+    "id": "0199c0de-0000-7000-8000-000100000001",
+    "email": "jd@codex.local",
+    "displayName": "Joel Dickson",
+    "initials": "JD",
+    "isAdmin": true,
+    "mustChangePassword": false
+  }
+}

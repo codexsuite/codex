@@ -1,0 +1,19 @@
+{
+  "create": { "categoryId": "0199c0de-0000-7000-8000-000a00000002", "name": "Campbell's Law", "allowDuplicate": false },
+  "patch": {
+    "name": "Goodhart's Law",
+    "summary": "When a measure becomes a target.",
+    "body": "Body.",
+    "fields": { "year": "1975" },
+    "customFields": [{ "label": "URL", "value": "https://example.test" }],
+    "aliases": ["Goodhart"],
+    "alwaysInContext": true,
+    "tags": ["law"],
+    "excludeFromAutoContext": false,
+    "categoryId": "0199c0de-0000-7000-8000-000a00000002",
+    "keepOldName": true,
+    "allowDuplicate": false
+  },
+  "move": { "afterId": "0199c0de-0000-7000-8000-000b00000004" },
+  "category": { "name": "Places", "colour": "category-story" }
+}

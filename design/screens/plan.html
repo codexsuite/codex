@@ -1,0 +1,1319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Codex · Plan (reference)</title>
+<!--
+  Reference implementation of the Plan screen (#1) inside the book workspace chrome (#6).
+  Open directly in a browser. Uses ../tokens.css only; no build step.
+  Working: drag-reorder of acts / chapters / scenes (grip handles or Alt+arrows on a grip),
+  click-to-edit with simulated websocket autosave, + Codex / Label pickers, "@" inline Codex
+  mentions, drag a Codex entry onto a scene, sidebar "where used" highlight, Board / Outline views,
+  archive / restore scenes, the Knowledge base entry panel, ?book= for any Library book (stub boards,
+  series categories, ?book=new, ?book=pe-v1&imported=1) and #scene= / #chapter= / #kb= / #entry= deep links.
+  The "Preview" panel bottom-right is a review aid, not part of the design.
+-->
+<link rel="stylesheet" href="../tokens.css">
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--color-bg); color: var(--color-text); font: var(--text-base)/var(--leading) var(--font-sans); -webkit-font-smoothing: antialiased; display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+button, input { font: inherit; color: inherit; }
+svg { flex: none; }
+.spacer { flex: 1; }
+.dim-t { color: var(--color-muted); }
+
+/* Shared controls (same as library.html) */
+.btn { display: inline-flex; align-items: center; gap: 5px; height: var(--control-height); padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: var(--color-surface); font-size: var(--text-sm); font-weight: var(--weight-medium); cursor: pointer; white-space: nowrap; }
+.btn:hover { background: var(--color-surface-2); }
+.btn.primary { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-accent-fg); }
+.btn.primary:hover { filter: brightness(1.07); }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--color-surface-2); }
+.btn svg, .seg svg, .ib svg, .mini svg { width: 13px; height: 13px; }
+.btn:focus-visible, .seg button:focus-visible, .ib:focus-visible, .mini:focus-visible, .grip:focus-visible, .tab:focus-visible, .search:focus-within, .entry:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.search { display: flex; align-items: center; gap: 6px; height: var(--control-height); width: 200px; max-width: 100%; padding: 0 var(--space-2); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); }
+.search svg { width: 13px; height: 13px; color: var(--color-muted); }
+.search input { flex: 1; min-width: 0; border: 0; background: transparent; outline: 0; font-size: var(--text-sm); }
+.search input::placeholder { color: var(--color-muted); }
+.sel { display: inline-flex; align-items: center; gap: 4px; height: var(--control-height); padding: 0 var(--space-2); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); font-size: var(--text-sm); white-space: nowrap; cursor: pointer; }
+.sel em { font-style: normal; color: var(--color-muted); }
+.sel svg { width: 11px; height: 11px; color: var(--color-muted); }
+.seg { display: inline-flex; height: var(--control-height); border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden; background: var(--color-surface); }
+.seg button { display: inline-flex; align-items: center; gap: 4px; padding: 0 9px; border: 0; border-right: 1px solid var(--color-border); background: transparent; color: var(--color-muted); font-size: var(--text-sm); cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--color-accent-soft); color: var(--color-text); font-weight: var(--weight-semibold); }
+.overline { font-size: var(--text-2xs); font-weight: var(--weight-medium); color: var(--color-muted); text-transform: uppercase; letter-spacing: .02em; }
+.ib { display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--color-muted); cursor: pointer; }
+.ib:hover { background: var(--color-surface-2); color: var(--color-text); }
+.cover.thumb { width: 20px; aspect-ratio: 2 / 3; border-radius: 2px; background: linear-gradient(160deg, #05070d, #0d1a2b); box-shadow: 0 0 0 1px rgb(0 0 0 / .15); flex: none; }
+
+/* Book header (#6 shared chrome) */
+.bookbar { height: var(--bar-height); flex: none; display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); background: var(--color-surface); border-bottom: 1px solid var(--color-border); min-width: 0; }
+.book-id { display: flex; align-items: center; gap: 7px; min-width: 0; padding-right: var(--space-2); border-right: 1px solid var(--color-border); height: 100%; }
+.book-id .t { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+.book-id b { font-size: var(--text-sm); font-weight: var(--weight-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+.book-id span { font-size: var(--text-2xs); color: var(--color-muted); white-space: nowrap; }
+.tabs { display: flex; height: 100%; }
+.tab { position: relative; display: inline-flex; align-items: center; padding: 0 10px; border: 0; background: none; color: var(--color-muted); font-size: var(--text-sm); font-weight: var(--weight-medium); cursor: pointer; text-decoration: none; }
+.tab:hover { color: var(--color-text); }
+.tab[aria-selected="true"] { color: var(--color-text); font-weight: var(--weight-semibold); }
+.tab[aria-selected="true"]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--color-accent); }
+.tab .badge { margin-left: 5px; }
+.tabs .vr { width: 1px; height: 16px; margin: 0 4px; align-self: center; background: var(--color-border); }
+.badge { display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: color-mix(in srgb, var(--tone) 16%, transparent); color: var(--tone); font-size: var(--text-2xs); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+.scope { display: flex; align-items: center; gap: var(--space-2); min-width: 0; font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sync { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-xs); color: var(--color-muted); white-space: nowrap; }
+.sync i { width: 6px; height: 6px; border-radius: 50%; background: var(--color-ok); }
+.sync[data-s="editing"] i { background: var(--color-warn); }
+.sync[data-s="saving"] i { background: var(--color-accent); animation: pulse .7s ease-in-out infinite alternate; }
+@keyframes pulse { to { opacity: .25; } }
+.avatar { width: 22px; height: 22px; border-radius: 50%; background: var(--color-accent-soft); color: var(--color-accent); font-size: 10px; font-weight: 700; display: grid; place-items: center; flex: none; }
+
+/* Workspace */
+.ws { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); }
+.ws.no-side { grid-template-columns: minmax(0, 1fr); }
+.ws.no-side .side { display: none; }
+.ws.has-panel { grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--panel-width); }
+.ws.no-side.has-panel { grid-template-columns: minmax(0, 1fr) var(--panel-width); }
+
+/* Sidebar: Codex · Snippets · Chats */
+.side { min-height: 0; display: flex; flex-direction: column; background: var(--color-surface); border-right: 1px solid var(--color-border); }
+.side-h { padding: 10px var(--space-3) 0; font-size: var(--text-md); font-weight: var(--weight-semibold); }
+.side-tools { display: flex; gap: 6px; padding: var(--space-2); }
+.side-tools .search { width: auto; flex: 1; }
+.side-new { padding: 0 var(--space-2) var(--space-2); }
+.side-new .btn { width: 100%; justify-content: center; }
+.side-list { flex: 1; overflow: auto; padding: 0 var(--space-1) var(--space-3); }
+.cat-h { display: flex; align-items: center; gap: 6px; padding: 10px 6px 4px; font-size: var(--text-2xs); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .04em; color: var(--color-muted); }
+.cat-h i, .dot { width: 7px; height: 7px; border-radius: 2px; background: var(--cat); flex: none; }
+.entry { width: 100%; display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 6px; border: 0; border-radius: var(--radius-sm); background: none; font-size: var(--text-sm); text-align: left; cursor: pointer; }
+.entry:hover { background: var(--color-surface-2); }
+.entry[aria-pressed="true"] { background: var(--color-accent-soft); font-weight: var(--weight-medium); }
+.entry .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.entry .u { font-size: var(--text-2xs); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.erow { position: relative; }
+.erow > .ib { position: absolute; right: 3px; top: 3px; }
+@media (hover: hover) {
+  .erow > .ib { opacity: 0; }
+  .erow:hover > .ib, .erow:focus-within > .ib { opacity: 1; }
+  .erow:hover .u, .erow:focus-within .u { visibility: hidden; }
+}
+@media (hover: none) { .erow .entry { padding-right: 28px; } }
+.erow .entry.open { box-shadow: inset 2px 0 0 var(--color-accent); }
+.side-empty { padding: var(--space-5) var(--space-3); text-align: center; color: var(--color-muted); font-size: var(--text-sm); }
+/* Series-level categories (book_scope) sit under their own overline */
+.scope-h { display: flex; align-items: center; gap: 6px; margin: 8px 6px 0; padding-top: 6px; border-top: 1px solid var(--color-border); font-size: var(--text-2xs); color: var(--color-muted); }
+.scope-h:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.scope-h b { font-weight: var(--weight-semibold); color: var(--color-text); }
+.scope-h svg { width: 11px; height: 11px; }
+
+/* Plan toolbar */
+.main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.toolbar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px var(--space-2); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--color-border); }
+.hl-chip { display: inline-flex; align-items: center; gap: 6px; height: var(--control-height); padding: 0 4px 0 9px; border-radius: var(--radius-sm); background: var(--color-accent-soft); font-size: var(--text-sm); white-space: nowrap; }
+.hl-chip .dim-t { font-size: var(--text-xs); }
+
+/* Board */
+.board { flex: 1; min-height: 0; overflow: auto; padding: var(--space-2) var(--space-3) var(--space-5); }
+.act { padding: var(--space-2) 0 var(--space-3); }
+.act + .act { border-top: 1px solid var(--color-border); }
+.act-h { display: flex; align-items: center; gap: 4px; margin-left: -4px; }
+.act-h h2 { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semibold); display: flex; gap: 6px; min-width: 0; }
+.act-h h2 .act-n { color: var(--color-muted); white-space: nowrap; }
+.chev svg { transition: transform .12s; }
+.act.collapsed .chev svg { transform: rotate(-90deg); }
+.act-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 6px 0 10px 44px; }
+.split { display: inline-flex; height: var(--control-height); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); overflow: hidden; }
+.split > button { display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; border: 0; border-right: 1px solid var(--color-border); background: none; font-size: var(--text-sm); font-weight: var(--weight-medium); cursor: pointer; color: var(--color-text); }
+.split > button:last-child { border-right: 0; }
+.split > button:hover { background: var(--color-surface-2); }
+.split svg { width: 13px; height: 13px; }
+.act-meta { font-size: var(--text-xs); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.act.collapsed .cols { display: none; }
+.act.collapsed .act-tools { margin-bottom: 0; }
+
+.cols { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; padding: 0 0 8px 44px; }
+.col { flex: 0 0 var(--column-width); max-width: 100%; min-width: 0; display: flex; flex-direction: column; background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.col-h { display: flex; align-items: flex-start; gap: 2px; padding: 6px 4px 6px 2px; border-bottom: 1px solid var(--color-border); }
+.col-t { flex: 1; min-width: 0; padding-top: 1px; }
+.col-t .overline { display: flex; gap: 6px; }
+.col-t .overline span { text-transform: none; letter-spacing: 0; }
+.scenes { display: flex; flex-direction: column; gap: 6px; padding: 6px; min-height: 40px; }
+.newscene { margin: 0 6px 6px; height: var(--control-height); border: 0; border-radius: var(--radius-sm); background: none; color: var(--color-muted); font-size: var(--text-sm); font-weight: var(--weight-medium); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.newscene:hover { background: var(--color-surface); color: var(--color-text); }
+.newscene svg { width: 12px; height: 12px; }
+.addcol { flex: 0 0 140px; min-height: 90px; display: grid; place-items: center; border: 1px dashed var(--color-border); border-radius: var(--radius-md); background: none; color: var(--color-muted); font-size: var(--text-sm); cursor: pointer; }
+.addcol:hover, .addact:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.addact { width: 100%; height: 38px; margin-top: var(--space-2); border: 1px dashed var(--color-border); border-radius: var(--radius-md); background: none; color: var(--color-muted); font-size: var(--text-sm); cursor: pointer; }
+
+/* Scene card */
+.scene { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); box-shadow: var(--shadow-raised); transition: opacity .12s; }
+.sc-h { display: flex; align-items: center; gap: 2px; padding: 3px 3px 3px 1px; border-bottom: 1px solid var(--color-border); min-width: 0; }
+.sc-n { font-size: var(--text-xs); font-weight: var(--weight-semibold); white-space: nowrap; margin-right: 4px; }
+.sc-labels { display: flex; gap: 4px; min-width: 0; overflow: hidden; flex: 1; }
+.lbl { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; height: 17px; border-radius: 9px; background: var(--color-surface-2); font-size: var(--text-2xs); font-weight: var(--weight-medium); white-space: nowrap; }
+.lbl i { width: 6px; height: 6px; border-radius: 50%; background: var(--tone); }
+.sc-title { padding: 6px 8px 0; font-size: var(--text-sm); font-weight: var(--weight-medium); overflow-wrap: anywhere; outline: 0; border-radius: 2px; }
+.sc-title:empty::before { content: attr(data-placeholder); color: var(--color-muted); }
+.sc-title + .sc-body { min-height: 36px; padding-top: 4px; }
+.sc-body { min-height: 52px; padding: 6px 8px; font-size: var(--text-base); white-space: pre-wrap; overflow-wrap: anywhere; outline: 0; border-radius: 2px; }
+.sc-body:empty::before { content: attr(data-placeholder); color: var(--color-muted); }
+.links { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 8px 4px; }
+.sc-f { display: flex; align-items: center; gap: 2px; padding: 0 4px 4px; }
+.mini { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 6px; border: 0; border-radius: var(--radius-xs); background: none; color: var(--color-muted); font-size: var(--text-xs); font-weight: var(--weight-medium); cursor: pointer; white-space: nowrap; }
+.mini:hover { background: var(--color-surface-2); color: var(--color-text); }
+.mini svg { width: 11px; height: 11px; }
+.words { font-size: var(--text-2xs); color: var(--color-muted); font-variant-numeric: tabular-nums; white-space: nowrap; padding-right: 4px; }
+.words.none { font-style: italic; }
+
+/* Codex mention / link chip: tinted by its category colour */
+.mention, .cx { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: 4px; background: color-mix(in srgb, var(--cat) 14%, transparent); color: var(--color-text); font-size: .92em; font-weight: var(--weight-medium); line-height: 1.55; white-space: nowrap; cursor: pointer; vertical-align: baseline; }
+.mention { box-shadow: inset 0 -1.5px 0 var(--cat); border-radius: 3px 3px 0 0; padding: 0 3px; }
+.cx { height: 19px; font-size: var(--text-2xs); }
+.cx i { width: 6px; height: 6px; border-radius: 2px; background: var(--cat); }
+.cx b { font-weight: inherit; }
+.cx .x { display: none; margin-right: -3px; padding: 0; border: 0; background: none; color: var(--color-muted); cursor: pointer; font-size: 12px; line-height: 1; }
+.cx:hover .x { display: inline; }
+
+/* Editable fields: click to edit, focus ring like an input */
+[data-field] { cursor: text; outline: 0; border-radius: var(--radius-xs); }
+[data-field]:hover { background: color-mix(in srgb, var(--color-surface-2) 60%, transparent); }
+[data-field]:focus { background: var(--color-surface); box-shadow: 0 0 0 2px var(--color-accent); }
+.col-t [data-field] { display: block; font-size: var(--text-md); font-weight: var(--weight-semibold); line-height: 1.3; padding: 0 2px; margin-left: -2px; overflow-wrap: anywhere; }
+.act-h [data-field] { padding: 0 3px; }
+
+/* Hover-revealed icons (always visible on touch) */
+@media (hover: hover) {
+  .sc-h .ib, .col-h .ib, .grip { opacity: 0; }
+  .scene:hover .ib, .scene:focus-within .ib, .col-h:hover .ib, .col-h:focus-within .ib,
+  .scene:hover .grip, .col-h:hover .grip, .act-h:hover .grip, .grip:focus-visible { opacity: 1; }
+}
+.grip { display: inline-grid; place-items: center; width: 18px; height: 22px; padding: 0; border: 0; border-radius: var(--radius-xs); background: none; color: var(--color-muted); cursor: grab; flex: none; }
+.grip:hover { background: var(--color-surface-2); color: var(--color-text); }
+.grip svg { width: 10px; height: 14px; }
+
+/* Drag & highlight states */
+.dragging { opacity: .35; }
+.scene.drop-target { box-shadow: 0 0 0 2px var(--color-accent); }
+#dropline { position: fixed; z-index: 30; pointer-events: none; background: var(--color-accent); border-radius: 2px; display: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 25%, transparent); }
+.scene.dim { opacity: .3; }
+.scene.hit { box-shadow: 0 0 0 2px var(--color-accent), var(--shadow-raised); }
+.scene.flash, .col.flash { animation: flash 1.8s ease-out; }
+@keyframes flash { from, 30% { box-shadow: 0 0 0 3px var(--color-accent); } }
+
+/* Import summary banner (?imported=1) */
+.banner { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2px 8px; align-items: start; margin: var(--space-1) 0 var(--space-2); padding: 8px 6px 8px 10px; border: 1px solid color-mix(in srgb, var(--color-info) 40%, var(--color-border)); border-radius: var(--radius-md); background: color-mix(in srgb, var(--color-info) 8%, var(--color-surface)); font-size: var(--text-sm); }
+.banner > svg { width: 16px; height: 16px; margin-top: 1px; color: var(--color-info); }
+.banner b { font-weight: var(--weight-semibold); }
+.banner p { margin: 2px 0 0; font-size: var(--text-xs); color: var(--color-muted); }
+.banner .acts { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: 4px; }
+.link { padding: 0; border: 0; background: none; color: var(--color-accent); font-size: var(--text-xs); font-weight: var(--weight-medium); cursor: pointer; }
+.link:hover { text-decoration: underline; }
+.act-h [data-field]:empty::before { content: attr(data-placeholder); color: var(--color-muted); font-weight: var(--weight-regular); }
+.act-empty { font-size: var(--text-xs); color: var(--color-muted); }
+
+/* Outline view */
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); }
+table { width: 100%; min-width: 680px; border-collapse: collapse; font-size: var(--text-sm); }
+th { text-align: left; padding: 7px 10px; font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--color-muted); text-transform: uppercase; letter-spacing: .04em; background: var(--color-surface-2); border-bottom: 1px solid var(--color-border); white-space: nowrap; }
+td { height: var(--row-height); padding: 4px 10px; border-bottom: 1px solid var(--color-border); vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+tr.grp td { height: 28px; background: var(--color-bg); color: var(--color-muted); font-size: var(--text-xs); font-weight: var(--weight-semibold); }
+tr.chap td { font-weight: var(--weight-semibold); }
+tr.srow:hover td { background: var(--color-accent-soft); cursor: pointer; }
+tr.srow.dim td { opacity: .35; }
+tr.arch td { color: var(--color-muted); }
+tr.arch td .clip { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--color-muted) 50%, transparent); }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.clip { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tags { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* Popover menu / picker */
+#pop { position: fixed; z-index: 40; width: 236px; max-height: 320px; display: none; flex-direction: column; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-raised), 0 12px 32px -12px rgb(0 0 0 / .35); overflow: hidden; }
+#pop.open { display: flex; }
+#pop .search { width: auto; margin: 6px; }
+#pop .list { overflow: auto; padding: 0 4px 4px; }
+#pop .item { width: 100%; display: flex; align-items: center; gap: 7px; min-height: 28px; padding: 0 8px; border: 0; border-radius: var(--radius-sm); background: none; font-size: var(--text-sm); text-align: left; cursor: pointer; }
+#pop .item:hover, #pop .item.on { background: var(--color-accent-soft); }
+#pop .item .k { margin-left: auto; font-size: var(--text-2xs); color: var(--color-muted); font-family: var(--font-mono); }
+#pop .item.danger { color: var(--color-danger); }
+#pop a.item { color: var(--color-text); text-decoration: none; }
+#pop .sep { height: 1px; margin: 4px 0; background: var(--color-border); }
+#pop .cat-h { padding: 6px 8px 2px; }
+#pop.wide { width: 320px; max-width: calc(100vw - 16px); }
+#pop .grp { padding: 8px 12px 4px; font-size: var(--text-2xs); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .04em; color: var(--color-muted); }
+#pop .arow { display: flex; align-items: flex-start; gap: 8px; padding: 6px 8px; border-radius: var(--radius-sm); }
+#pop .arow + .arow { border-top: 1px dashed var(--color-border); }
+#pop .arow > div { flex: 1; min-width: 0; display: grid; gap: 1px; font-size: var(--text-sm); }
+#pop .arow .note { font-size: var(--text-2xs); color: var(--color-warn); }
+#pop .arow .mini { border: 1px solid var(--color-border); color: var(--color-text); }
+
+/* Knowledge base entry panel (same look as the References detail panel; Write builds the same one) */
+.panel { display: none; min-height: 0; overflow: auto; flex-direction: column; border-left: 1px solid var(--color-border); background: var(--color-surface); }
+.ws.has-panel .panel { display: flex; }
+.p-h { position: sticky; top: 0; z-index: 3; padding: var(--space-3) var(--space-3) var(--space-2); background: var(--color-surface); border-bottom: 1px solid var(--color-border); }
+.p-top { display: flex; align-items: center; gap: 7px; }
+.p-top .dot { margin-top: 1px; }
+.p-name { flex: 1; min-width: 0; font-size: var(--text-md); font-weight: var(--weight-semibold); line-height: 1.3; padding: 1px 3px; overflow-wrap: anywhere; }
+.p-name:empty::before { content: attr(data-placeholder); color: var(--color-muted); font-weight: var(--weight-regular); }
+.p-h .by { margin: 3px 0 0 14px; font-size: var(--text-xs); color: var(--color-muted); }
+.p-acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-top: var(--space-3); }
+.sec { padding: var(--space-3); border-bottom: 1px solid var(--color-border); }
+.sec-h { display: flex; align-items: center; gap: 6px; margin-bottom: var(--space-2); }
+.sec-h h3 { margin: 0; flex: 1; font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.sec-h .k { font-size: var(--text-xs); color: var(--color-muted); font-variant-numeric: tabular-nums; }
+.fields { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 6px 10px; align-items: center; font-size: var(--text-sm); }
+.fields > label { font-size: var(--text-xs); color: var(--color-muted); }
+.fields > label.top { align-self: start; padding-top: 4px; }
+.fld { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+.fld .hint { flex-basis: 100%; font-size: var(--text-2xs); color: var(--color-muted); }
+.p-sum { width: 100%; min-height: 54px; padding: 4px 7px; font-size: var(--text-sm); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; box-shadow: inset 0 0 0 1px var(--color-border); }
+.p-sum:empty::before { content: attr(data-placeholder); color: var(--color-muted); }
+.alias { display: inline-flex; align-items: center; gap: 2px; height: 20px; padding: 0 2px 0 7px; border-radius: 10px; background: var(--color-surface-2); font-size: var(--text-xs); white-space: nowrap; }
+.alias button { width: 16px; height: 16px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--color-muted); font-size: 12px; line-height: 1; cursor: pointer; }
+.alias button:hover { background: var(--color-border); color: var(--color-text); }
+.alias-in { flex: 1; min-width: 80px; height: 22px; padding: 0 4px; border: 0; border-radius: var(--radius-xs); background: transparent; font-size: var(--text-xs); outline: 0; }
+.alias-in:focus { box-shadow: 0 0 0 2px var(--color-accent); background: var(--color-bg); }
+.alias-in::placeholder { color: var(--color-muted); }
+.switch { position: relative; width: 28px; height: 16px; flex: none; padding: 0; border: 0; border-radius: 8px; background: color-mix(in srgb, var(--color-muted) 45%, transparent); cursor: pointer; transition: background .12s; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--color-surface); box-shadow: var(--shadow-raised); transition: transform .12s; }
+.switch[aria-checked="true"] { background: var(--color-accent); }
+.switch[aria-checked="true"]::after { transform: translateX(12px); }
+.switch:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.used { display: grid; gap: 1px; padding: 6px 8px; margin: 0 -8px; width: calc(100% + 16px); border: 0; border-radius: var(--radius-sm); background: none; font-size: var(--text-sm); text-align: left; cursor: pointer; }
+.used:hover { background: var(--color-accent-soft); }
+.used .overline { display: flex; gap: 6px; }
+.used .overline span { margin-left: auto; text-transform: none; letter-spacing: 0; }
+.addn { padding: 5px 0 5px 10px; border-left: 2px solid var(--cat); font-size: var(--text-sm); line-height: 1.5; }
+.addn + .addn { margin-top: var(--space-2); }
+.p-empty { font-size: var(--text-sm); color: var(--color-muted); }
+.p-foot { padding: var(--space-2) var(--space-3); }
+.btn.danger-t { color: var(--color-danger); }
+
+/* Toast */
+#toast { position: fixed; left: 50%; bottom: 16px; z-index: 50; transform: translateX(-50%) translateY(20px); opacity: 0; pointer-events: none; display: flex; align-items: center; gap: var(--space-3); max-width: calc(100vw - 32px); padding: 7px 8px 7px 12px; border-radius: var(--radius-md); background: var(--color-text); color: var(--color-bg); font-size: var(--text-sm); box-shadow: var(--shadow-raised); transition: .18s; }
+#toast.show { opacity: 1; transform: translateX(-50%); pointer-events: auto; }
+#toast code { font-family: var(--font-mono); font-size: var(--text-xs); opacity: .8; }
+#toast button { border: 0; background: none; color: inherit; font-weight: var(--weight-semibold); text-decoration: underline; cursor: pointer; font-size: var(--text-sm); }
+
+/* Review aid (not part of the design) */
+.preview { position: fixed; right: 12px; bottom: 12px; z-index: 20; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); box-shadow: var(--shadow-raised); font-size: var(--text-xs); }
+.preview > b { color: var(--color-muted); font-weight: var(--weight-semibold); text-transform: uppercase; letter-spacing: .05em; }
+
+@media (max-width: 900px) {
+  .scope .stat, .sync .lbl-t, .book-id .t { display: none; }
+}
+/* Narrower screens: the entry panel becomes a sheet over the board (as in references.html) */
+@media (max-width: 860px) {
+  .ws.has-panel { grid-template-columns: var(--sidebar-width) minmax(0, 1fr); }
+  .ws.no-side.has-panel { grid-template-columns: minmax(0, 1fr); }
+  .panel { position: fixed; z-index: 26; top: var(--bar-height); right: 0; bottom: 0; width: min(var(--panel-width), 100vw); box-shadow: var(--shadow-raised), -12px 0 32px -12px rgb(0 0 0 / .3); }
+  .bookbar .scope { display: none; }   /* room for the References tab */
+}
+@media (max-width: 720px) {
+  .ws:not(.no-side) { grid-template-columns: minmax(0, 1fr); }
+  .ws:not(.no-side) .side { position: fixed; z-index: 25; top: var(--bar-height); bottom: 0; left: 0; width: min(300px, 86vw); box-shadow: var(--shadow-raised); }
+  .bookbar .hide-sm { display: none; }
+  .cols, .act-tools { padding-left: 0; margin-left: 0; }
+  .toolbar .search { flex: 1; width: auto; }
+  .preview { left: 12px; right: auto; }
+}
+</style>
+</head>
+<body>
+<header class="bookbar">
+  <a class="ib" id="back" href="library.html" aria-label="Back to Library" title="Back to Library"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 3 5 8l5 5"/></svg></a>
+  <a class="ib" href="settings.html" data-tab="settings" aria-label="Book settings" title="Book settings"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg></a>
+  <div class="book-id">
+    <div class="cover thumb" id="cover"></div>
+    <div class="t"><b id="bookTitle">Product Engineering</b><span>Joel Dickson</span></div>
+    <button class="ib" id="sideToggle" aria-label="Toggle sidebar" title="Toggle sidebar"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M6 3v10"/></svg></button>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="Mode">
+    <button class="tab" role="tab" aria-selected="true">Plan</button>
+    <a class="tab" role="tab" aria-selected="false" href="write.html" data-tab="write">Write</a>
+    <button class="tab" role="tab" aria-selected="false">Chat</button>
+    <button class="tab" role="tab" aria-selected="false">Review</button>
+    <span class="vr" aria-hidden="true"></span>
+    <a class="tab" role="tab" aria-selected="false" href="references.html" data-tab="references" title="Sources, permissions and the bibliography for this book (#2)">References <span id="tabBadge"></span></a>
+  </nav>
+  <div class="scope hide-sm">
+    <button class="sel"><em>Scope</em> Full manuscript <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6 4 4 4-4"/></svg></button>
+    <span class="stat" id="stats"></span>
+  </div>
+  <span class="spacer"></span>
+  <span class="sync" id="sync" data-s="saved" role="status" aria-live="polite"><i></i><span class="lbl-t">Saved</span></span>
+  <button class="btn ghost hide-sm">Format</button>
+  <button class="btn ghost hide-sm">Focus</button>
+  <span class="avatar">JD</span>
+</header>
+
+<div class="ws" id="ws">
+  <aside class="side" aria-label="Book sidebar">
+    <div class="side-h">Knowledge base</div>
+    <div id="sideBody"></div>
+  </aside>
+  <main class="main">
+    <div class="toolbar">
+      <button class="btn primary" data-cmd="new-act"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3v10M3 8h10"/></svg>New Act</button>
+      <div class="seg" role="group" aria-label="View as">
+        <button data-view="board"><svg viewBox="0 0 16 16" fill="currentColor"><rect x="1.5" y="2" width="4" height="12" rx="1"/><rect x="6.5" y="2" width="4" height="8" rx="1"/><rect x="11.5" y="2" width="3" height="10" rx="1"/></svg>Board</button>
+        <button data-view="outline"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4h12M5 8h9M5 12h9"/></svg>Outline</button>
+      </div>
+      <span id="hl"></span>
+      <span class="spacer"></span>
+      <label class="search"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><input id="q" placeholder="Find in plan…" aria-label="Find scenes"></label>
+      <button class="sel" data-cmd="label-filter"><em>Label</em> <span id="lf">Any</span> <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6 4 4 4-4"/></svg></button>
+      <button class="btn" data-cmd="archived" id="archBtn" title="Scenes taken off the board; restore them from here"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="3" rx="1"/><path d="M3 6v6.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V6M6.5 9h3"/></svg><span id="archN">Archived (0)</span></button>
+      <button class="btn" data-cmd="toggle-all" id="toggleAll">Collapse all</button>
+    </div>
+    <div class="board" id="board"></div>
+  </main>
+  <aside class="panel" id="panel" aria-label="Knowledge base entry"></aside>
+</div>
+
+<div id="dropline"></div>
+<div id="pop" role="menu"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<div class="preview" aria-label="Preview controls (review aid)">
+  <b>Preview</b>
+  <div class="seg"><button data-theme-set="system">System</button><button data-theme-set="light">Light</button><button data-theme-set="dark">Dark</button></div>
+  <div class="seg"><button data-dens-set="compact">Compact</button><button data-dens-set="comfortable">Comfortable</button></div>
+</div>
+
+
+<script>
+// ---------- Book (?book=) ----------
+// Library catalogue, so ?book= can show any book's header and back link. Only 'pe' has content.
+const SERIES_NAMES = { fg: 'Forsaken Gods', ac: 'The Ashen Crown', td: 'Tidewater Chronicles' };
+const BOOKS = {
+  'pe': { title: 'Product Engineering', cover: ['#05070d', '#0d1a2b'] },
+  'pe-v1': { title: 'Product Engineering (v1)', cover: ['#d9cfc0', '#b9ab97'] },
+  'quiet-algorithm': { title: 'The Quiet Algorithm', cover: ['#0e0f1a', '#283a7a'] },
+  'saltwater-ledger': { title: 'Saltwater Ledger', cover: ['#e8e2d6', '#cbbfa9'] },
+  'northbound': { title: 'Northbound', cover: ['#f1f5f9', '#94a3b8'] },
+  'hymns-for-machines': { title: 'Hymns for Machines', cover: ['#3b0d1f', '#9d174d'] },
+  'players-guide': { title: 'Players Guide', series: 'fg', n: 1, cover: ['#3a3a3a', '#555'] },
+  'gamemasters-codex': { title: "Gamemaster's Codex", series: 'fg', n: 2, cover: ['#2a1d12', '#5c3b1e'] },
+  'bestiary-of-the-fallen': { title: 'Bestiary of the Fallen', series: 'fg', n: 3, cover: ['#1b2320', '#3d4f45'] },
+  'ember-oath': { title: 'Ember Oath', series: 'ac', n: 1, cover: ['#2b0b0b', '#7a1d14'] },
+  'iron-litany': { title: 'Iron Litany', series: 'ac', n: 2, cover: ['#1d1d2b', '#45306b'] },
+  'hollow-throne': { title: 'Hollow Throne', series: 'ac', n: 3, cover: ['#141414', '#3b3b3b'] },
+  'last-cinder': { title: 'Last Cinder', series: 'ac', n: 4, cover: ['#3a1406', '#a3410f'] },
+  'saltmarsh': { title: 'Saltmarsh', series: 'td', n: 1, cover: ['#08263a', '#155e75'] },
+  'undertow': { title: 'Undertow', series: 'td', n: 2, cover: ['#0b3b3a', '#14706b'] },
+};
+// A new book from Library's dialog arrives as ?book=new&title=…[&series=…&n=…]; an import as ?book=pe-v1&imported=1
+const params = new URLSearchParams(location.search);
+const BOOK_ID = params.get('book') === 'new' ? 'new' : BOOKS[params.get('book')] ? params.get('book') : 'pe';
+const BOOK = BOOK_ID !== 'new' ? BOOKS[BOOK_ID]
+  : { title: params.get('title') || 'Untitled book', series: SERIES_NAMES[params.get('series')] ? params.get('series') : null, n: +params.get('n') || null, cover: ['#e5e9f0', '#a3b1c6'] };
+const BOOK_Q = BOOK_ID === 'new' ? '?' + new URLSearchParams([...params].filter(([k]) => k !== 'imported')) : '?book=' + BOOK_ID;
+const HL_KEY = 'codex.hl.' + BOOK_ID;
+
+// ---------- Sample data ----------
+// Knowledge base. Category keys are the --category-* colour tokens; a book (or its series) names them.
+const PE_CATS = { blog: 'Blog Posts', law: 'Laws', story: 'Stories', research: 'Research', person: 'People' };
+const kb = (id, cat, name, aliases, summary, always = false) => ({ id, cat, name, aliases, summary, always });
+const PE_ENTRIES = [
+  kb('bad-scrum', 'blog', 'Signs of Bad Scrum', ['Bad Scrum'], 'My 2019 post on the ceremonies that outlive their purpose: stand-ups as status reports, sprints as deadlines.'),
+  kb('feature-factory', 'blog', 'Feature Factory', ['feature factories'], 'Teams judged by features shipped rather than outcomes changed. The problem this book is about.', true),
+  kb('no-estimates', 'blog', 'Why We Stopped Estimating', [], 'Post on dropping story points at Atlas, what replaced them, and what it cost.'),
+  kb('conway', 'law', "Conway's Law", ['Conway'], 'Organisations design systems that mirror their own communication structure (Conway, 1968).'),
+  kb('goodhart', 'law', "Goodhart's Law", ['Goodhart'], 'When a measure becomes a target, it ceases to be a good measure.'),
+  kb('brooks', 'law', "Brooks's Law", [], 'Adding people to a late software project makes it later.'),
+  kb('payments', 'story', 'The Payments Rewrite', ['payments rewrite'], 'Fourteen months, delivered on time, and almost nobody used the new checkout flow.'),
+  kb('atlas', 'story', 'Team Atlas Offsite', ['Team Atlas'], 'The offsite where the engineers ran the customer interviews themselves.'),
+  kb('dora', 'research', 'DORA Four Keys', ['DORA'], 'Deployment frequency, lead time for changes, change failure rate and time to restore.'),
+  kb('manifesto', 'research', 'Agile Manifesto (2001)', [], 'Manifesto for Agile Software Development: four values and twelve principles.'),
+  kb('beck', 'person', 'Kent Beck', [], 'Creator of Extreme Programming; the voice of short feedback loops in Chapter 3.'),
+  kb('cagan', 'person', 'Marty Cagan', ['Cagan'], 'Silicon Valley Product Group. Empowered teams and continuous discovery.'),
+];
+// Series-level Knowledge base (book_scope): shared by every book in the series, shown instead of a book's own
+const SERIES_KB = {
+  fg: { cats: { research: 'Spells' }, labels: [{ id: 'playtested', name: 'Playtested', tone: 'ok', series: true }], entries: [
+    kb('ember-lance', 'research', 'Ember Lance', ['lance'], '3rd-level evocation. A 60 ft line of holy fire; a Forsaken caster takes 1d6 of it back.'),
+    kb('grave-whisper', 'research', 'Grave Whisper', [], 'Cantrip. Ask a corpse one question; it answers in its god\'s voice, if it still has one.'),
+    kb('unnamed-ward', 'research', 'Ward of the Unnamed', ['the Ward'], '5th-level abjuration. A 20 ft dome no divine spell can cross, in either direction.', true),
+  ] },
+  ac: { cats: { person: 'Characters', story: 'Places' }, entries: [
+    kb('maren', 'person', 'Maren Vell', ['the Queen', 'Maren'], 'Exiled queen of the Ashen Crown. Swore the ember oath at her father\'s pyre.', true),
+    kb('tobin', 'person', 'Tobin Hale', ['Tobin'], 'Her sworn sword. Counts everything: guards, exits, debts.'),
+    kb('abbot', 'person', 'The Grey Abbot', ['the Abbot'], 'Keeper of the Iron Litany. Never lies; never tells the whole truth.'),
+    kb('cinderhold', 'story', 'Cinderhold', [], 'The Vell seat in the north, built over a fire that has not gone out in three hundred years.'),
+    kb('hollow-court', 'story', 'The Hollow Court', ['the Court'], 'The capital\'s throne hall, emptied by the war and filled again by the wrong people.'),
+    kb('emberfall', 'story', 'Emberfall Pass', ['Emberfall'], 'The only road south through the mountains. Held for a winter in Iron Litany.'),
+  ] },
+  td: { cats: {}, entries: [] },
+};
+// Offered in the category select when a book has no categories yet
+const STARTER_CATS = { person: 'Characters', story: 'Places', blog: 'Objects', research: 'Lore', law: 'Rules' };
+const SKB = BOOK.series ? SERIES_KB[BOOK.series] : null;
+const CATS = SKB ? { ...SKB.cats } : BOOK_ID === 'pe' ? { ...PE_CATS } : BOOK_ID === 'pe-v1' ? { blog: 'Blog Posts', law: 'Laws', person: 'People' } : {};
+const SERIES_CATS = new Set(SKB ? Object.keys(SKB.cats) : []);
+const ENTRIES = structuredClone(SKB ? SKB.entries : BOOK_ID === 'pe' ? PE_ENTRIES
+  : BOOK_ID === 'pe-v1' ? PE_ENTRIES.filter(e => ['feature-factory', 'conway', 'goodhart', 'beck'].includes(e.id)) : []);
+const LABELS = [
+  { id: 'ready', name: 'Ready to write', tone: 'ok' },
+  { id: 'drafting', name: 'Drafting', tone: 'info' },
+  { id: 'research', name: 'Needs research', tone: 'warn' },
+  { id: 'cut', name: 'Maybe cut', tone: 'danger' },
+  ...(SKB?.labels || []),
+];
+// Sources cited in the book (references.html ids), for scene source uses: [refId, use kind, words quoted]
+const REFS = { xp: 'Extreme Programming Explained', manifesto: 'Agile Manifesto', goodhart: 'Problems of Monetary Management', velocity: 'The Velocity Trap', conway: 'How Do Committees Invent?', empowered: 'Empowered', dora: 'State of DevOps Report', accelerate: 'Accelerate', topologies: 'Team Topologies', brooks: 'The Mythical Man-Month', friday: 'Ship It Friday' };
+let uid = 0;
+const id = p => p + (++uid);
+const slugify = s => s.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) || 'untitled';
+const sc = (summary, o = {}) => ({ id: id('s'), title: o.title || '', summary, codex: o.codex || [], labels: o.labels || [], words: o.words || 0, uses: o.uses || [], adds: o.adds || [] });
+const ch = (title, scenes) => ({ id: id('c'), title, slug: slugify(title), scenes });
+const act = (title, chapters, collapsed = false) => ({ id: id('a'), title, collapsed, chapters });
+
+// Every other book only needs one act and a few chapters so it opens: [act title, [[chapter, [[summary, opts]]]]]
+const STUBS = {
+  'pe-v1': ['Part One', [
+    ['Introduction', [['Why product engineering, and why now.', { labels: ['ready'], words: 4180 }]]],
+    ['The Feature Factory', [['How teams end up measuring output. [[e:feature-factory]]', { words: 9640 }], ['[[e:goodhart]] and the dashboards nobody trusts.', { words: 8310, labels: ['research'] }]]],
+    ['Teams and Architecture', [['[[e:conway]]: org charts that ship themselves.', { codex: ['conway'], words: 9020 }], ['What [[e:beck]] got right about feedback loops.', { words: 6870 }]]],
+  ]],
+  'quiet-algorithm': ['Signal', [
+    ['The Night Shift', [['Ines notices the recommender has stopped recommending anything at all.', { labels: ['drafting'], words: 3420 }], ['She traces the silence to a model nobody admits to training.', { words: 2980 }]]],
+    ['Ghost Weights', [['A former colleague agrees to meet, then doesn\'t show.', { labels: ['research'], words: 2150 }]]],
+    ['Quiet Hours', [['']]],
+  ]],
+  'saltwater-ledger': ['The Harbour', [
+    ['The Ledger', [['A shipping clerk finds a page of debts written in his dead father\'s hand.', { words: 4800 }]]],
+    ['High Water', [['The flood takes the counting house; the ledger survives.', { words: 5200 }], ['Who else is looking for it, and what they will pay.', { words: 3900 }]]],
+  ]],
+  'northbound': ['Departure', [
+    ['The Last Ferry', [['Two sisters leave the island with one suitcase and their mother\'s ashes.', { labels: ['ready'], words: 2400 }]]],
+    ['Inland', [['The road north, and the argument they have been saving for years.', { labels: ['research'] }]]],
+    ['The Border Town', [['']]],
+  ]],
+  'hymns-for-machines': ['First Hymns', [
+    ['Matins', [['Poems for the servers that hum all night.', { words: 1900 }]]],
+    ['Lauds', [['The assembly line as liturgy.', { labels: ['drafting'], words: 2300 }], ['A hymn for the last switchboard operator.', {}]]],
+  ]],
+  'players-guide': ['Character Creation', [
+    ['The Forsaken', [['What it means to worship a god the others cast out. [[e:grave-whisper]] is the first prayer every player learns.', { labels: ['playtested'], words: 6200 }]]],
+    ['Cinderpriests', [['The class built around [[e:ember-lance]] and the price it takes back.', { codex: ['ember-lance'], labels: ['playtested'], words: 7400 }], ['Subclasses by fallen god.', { labels: ['drafting'], words: 3100 }]]],
+    ['Spells', [['Spell lists by god, with [[e:unnamed-ward]] as the signature defence.', { labels: ['research'], words: 5800 }]]],
+  ]],
+  'gamemasters-codex': ['Running the Game', [
+    ['The Silent Pantheon', [['How silenced gods still speak: omens, debts and [[e:grave-whisper]].', { labels: ['playtested'], words: 8100 }]]],
+    ['Encounters', [['Building fights around [[e:unnamed-ward]] so casters can\'t hide behind it.', { labels: ['drafting'], words: 6400 }], ['Treasure that remembers who owned it.', { words: 2900 }]]],
+  ]],
+  'bestiary-of-the-fallen': ['Creatures', [
+    ['Lesser Fallen', [['Ash-hounds, hollow priests and the things that eat prayers.', { labels: ['drafting'], words: 4100 }]]],
+    ['Greater Fallen', [['The Unmade King: lair actions, legendary resistances and a weakness to [[e:ember-lance]].', { labels: ['research'] }]]],
+  ]],
+  'ember-oath': ['The Oath', [
+    ['Cinders', [['[[e:maren]] swears the ember oath at her father\'s pyre in [[e:cinderhold]].', { words: 6900 }]]],
+    ['The Road South', [['[[e:tobin]] takes service with the exiled queen.', { codex: ['maren'], words: 5400 }], ['First blood at [[e:emberfall]].', { words: 6100 }]]],
+  ]],
+  'iron-litany': ['The Litany', [
+    ['Iron Bells', [['[[e:abbot]] reads the litany that names [[e:maren]] a usurper.', { words: 7200 }]]],
+    ['Siege of Emberfall', [['Holding [[e:emberfall]] through the first winter.', { codex: ['tobin'], words: 8800 }]]],
+  ]],
+  'hollow-throne': ['The Court', [
+    ['An Empty Seat', [['[[e:maren]] returns to [[e:hollow-court]] to find the throne already claimed.', { labels: ['drafting'], words: 3860 }], ['[[e:tobin]] counts the guards and does not like the number.', { words: 2140 }]]],
+    ['The Grey Council', [['[[e:abbot]] offers a truce with a knife in it.', { codex: ['maren'], labels: ['research'], words: 1720, adds: [{ e: 'abbot', text: 'From here the reader knows the Abbot has already met the claimant.' }] }]]],
+    ['Ash and Iron', [['Word comes from [[e:cinderhold]]: the fire has gone out.', { labels: ['cut'] }]]],
+  ]],
+  'last-cinder': ['Endings', [
+    ['The Last Fire', [['How it ends for [[e:maren]]. Outline only.', { labels: ['ready'], words: 1200 }]]],
+    ['After', [['']]],
+  ]],
+  'saltmarsh': ['The Marsh', [
+    ['Low Tide', [['A body in the reeds the morning after the regatta.', { words: 4100 }]]],
+    ['The Harbourmaster', [['Questions the harbourmaster would rather not answer.', { words: 3700 }], ['The tide tables don\'t match the logbook.', { words: 2900 }]]],
+  ]],
+  'undertow': ['The Return', [
+    ['Spring Tide', [['A year later, the same boat washes up empty.', { labels: ['drafting'], words: 3300 }]]],
+    ['Soundings', [['Diving the wreck, and what the dive log leaves out.', { labels: ['research'] }]]],
+  ]],
+};
+function seedActs() {
+  if (BOOK_ID === 'new') return [act('', [])];   // the insert trigger's one empty act
+  if (BOOK_ID !== 'pe') {
+    const [t, chs] = STUBS[BOOK_ID];
+    return [act(t, chs.map(([ct, scs]) => ch(ct, scs.map(([s, o]) => sc(s, o)))))];
+  }
+  return [
+    act('Introduction', [
+      ch('Preface', [sc('Why I wrote this: ten years of watching good teams ship the wrong thing, on time.', { labels: ['ready'], words: 1840 })]),
+      ch('About this book', [sc('Who it is for, how to read it, and what I mean by "product engineering".', { labels: ['ready'], words: 1210 })]),
+      ch('A Brief History of Software Practice', [
+        sc('The beginnings in Agile (80s–00s): XP, [[e:beck]] and the shift to short feedback loops.', { words: 2650, uses: [['xp', 'Paraphrase', 0]] }),
+        sc('The [[e:manifesto]] and the rise of Scrum.', { words: 1980, uses: [['manifesto', 'Quote', 7]] }),
+        sc('The gaining popularity of Scrum and the rise of "Scrum as a methodology", or "Bad Scrum".\n[[e:bad-scrum]]', { labels: ['research'] }),
+      ]),
+      ch('What Went Wrong', [
+        sc('Feature factories: measuring output because outcomes are hard. [[e:goodhart]]', { codex: ['feature-factory'], labels: ['research'], uses: [['goodhart', 'Quote', 16], ['velocity', 'Quote', 214]],
+          adds: [{ e: 'goodhart', text: 'The reader meets Goodhart\'s Law for the first time here: when a measure becomes a target, it stops being a good measure.' }] }),
+        sc('Org charts that ship themselves.', { codex: ['conway'], uses: [['conway', 'Quote', 22]] }),
+      ]),
+    ]),
+    act('The Product Engineer', [
+      ch('Owning Outcomes', [
+        sc('Engineers in discovery, with [[e:payments]] as the cautionary tale.', { codex: ['cagan'], labels: ['drafting'], words: 3120, uses: [['empowered', 'Paraphrase', 0]] }),
+        sc("Outcome metrics that don't rot.", { codex: ['dora', 'goodhart'], labels: ['research'], uses: [['goodhart', 'Paraphrase', 0], ['dora', 'Data', 0], ['accelerate', 'Paraphrase', 0]] }),
+      ]),
+      ch("Discovery is Everyone's Job", [
+        sc('What happened at [[e:atlas]] when the engineers ran the customer interviews.', { words: 640, labels: ['drafting'] }),
+        sc(''),
+      ]),
+      ch('Shipping Small', [sc('Thin slices, feature flags, and why batch size is the strategy.', { codex: ['dora'], labels: ['drafting'], words: 940, uses: [['accelerate', 'Paraphrase', 0]] })]),
+    ]),
+    act('Practices', [
+      ch('Estimation Without Theatre', [sc('[[e:no-estimates]]: what we did instead, and what it cost us.', { labels: ['cut'], uses: [['velocity', 'Quote', 128]] })]),
+      ch('Teams and Topology', [sc('[[e:conway]] in practice: design the teams for the architecture you want.', { codex: ['brooks'], uses: [['conway', 'Paraphrase', 0], ['topologies', 'Figure', 0], ['brooks', 'Quote', 31]] })]),
+      ch('Where to From Here', [sc('Closing: a reading list and an invitation.', { uses: [['friday', 'Lyric', 0]] })]),
+    ], true),
+  ];
+}
+
+const state = {
+  acts: seedActs(),
+  archived: [],   // { s, ch, si }: scenes taken off the board (scene.archived_at), with where they were
+  panel: null,    // Knowledge base entry panel: { id } to edit an entry, { mode: 'new', name, cat } to create one
+  banner: params.get('imported') === '1' && BOOK_ID !== 'new',
+  view: 'board', side: true, highlight: null, label: null, q: '', sideQ: '',
+};
+
+// ---------- Helpers ----------
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const kw = n => n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : String(n);
+const entry = eid => ENTRIES.find(e => e.id === eid);
+const label = lid => LABELS.find(l => l.id === lid);
+const TOKEN = /\[\[e:([\w-]+)\]\]/g;
+const refs = s => new Set([...s.codex, ...[...s.summary.matchAll(TOKEN)].map(m => m[1])]);
+const plain = s => s.summary.replace(TOKEN, (_, e) => entry(e)?.name || '');
+const allScenes = () => state.acts.flatMap(a => a.chapters.flatMap(c => c.scenes));
+const usage = eid => allScenes().filter(s => refs(s).has(eid)).length;
+const sceneWords = list => list.reduce((t, s) => t + s.words, 0);
+function locate(kind, xid) {
+  for (const [ai, a] of state.acts.entries()) {
+    if (kind === 'act' && a.id === xid) return { a, ai };
+    for (const [ci, c] of a.chapters.entries()) {
+      if (kind === 'chapter' && c.id === xid) return { a, ai, c, ci };
+      for (const [si, s] of c.scenes.entries()) if (kind === 'scene' && s.id === xid) return { a, ai, c, ci, s, si };
+    }
+  }
+}
+function chapterNo(cid) {
+  let n = 0;
+  for (const a of state.acts) for (const c of a.chapters) { n++; if (c.id === cid) return n; }
+}
+const isFiltering = () => state.highlight || state.label || state.q;
+const matchScene = s => (!state.highlight || refs(s).has(state.highlight)) && (!state.label || s.labels.includes(state.label)) && (!state.q || plain(s).toLowerCase().includes(state.q.toLowerCase()));
+// Deep links address scenes and chapters by their current display numbers (#scene=5.2, #chapter=5)
+const chapterAt = n => state.acts.flatMap(a => a.chapters)[n - 1];
+const sceneAt = (cn, sn) => chapterAt(cn)?.scenes[sn - 1];
+const sceneNo = sid => { const l = locate('scene', sid); return `${chapterNo(l.c.id)}.${l.si + 1}`; };
+const writeHref = hash => `write.html${BOOK_Q}#${hash}`;
+// References tab badge, worked out like references.html: danger for copyright risks, else warn for sources to check.
+// Archived scenes take their source uses with them, which can change a source's clearance (#16 J4).
+function refBadge() {
+  const uses = allScenes().flatMap(s => s.uses), used = r => uses.some(u => u[0] === r);
+  const quoted = uses.filter(u => u[0] === 'velocity' && u[1] === 'Quote').reduce((t, u) => t + u[2], 0);
+  const risks = (quoted > 300) + used('topologies') + used('friday');
+  const checks = ['manifesto', 'goodhart', 'dora', 'accelerate'].filter(used).length + (used('velocity') && quoted <= 300);
+  return { risks, checks };
+}
+function usesNote(s) {
+  const u = s.uses;
+  if (u.length === 1) return ` · <b>${esc(REFS[u[0][0]])}</b> ${u[0][1].toLowerCase()} archived${u[0][2] ? ` (${u[0][2]} words)` : ''}`;
+  return u.length ? ` · ${u.length} source uses archived` : '';
+}
+
+const I = {
+  grip: '<svg viewBox="0 0 10 14" fill="currentColor"><circle cx="3" cy="3" r="1.2"/><circle cx="7" cy="3" r="1.2"/><circle cx="3" cy="7" r="1.2"/><circle cx="7" cy="7" r="1.2"/><circle cx="3" cy="11" r="1.2"/><circle cx="7" cy="11" r="1.2"/></svg>',
+  pen: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M10.5 2.5 13.5 5.5 6 13H3v-3z"/></svg>',
+  more: '<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="3.5" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="8" cy="12.5" r="1.3"/></svg>',
+  plus: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3v10M3 8h10"/></svg>',
+  tag: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2.5 2.5h5l6 6-5 5-6-6z"/><circle cx="5.5" cy="5.5" r="1"/></svg>',
+  chev: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 6 4 4 4-4"/></svg>',
+  x: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 4 8 8M12 4l-8 8"/></svg>',
+  info: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 7.5v3.5M8 5v.5"/></svg>',
+  series: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="4" width="7" height="10" rx="1"/><path d="M5 2h8a1 1 0 0 1 1 1v9"/></svg>',
+};
+
+// ---------- Rendering ----------
+const mention = eid => { const e = entry(eid); return e ? `<span class="mention" contenteditable="false" data-e="${eid}" style="--cat:var(--category-${e.cat})" title="${esc(CATS[e.cat])}">${esc(e.name)}</span>` : ''; };
+const summaryHTML = s => esc(s).replace(TOKEN, (_, e) => mention(e));
+const cxChip = (eid, removable) => { const e = entry(eid); return `<span class="cx" data-e="${eid}" style="--cat:var(--category-${e.cat})" title="${esc(CATS[e.cat])}"><i></i><b>${esc(e.name)}</b>${removable ? `<button class="x" data-cmd="unlink" data-e="${eid}" aria-label="Unlink ${esc(e.name)}">×</button>` : ''}</span>`; };
+const lblChip = lid => { const l = label(lid); return `<span class="lbl" style="--tone:var(--color-${l.tone})"><i></i>${esc(l.name)}</span>`; };
+
+function sceneCard(s, n) {
+  const cls = isFiltering() ? (matchScene(s) ? (state.highlight ? ' hit' : '') : ' dim') : '';
+  return `<article class="scene${cls}" data-scene="${s.id}">
+    <header class="sc-h"><button class="grip" data-grip="scene" aria-label="Reorder scene ${n} (drag, or Alt+arrow keys)">${I.grip}</button>
+      <span class="sc-n">Scene ${n}</span><span class="sc-labels">${s.labels.map(lblChip).join('')}</span>
+      <button class="ib" data-cmd="focus" aria-label="Edit summary">${I.pen}</button><button class="ib" data-menu="scene" aria-label="Scene actions">${I.more}</button></header>
+    <div class="sc-title" contenteditable="true" spellcheck="false" data-field="sctitle" data-placeholder="Untitled">${esc(s.title || '')}</div>
+    <div class="sc-body" contenteditable="true" data-field="summary" data-placeholder="Summarise this scene… (@ to mention Codex)">${summaryHTML(s.summary)}</div>
+    ${s.codex.length ? `<div class="links">${s.codex.map(e => cxChip(e, true)).join('')}</div>` : ''}
+    <footer class="sc-f"><button class="mini" data-pick="codex">${I.plus}Codex</button><button class="mini" data-pick="label">${I.tag}Label</button><span class="spacer"></span>
+      <span class="words${s.words ? '' : ' none'}" title="Words written in Write">${s.words ? kw(s.words) + ' words' : 'Not written'}</span></footer>
+  </article>`;
+}
+function column(c) {
+  const n = chapterNo(c.id);
+  return `<section class="col" data-ch="${c.id}">
+    <header class="col-h"><button class="grip" data-grip="chapter" aria-label="Reorder chapter ${n}">${I.grip}</button>
+      <div class="col-t"><div class="overline">Chapter ${n}<span>· ${c.scenes.length} ${c.scenes.length === 1 ? 'scene' : 'scenes'}${sceneWords(c.scenes) ? ' · ' + kw(sceneWords(c.scenes)) : ''}</span></div>
+        <span data-field="chtitle" contenteditable="true" spellcheck="false">${esc(c.title)}</span></div>
+      <button class="ib" data-cmd="focus" aria-label="Rename chapter">${I.pen}</button><button class="ib" data-menu="chapter" aria-label="Chapter actions">${I.more}</button></header>
+    <div class="scenes" data-drop="scenes">${c.scenes.map((s, i) => sceneCard(s, i + 1)).join('')}</div>
+    <button class="newscene" data-cmd="new-scene">${I.plus}New scene</button>
+  </section>`;
+}
+function actSection(a, i) {
+  const scenes = a.chapters.flatMap(c => c.scenes);
+  return `<section class="act${a.collapsed ? ' collapsed' : ''}" data-a="${a.id}">
+    <header class="act-h"><button class="grip" data-grip="act" aria-label="Reorder act ${i + 1}">${I.grip}</button>
+      <button class="ib chev" data-cmd="toggle-act" aria-expanded="${!a.collapsed}" aria-label="Collapse act">${I.chev}</button>
+      <h2><span class="act-n">Act ${i + 1}${a.title ? ':' : ''}</span><span data-field="acttitle" contenteditable="true" spellcheck="false" data-placeholder="Name this act">${esc(a.title)}</span></h2></header>
+    <div class="act-tools"><div class="split"><button data-cmd="new-chapter">${I.plus}New Chapter</button><button data-cmd="focus" aria-label="Rename act">${I.pen}</button><button data-menu="act" aria-label="Act actions">${I.more}</button></div>
+      <span class="act-meta">${a.chapters.length ? `${a.chapters.length} chapters · ${scenes.length} scenes · ${kw(sceneWords(scenes))} words` : 'No chapters yet. Add one, then a scene, and type its summary.'}</span></div>
+    <div class="cols" data-drop="cols">${a.chapters.map(column).join('')}<button class="addcol" data-cmd="new-chapter">+ New chapter</button></div>
+  </section>`;
+}
+function outline() {
+  let rows = '';
+  state.acts.forEach((a, ai) => {
+    rows += `<tr class="grp"><td colspan="5">Act ${ai + 1}: ${esc(a.title)}</td></tr>`;
+    a.chapters.forEach(c => {
+      rows += `<tr class="chap"><td class="num">${chapterNo(c.id)}</td><td colspan="3">${esc(c.title)} <span class="dim-t" style="font-weight:400;font-size:var(--text-xs)">ch:${esc(c.slug)}</span></td><td class="num">${kw(sceneWords(c.scenes))}</td></tr>`;
+      c.scenes.forEach((s, si) => {
+        const r = [...refs(s)];
+        rows += `<tr class="srow${isFiltering() && !matchScene(s) ? ' dim' : ''}" data-goto="${s.id}"><td class="num dim-t">${chapterNo(c.id)}.${si + 1}</td>
+          <td><div class="clip">${esc(plain(s)) || '<span class="dim-t">Empty scene</span>'}</div></td>
+          <td><div class="tags">${r.map(e => cxChip(e)).join('')}</div></td><td><div class="tags">${s.labels.map(lblChip).join('')}</div></td>
+          <td class="num ${s.words ? '' : 'dim-t'}">${s.words ? s.words.toLocaleString() : '—'}</td></tr>`;
+      });
+    });
+  });
+  // Archived scenes: a muted group at the end, each with Restore
+  if (state.archived.length) {
+    rows += `<tr class="grp"><td colspan="5">Archived · ${state.archived.length}</td></tr>`;
+    state.archived.forEach(x => {
+      const n = chapterNo(x.ch);
+      rows += `<tr class="arch"><td class="num">${n ? `${n}.–` : '–'}</td><td colspan="3"><div class="clip">${esc(plain(x.s)) || 'Empty scene'}</div></td>
+        <td class="num"><button class="mini" data-restore="${x.s.id}">Restore</button></td></tr>`;
+    });
+  }
+  return `<div class="tbl-wrap"><table><thead><tr><th class="num">#</th><th>Scene summary</th><th>Codex</th><th>Labels</th><th class="num">Words</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+// Import summary (?imported=1): what came across, worked out from the imported book
+function banner() {
+  if (!state.banner) return '';
+  const chs = state.acts.flatMap(a => a.chapters), scs = allScenes(), pl = (n, one, many = one + 's') => `${n.toLocaleString()} ${n === 1 ? one : many}`;
+  return `<div class="banner" role="status">${I.info}<div><b>Imported from a Novelcrafter export</b> · product-engineering.zip
+      <p>${pl(state.acts.length, 'act')}, ${pl(chs.length, 'chapter')}, ${pl(scs.length, 'scene')} and ${pl(sceneWords(scs), 'word')}, plus ${pl(ENTRIES.length, 'Knowledge base entry', 'Knowledge base entries')} in ${pl(Object.keys(CATS).length, 'category', 'categories')}. Scene summaries, labels and Codex links came across; snippets and chats were skipped.</p>
+      <div class="acts"><button class="link" data-cmd="undo-import">Undo import</button></div></div>
+    <button class="ib" data-cmd="dismiss-banner" aria-label="Dismiss import summary">${I.x}</button></div>`;
+}
+function renderBoard() {
+  $('#board').innerHTML = banner() + (state.view === 'outline' ? outline()
+    : state.acts.map(actSection).join('') + `<button class="addact" data-cmd="new-act">+ New act</button>`);
+}
+function renderSide() {
+  const body = $('#sideBody');
+  const q = state.sideQ.toLowerCase();
+  const openId = state.panel?.id;
+  const group = ([cat, name]) => {
+    const items = ENTRIES.filter(e => e.cat === cat && (e.name.toLowerCase().includes(q) || e.aliases.some(a => a.toLowerCase().includes(q))));
+    if (!items.length) return '';
+    return `<div class="cat-h" style="--cat:var(--category-${cat})"><i></i>${name}<span class="spacer"></span>${items.length}</div>` +
+      items.map(e => `<div class="erow"><button class="entry${openId === e.id ? ' open' : ''}" draggable="true" data-entry="${e.id}" aria-pressed="${state.highlight === e.id}" title="Click: show scenes using it · Drag onto a scene to link"><span class="dot" style="--cat:var(--category-${cat})"></span><span class="n">${esc(e.name)}</span><span class="u">${usage(e.id) || ''}</span></button>` +
+        `<button class="ib" data-cmd="edit-entry" data-e="${e.id}" aria-label="Edit ${esc(e.name)}" title="Edit entry">${I.pen}</button></div>`).join('');
+  };
+  // Series categories (book_scope) come first, under an overline naming the series; the book's own follow
+  const cats = Object.entries(CATS), sg = cats.filter(([c]) => SERIES_CATS.has(c)).map(group).join(''), bg = cats.filter(([c]) => !SERIES_CATS.has(c)).map(group).join('');
+  const sname = esc(SERIES_NAMES[BOOK.series] || '');
+  const groups = (sg ? `<div class="scope-h" title="Shared by every book in ${sname}. Edits apply to the whole series.">${I.series}From <b>${sname}</b></div>` + sg : '')
+    + (bg && sg ? '<div class="scope-h">This book</div>' : '') + bg;
+  const empty = ENTRIES.length ? 'No entries match.'
+    : `No entries yet.<br>Add the people, places and ideas this book keeps coming back to.${BOOK.series ? `<br><span style="font-size:var(--text-xs)">${sname} has no shared entries yet.</span>` : ''}`;
+  if (!body.querySelector('.side-list')) {
+    body.innerHTML = `<div class="side-tools"><label class="search"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><input id="sideQ" placeholder="Search Knowledge base" aria-label="Search Knowledge base"></label>
+      <button class="ib" style="width:28px;height:28px;border:1px solid var(--color-border)" aria-label="Filter"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3.5h12L9.5 9v4l-3 1V9z"/></svg></button></div>
+      <div class="side-new"><button class="btn" data-cmd="new-entry">${I.plus}New Entry</button></div><div class="side-list"></div>`;
+    $('#sideQ').addEventListener('input', e => { state.sideQ = e.target.value; renderSide(); });
+  }
+  body.querySelector('.side-list').innerHTML = groups || `<div class="side-empty">${empty}</div>`;
+}
+function renderChrome() {
+  const words = sceneWords(allScenes());
+  $('#stats').textContent = `${words.toLocaleString()} words · ${Math.ceil(words / 250)} pages · ${Math.floor(words / 238 / 60)}h ${Math.round(words / 238 % 60)}m read`;
+  $('#ws').classList.toggle('no-side', !state.side);
+  document.querySelectorAll('[data-view]').forEach(b => b.setAttribute('aria-pressed', b.dataset.view === state.view));
+  const e = entry(state.highlight);
+  const n = e ? allScenes().filter(matchScene).length : 0;
+  $('#hl').innerHTML = e ? `<span class="hl-chip"><span class="dot" style="--cat:var(--category-${e.cat})"></span>${esc(e.name)} <span class="dim-t">in ${n} ${n === 1 ? 'scene' : 'scenes'}</span><button class="ib" data-cmd="clear-hl" aria-label="Clear highlight">✕</button></span>` : '';
+  $('#lf').textContent = state.label ? label(state.label).name : 'Any';
+  $('#toggleAll').textContent = state.acts.every(a => a.collapsed) ? 'Expand all' : 'Collapse all';
+  $('#toggleAll').hidden = state.view !== 'board';
+  $('#archN').textContent = `Archived (${state.archived.length})`;
+  $('#archBtn').classList.toggle('ghost', !state.archived.length);
+  const { risks, checks } = refBadge();
+  $('#tabBadge').innerHTML = risks ? `<span class="badge" style="--tone:var(--color-danger)" title="${risks} copyright ${risks === 1 ? 'risk' : 'risks'}">${risks}</span>`
+    : checks ? `<span class="badge" style="--tone:var(--color-warn)" title="${checks} to check">${checks}</span>` : '';
+  // The highlight carries to Write and References for this book (G7)
+  try { state.highlight ? sessionStorage.setItem(HL_KEY, state.highlight) : sessionStorage.removeItem(HL_KEY); } catch {}
+  const html = document.documentElement;
+  document.querySelectorAll('[data-theme-set]').forEach(b => b.setAttribute('aria-pressed', b.dataset.themeSet === (html.dataset.theme || 'system')));
+  document.querySelectorAll('[data-dens-set]').forEach(b => b.setAttribute('aria-pressed', b.dataset.densSet === (html.dataset.density || 'compact')));
+}
+
+// ---------- Knowledge base entry panel (G9): the same panel as Write's ----------
+const catName = c => CATS[c] || STARTER_CATS[c];
+const catSel = c => `<button class="sel" data-cmd="kb-cat" aria-label="Category"><span class="dot" style="--cat:var(--category-${c})"></span>${esc(catName(c))}${I.chev}</button>`;
+const aliasesHTML = e => e.aliases.map((a, i) => `<span class="alias">${esc(a)}<button data-cmd="rm-alias" data-i="${i}" aria-label="Remove alias ${esc(a)}">×</button></span>`).join('')
+  + `<input class="alias-in" placeholder="${e.aliases.length ? 'Add…' : 'Add an alias…'}" aria-label="Add alias">`;
+function panelHTML() {
+  const p = state.panel;
+  if (p.mode === 'new') {
+    return `<div class="p-h"><div class="p-top"><span class="dot" style="--cat:var(--category-${p.cat})"></span>
+        <span class="p-name" data-field="kb-name" contenteditable="true" spellcheck="false" data-placeholder="Entry name">${esc(p.name)}</span>
+        <button class="ib" data-cmd="close-panel" aria-label="Close" title="Close (Esc)">${I.x}</button></div>
+        <div class="by">New Knowledge base entry${SERIES_CATS.has(p.cat) ? ` · shared with every book in ${esc(SERIES_NAMES[BOOK.series])}` : ''}</div></div>
+      <section class="sec"><div class="fields"><label>Category</label><div class="fld">${catSel(p.cat)}</div></div>
+        <div class="p-acts"><button class="btn ghost" data-cmd="close-panel">Cancel</button><button class="btn primary" data-cmd="kb-create">Create</button></div></section>`;
+  }
+  const e = entry(p.id), cl = `style="--cat:var(--category-${e.cat})"`;
+  const used = [], adds = [];
+  for (const s of allScenes()) {
+    const linked = s.codex.includes(e.id), mentioned = [...s.summary.matchAll(TOKEN)].some(m => m[1] === e.id);
+    if (linked || mentioned) used.push({ s, how: [linked && 'Linked', mentioned && 'Mentioned'].filter(Boolean).join(' · ') });
+    s.adds.filter(x => x.e === e.id).forEach(x => adds.push({ s, text: x.text }));
+  }
+  const at = s => { const [c, n] = sceneNo(s.id).split('.'); return `Chapter ${c} · Scene ${n}`; };
+  return `<div class="p-h"><div class="p-top"><span class="dot" ${cl}></span>
+        <span class="p-name" data-field="kb-name" contenteditable="true" spellcheck="false" data-placeholder="Entry name">${esc(e.name)}</span>
+        <button class="ib" data-cmd="close-panel" aria-label="Close" title="Close (Esc)">${I.x}</button></div>
+      ${SERIES_CATS.has(e.cat) ? `<div class="by">From ${esc(SERIES_NAMES[BOOK.series])} · changes apply to every book in the series</div>` : ''}</div>
+    <section class="sec"><div class="fields">
+      <label>Category</label><div class="fld">${catSel(e.cat)}</div>
+      <label class="top">Aliases</label><div class="fld" id="kbAliases">${aliasesHTML(e)}</div>
+      <label class="top">Summary</label><div class="fld"><div class="p-sum" data-field="kb-summary" contenteditable="true" data-placeholder="What the model should know about ${esc(e.name)}…">${esc(e.summary)}</div></div>
+      <label class="top">Always in context</label><div class="fld"><button class="switch" role="switch" aria-checked="${e.always}" data-cmd="kb-always" aria-label="Always in context"></button>
+        <span class="hint">${e.always ? 'Sent with every generation in this book.' : 'Sent only when a scene or beat uses it.'}</span></div>
+    </div></section>
+    <section class="sec"><div class="sec-h"><h3>Used in</h3><span class="k">${used.length} ${used.length === 1 ? 'scene' : 'scenes'}</span></div>
+      ${used.length ? used.map(({ s, how }) => `<button class="used" data-goto="${s.id}" title="Show on the board"><span class="overline">${at(s)}<span>${how}</span></span><span class="clip">${esc(plain(s)) || '<span class="dim-t">Empty scene</span>'}</span></button>`).join('')
+        : '<div class="p-empty">Not used yet. Drag the entry onto a scene, or type <b>@</b> in a summary.</div>'}</section>
+    <section class="sec"><div class="sec-h"><h3>Additions</h3><span class="k">${adds.length}</span></div>
+      ${adds.length ? adds.map(x => `<div class="addn" ${cl}><div class="overline">${at(x.s)}</div>${esc(x.text)}</div>`).join('')
+        : '<div class="p-empty">No additions. In Write, type <b>/</b> → <b>Codex addition</b> to record what changes from a scene on.</div>'}</section>
+    <div class="p-foot"><button class="btn ghost danger-t" data-cmd="kb-delete">Delete entry</button></div>`;
+}
+function renderPanel() {
+  if (state.panel?.id && !entry(state.panel.id)) state.panel = null;
+  $('#ws').classList.toggle('has-panel', !!state.panel);
+  $('#panel').innerHTML = state.panel ? panelHTML() : '';
+}
+function openEntry(eid) { state.panel = { id: eid }; render(); }
+function newEntry() {
+  state.panel = { mode: 'new', name: '', cat: Object.keys(CATS)[0] || 'person' };
+  render(); focusField('#panel [data-field="kb-name"]');
+}
+function createEntry() {
+  const p = state.panel, name = p.name.trim();
+  if (!name) { toast('Name the entry first'); return focusField('#panel [data-field="kb-name"]'); }
+  let eid = slugify(name); while (entry(eid)) eid += '-2';
+  if (!CATS[p.cat]) CATS[p.cat] = STARTER_CATS[p.cat];
+  ENTRIES.push(kb(eid, p.cat, name, [], ''));
+  state.panel = { id: eid };
+  commit(`Created <b>${esc(name)}</b> in ${esc(CATS[p.cat])}`);
+  focusField('#panel [data-field="kb-summary"]');
+}
+function deleteEntry() {
+  const e = entry(state.panel.id);
+  snapshot();
+  ENTRIES.splice(ENTRIES.indexOf(e), 1);
+  // Links go, mentions turn back into plain text, additions go with the entry
+  for (const s of [...allScenes(), ...state.archived.map(x => x.s)]) {
+    s.codex = s.codex.filter(x => x !== e.id);
+    s.summary = s.summary.replaceAll(`[[e:${e.id}]]`, e.name);
+    s.adds = s.adds.filter(x => x.e !== e.id);
+  }
+  if (state.highlight === e.id) state.highlight = null;
+  state.panel = null;
+  commit(`Deleted <b>${esc(e.name)}</b>`, true);
+}
+function addAlias(inp) {
+  const v = inp.value.trim(), e = entry(state.panel?.id);
+  inp.value = '';
+  if (!e || !v || e.aliases.some(a => a.toLowerCase() === v.toLowerCase())) return false;
+  e.aliases.push(v); markDirty(); return true;
+}
+
+function render() { renderBoard(); renderSide(); renderChrome(); renderPanel(); }
+
+// ---------- Autosave (simulated websocket): X seconds after first change, and on blur ----------
+const SYNC_MS = 3000;
+const sync = { dirty: false, timer: null, at: Date.now() };
+function setSync(s) {
+  const el = $('#sync'); el.dataset.s = s;
+  const ago = Math.round((Date.now() - sync.at) / 1000);
+  el.querySelector('.lbl-t').textContent = s === 'editing' ? `Unsaved · syncing in ${SYNC_MS / 1000}s` : s === 'saving' ? 'Saving…' : `Saved${ago < 5 ? ' · just now' : ago < 60 ? ` · ${ago}s ago` : ` · ${Math.round(ago / 60)}m ago`}`;
+}
+function markDirty() { sync.dirty = true; setSync('editing'); sync.timer ??= setTimeout(flush, SYNC_MS); }
+function flush() {
+  clearTimeout(sync.timer); sync.timer = null;
+  if (!sync.dirty) return;
+  sync.dirty = false; setSync('saving');
+  setTimeout(() => { sync.at = Date.now(); sync.dirty ? setSync('editing') : setSync('saved'); renderSide(); renderChrome(); }, 450);
+}
+setInterval(() => { if ($('#sync').dataset.s === 'saved') setSync('saved'); }, 10000);
+
+// ---------- Undo + toast ----------
+let undoSnap = null, toastT;
+const snapshot = () => { undoSnap = structuredClone({ acts: state.acts, archived: state.archived, entries: ENTRIES, cats: CATS }); };
+function undo() {
+  const u = undoSnap; undoSnap = null;
+  state.acts = u.acts; state.archived = u.archived;
+  ENTRIES.splice(0, ENTRIES.length, ...u.entries);
+  for (const k in CATS) delete CATS[k];
+  Object.assign(CATS, u.cats);
+}
+function toast(html, undo) {
+  const t = $('#toast');
+  t.innerHTML = `<span>${html}</span>${undo ? '<button data-cmd="undo">Undo</button>' : ''}`;
+  t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 4200);
+}
+function commit(msg, undo) { markDirty(); flush(); render(); if (msg) toast(msg, undo); }
+
+// ---------- Inline editing ----------
+function serialize(el) {
+  let out = '';
+  el.childNodes.forEach(n => {
+    if (n.nodeType === 3) out += n.nodeValue;
+    else if (n.dataset?.e) out += `[[e:${n.dataset.e}]]`;
+    else if (n.nodeName === 'BR') out += '\n';
+    else { if (out && !out.endsWith('\n')) out += '\n'; out += serialize(n); }
+  });
+  return out;
+}
+document.addEventListener('input', e => {
+  const f = e.target.closest?.('[data-field]');
+  if (!f) return;
+  if (f.dataset.field === 'summary') locate('scene', f.closest('[data-scene]').dataset.scene).s.summary = serialize(f).replace(/\n$/, '');
+  if (f.dataset.field === 'sctitle') locate('scene', f.closest('[data-scene]').dataset.scene).s.title = f.textContent.trim();
+  if (f.dataset.field === 'chtitle') locate('chapter', f.closest('[data-ch]').dataset.ch).c.title = f.textContent.trim();
+  if (f.dataset.field === 'acttitle') locate('act', f.closest('[data-a]').dataset.a).a.title = f.textContent.trim();
+  if (f.dataset.field === 'kb-name') {
+    const t = f.textContent.trim();
+    if (state.panel.mode === 'new') { state.panel.name = t; return; }   // nothing to save until Create
+    if (!t) return;
+    entry(state.panel.id).name = t; renderBoard(); renderSide();
+  }
+  if (f.dataset.field === 'kb-summary') entry(state.panel.id).summary = f.innerText.trim();
+  markDirty();
+});
+document.addEventListener('focusout', e => {
+  if (e.target.matches?.('.alias-in') && addAlias(e.target)) $('#kbAliases').innerHTML = aliasesHTML(entry(state.panel.id));
+  if (e.target.closest?.('[data-field]')) flush();
+});
+document.addEventListener('paste', e => {
+  if (!e.target.closest?.('[data-field]')) return;
+  e.preventDefault(); document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
+});
+
+// ---------- Popover (menus + pickers) ----------
+const pop = $('#pop');
+let popCtx = null;
+function openPop(anchorRect, html, ctx, wide) {
+  popCtx = ctx; pop.innerHTML = html; pop.classList.add('open'); pop.classList.toggle('wide', !!wide);
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  let top = anchorRect.bottom + 4;
+  if (top + h > innerHeight - 8) top = Math.max(8, anchorRect.top - h - 4);
+  pop.style.left = Math.max(8, Math.min(anchorRect.left, innerWidth - w - 8)) + 'px';
+  pop.style.top = top + 'px';
+  pop.querySelector('input')?.focus();
+}
+function closePop() { pop.classList.remove('open'); popCtx = null; }
+function codexList(q, current) {
+  const ql = q.toLowerCase();
+  return Object.entries(CATS).map(([cat, name]) => {
+    const items = ENTRIES.filter(e => e.cat === cat && e.name.toLowerCase().includes(ql));
+    return items.length ? `<div class="cat-h" style="--cat:var(--category-${cat})"><i></i>${name}</div>` + items.map(e =>
+      `<button class="item" data-pick-e="${e.id}"><span class="dot" style="--cat:var(--category-${cat})"></span>${esc(e.name)}${current.has(e.id) ? '<span class="k">linked</span>' : ''}</button>`).join('') : '';
+  }).join('') || '<div class="side-empty">No match. Enter creates a new entry.</div>';
+}
+function openCodexPicker(rect, sceneId, inlineRange) {
+  const s = locate('scene', sceneId).s;
+  openPop(rect, `<label class="search"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><input placeholder="${inlineRange ? 'Mention Codex entry…' : 'Link Codex entry…'}"></label><div class="list">${codexList('', refs(s))}</div>`,
+    { kind: 'codex', sceneId, inlineRange });
+  pop.querySelector('input').addEventListener('input', ev => { pop.querySelector('.list').innerHTML = codexList(ev.target.value, refs(s)); });
+}
+function pickCodex(eid) {
+  const { sceneId, inlineRange } = popCtx; closePop();
+  const { s } = locate('scene', sceneId);
+  if (inlineRange) {
+    const body = document.querySelector(`[data-scene="${sceneId}"] .sc-body`);
+    body.focus();
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(inlineRange);
+    const tpl = document.createElement('template'); tpl.innerHTML = mention(eid);
+    const node = tpl.content.firstChild, space = document.createTextNode(' ');
+    inlineRange.insertNode(space); inlineRange.insertNode(node);
+    inlineRange.setStartAfter(space); inlineRange.collapse(true); sel.removeAllRanges(); sel.addRange(inlineRange);
+    s.summary = serialize(body).replace(/\n$/, '');
+    markDirty();
+  } else if (!refs(s).has(eid)) {
+    s.codex.push(eid); commit(`Linked <b>${esc(entry(eid).name)}</b>`);
+  } else closePop();
+}
+function openLabelPicker(rect, sceneId) {
+  const s = locate('scene', sceneId).s;
+  openPop(rect, `<div class="list" style="padding-top:4px">${LABELS.map(l => `<button class="item" data-pick-l="${l.id}"><span class="lbl" style="--tone:var(--color-${l.tone});background:none;padding:0"><i></i></span>${esc(l.name)}${s.labels.includes(l.id) || l.series ? `<span class="k">${l.series ? 'Series' : ''}${s.labels.includes(l.id) ? ' ✓' : ''}</span>` : ''}</button>`).join('')}<div class="sep"></div><button class="item" disabled style="color:var(--color-muted)">${I.plus} New label…</button></div>`, { kind: 'label', sceneId });
+}
+function openMenu(rect, kind, xid) {
+  const loc = locate(kind, xid);
+  let items = [];
+  // Open in Write / References are real links (G5): write.html#scene=n.m, #chapter=n; references.html#<refId>
+  if (kind === 'scene') items = [['write', 'Open in Write', '↵', '', writeHref('scene=' + sceneNo(xid))],
+    ...[...new Set(loc.s.uses.map(u => u[0]))].map(r => ['ref', `Open in References · ${REFS[r]}`, '', '', `references.html${BOOK_Q}#${r}`]),
+    ['sep'], ['dup', 'Duplicate scene'], ['archive', 'Archive scene'], ['sep'], ['del', 'Delete scene', '', 'danger']];
+  if (kind === 'chapter') items = [['write', 'Open in Write', '', '', writeHref('chapter=' + chapterNo(xid))], ['copyref', 'Copy reference', 'ch:' + loc.c.slug],
+    ...state.acts.filter(a => a !== loc.a).map(a => ['move:' + a.id, `Move to Act ${state.acts.indexOf(a) + 1}: ${a.title}`]), ['sep'], ['del', 'Delete chapter', '', 'danger']];
+  if (kind === 'act') items = [['toggle', loc.a.collapsed ? 'Expand act' : 'Collapse act'], ['sep'], ['del', 'Delete act', '', 'danger']];
+  openPop(rect, `<div class="list" style="padding-top:4px">${items.map(([k, t, key, cls, href]) => k === 'sep' ? '<div class="sep"></div>'
+    : href ? `<a class="item" data-link href="${esc(href)}">${esc(t)}${key ? `<span class="k">${esc(key)}</span>` : ''}</a>`
+    : `<button class="item ${cls || ''}" data-mi="${k}">${esc(t)}${key ? `<span class="k">${esc(key)}</span>` : ''}</button>`).join('')}</div>`, { kind, xid }, kind === 'scene' && loc.s.uses.length);
+}
+function menuAction(k) {
+  const { kind, xid } = popCtx; closePop();
+  const loc = locate(kind, xid);
+  if (k === 'copyref') { navigator.clipboard?.writeText('ch:' + loc.c.slug).catch(() => {}); return toast(`Copied <code>ch:${esc(loc.c.slug)}</code> · stays valid after reorder or rename (#4)`); }
+  if (k === 'toggle') { loc.a.collapsed = !loc.a.collapsed; return render(); }
+  snapshot();
+  if (k === 'dup') { loc.c.scenes.splice(loc.si + 1, 0, { ...structuredClone(loc.s), id: id('s'), words: 0, uses: [], adds: [] }); return commit('Scene duplicated', true); }
+  // Archive (scene.archived_at): off the board, the chapter renumbers, and its source uses are archived with it
+  if (k === 'archive') {
+    loc.c.scenes.splice(loc.si, 1); state.archived.push({ s: loc.s, ch: loc.c.id, si: loc.si });
+    return commit(`Scene archived${usesNote(loc.s)}`, true);
+  }
+  if (k.startsWith('move:')) {
+    const to = locate('act', k.slice(5)).a; loc.a.chapters.splice(loc.ci, 1); to.chapters.push(loc.c);
+    return commit(`Moved to Act ${state.acts.indexOf(to) + 1} as Chapter ${chapterNo(loc.c.id)} · chapters renumbered`, true);
+  }
+  if (k === 'del') {
+    if (kind === 'scene') loc.c.scenes.splice(loc.si, 1);
+    if (kind === 'chapter') loc.a.chapters.splice(loc.ci, 1);
+    if (kind === 'act') state.acts.splice(loc.ai, 1);
+    commit(`${kind[0].toUpperCase() + kind.slice(1)} deleted`, true);
+  }
+}
+
+// ---------- Clicks ----------
+document.addEventListener('click', e => {
+  const t = e.target;
+  if (popCtx && !pop.contains(t) && !t.closest('[data-menu],[data-pick],[data-cmd="label-filter"]')) closePop();
+  const pe = t.closest('[data-pick-e]'); if (pe) return pickCodex(pe.dataset.pickE);
+  const pc = t.closest('[data-pick-cat]');
+  if (pc) {
+    const k = pc.dataset.pickCat; closePop();
+    if (state.panel.mode === 'new') { state.panel.cat = k; return renderPanel(); }
+    if (!CATS[k]) CATS[k] = STARTER_CATS[k];
+    entry(state.panel.id).cat = k; return commit();
+  }
+  const rs = t.closest('[data-restore]'); if (rs) { closePop(); return restoreScene(rs.dataset.restore); }
+  const pl = t.closest('[data-pick-l]');
+  if (pl) {
+    if (popCtx.kind === 'filter') { state.label = pl.dataset.pickL === 'any' ? null : pl.dataset.pickL; closePop(); return render(); }
+    const s = locate('scene', popCtx.sceneId).s, l = pl.dataset.pickL; closePop();
+    s.labels = s.labels.includes(l) ? s.labels.filter(x => x !== l) : [...s.labels, l];
+    return commit();
+  }
+  const mi = t.closest('[data-mi]'); if (mi) return menuAction(mi.dataset.mi);
+  const m = t.closest('[data-menu]');
+  if (m) { const kind = m.dataset.menu; const host = m.closest(kind === 'scene' ? '[data-scene]' : kind === 'chapter' ? '[data-ch]' : '[data-a]'); return openMenu(m.getBoundingClientRect(), kind, host.dataset.scene || host.dataset.ch || host.dataset.a); }
+  const pk = t.closest('[data-pick]');
+  if (pk) { const sid = pk.closest('[data-scene]').dataset.scene; return pk.dataset.pick === 'codex' ? openCodexPicker(pk.getBoundingClientRect(), sid) : openLabelPicker(pk.getBoundingClientRect(), sid); }
+  const en = t.closest('[data-entry]');
+  if (en) { state.highlight = state.highlight === en.dataset.entry ? null : en.dataset.entry; return render(); }
+  const cx = t.closest('.mention, .cx');
+  if (cx && !t.closest('[data-cmd="unlink"]') && !t.closest('#pop')) { state.highlight = cx.dataset.e; return render(); }
+  const go = t.closest('[data-goto]');
+  if (go) {
+    if (go.closest('#panel') && matchMedia('(max-width: 860px)').matches) state.panel = null;   // the sheet would cover the card
+    return gotoScene(go.dataset.goto);
+  }
+  const c = t.closest('[data-cmd],[data-view],[data-theme-set],[data-dens-set]');
+  if (!c) return;
+  const html = document.documentElement;
+  if (c.dataset.view) { state.view = c.dataset.view; return render(); }
+  if (c.dataset.themeSet) { c.dataset.themeSet === 'system' ? delete html.dataset.theme : html.dataset.theme = c.dataset.themeSet; return renderChrome(); }
+  if (c.dataset.densSet) { c.dataset.densSet === 'compact' ? delete html.dataset.density : html.dataset.density = c.dataset.densSet; return renderChrome(); }
+  const cmd = c.dataset.cmd;
+  const A = c.closest('[data-a]') && locate('act', c.closest('[data-a]').dataset.a)?.a;
+  const C = c.closest('[data-ch]') && locate('chapter', c.closest('[data-ch]').dataset.ch)?.c;
+  if (cmd === 'focus') {
+    const f = c.closest('.scene, .col-h, .act')?.querySelector('[data-field]');
+    f.focus(); const r = document.createRange(); r.selectNodeContents(f); r.collapse(false); getSelection().removeAllRanges(); getSelection().addRange(r);
+  }
+  if (cmd === 'toggle-act') { A.collapsed = !A.collapsed; render(); }
+  if (cmd === 'toggle-all') { const all = state.acts.every(a => a.collapsed); state.acts.forEach(a => a.collapsed = !all); render(); }
+  if (cmd === 'new-scene') { const s = sc(''); C.scenes.push(s); commit(); focusField(`[data-scene="${s.id}"] .sc-body`); }
+  if (cmd === 'new-chapter') { const nc = ch('Untitled chapter', [sc('')]); A.chapters.push(nc); A.collapsed = false; commit(); focusField(`[data-ch="${nc.id}"] [data-field]`, true); }
+  if (cmd === 'new-act') { state.view = 'board'; const na = act('Untitled act', [ch('Untitled chapter', [sc('')])]); state.acts.push(na); commit(); focusField(`[data-a="${na.id}"] [data-field="acttitle"]`, true); }
+  if (cmd === 'unlink') { const s = locate('scene', c.closest('[data-scene]').dataset.scene).s; s.codex = s.codex.filter(x => x !== c.dataset.e); commit(); }
+  if (cmd === 'clear-hl') { state.highlight = null; render(); }
+  if (cmd === 'label-filter') openPop(c.getBoundingClientRect(), `<div class="list" style="padding-top:4px"><button class="item" data-pick-l="any">Any label${!state.label ? '<span class="k">✓</span>' : ''}</button><div class="sep"></div>${LABELS.map(l => `<button class="item" data-pick-l="${l.id}"><span class="lbl" style="--tone:var(--color-${l.tone});background:none;padding:0"><i></i></span>${esc(l.name)} <span class="k">${allScenes().filter(s => s.labels.includes(l.id)).length}</span></button>`).join('')}</div>`, { kind: 'filter' });
+  if (cmd === 'undo' && undoSnap) { undo(); $('#toast').classList.remove('show'); commit(); }
+  if (cmd === 'archived') openArchived(c.getBoundingClientRect());
+  if (cmd === 'new-entry') newEntry();
+  if (cmd === 'edit-entry') openEntry(c.dataset.e);
+  if (cmd === 'close-panel') { state.panel = null; render(); }
+  if (cmd === 'kb-create') createEntry();
+  if (cmd === 'kb-delete') deleteEntry();
+  if (cmd === 'kb-cat') openPop(c.getBoundingClientRect(), `<div class="list" style="padding-top:4px">${Object.keys(CATS).length ? '' : '<div class="grp" style="padding:4px 8px">New category</div>'}${Object.entries(Object.keys(CATS).length ? CATS : STARTER_CATS).map(([k, n]) => `<button class="item" data-pick-cat="${k}"><span class="dot" style="--cat:var(--category-${k})"></span>${esc(n)}${SERIES_CATS.has(k) ? '<span class="k">Series</span>' : ''}</button>`).join('')}</div>`, { kind: 'cat' });
+  if (cmd === 'kb-always') { const e = entry(state.panel.id); e.always = !e.always; commit(); $('#panel [data-cmd="kb-always"]')?.focus(); }
+  if (cmd === 'rm-alias') { entry(state.panel.id).aliases.splice(+c.dataset.i, 1); markDirty(); $('#kbAliases').innerHTML = aliasesHTML(entry(state.panel.id)); }
+  if (cmd === 'dismiss-banner') { state.banner = false; renderBoard(); }
+  if (cmd === 'undo-import') toast('Would delete <b>' + esc(BOOK.title) + '</b> and everything imported with it, then go back to Library');
+});
+// Jump to a scene card or chapter column: board view, expand its act, scroll to it and flash it
+function gotoScene(sid, instant) {
+  const loc = locate('scene', sid); if (!loc) return;
+  state.view = 'board'; loc.a.collapsed = false; render();
+  const card = document.querySelector(`[data-scene="${sid}"]`);
+  card.scrollIntoView({ block: 'center', inline: 'center', behavior: instant ? 'instant' : 'smooth' }); card.classList.add('flash');
+}
+function gotoChapter(cid, instant) {
+  state.view = 'board'; locate('chapter', cid).a.collapsed = false; render();
+  const col = document.querySelector(`[data-ch="${cid}"]`);
+  col.scrollIntoView({ block: 'start', inline: 'nearest', behavior: instant ? 'instant' : 'smooth' }); col.classList.add('flash');
+}
+
+// ---------- Archived scenes (G14) ----------
+function openArchived(rect) {
+  const rows = state.archived.map(x => {
+    const n = chapterNo(x.ch), u = x.s.uses.length;
+    return `<div class="arow"><div><span class="overline">${n ? `Chapter ${n} · was Scene ${x.si + 1}` : 'Its chapter was deleted'}</span>
+      <span class="clip">${esc(plain(x.s)) || '<span class="dim-t">Empty scene</span>'}</span>${u ? `<span class="note">${u} source ${u === 1 ? 'use' : 'uses'} archived with it</span>` : ''}</div>
+      <button class="mini" data-restore="${x.s.id}">Restore</button></div>`;
+  }).join('');
+  openPop(rect, `<div class="grp">Archived scenes</div><div class="list">${rows || '<div class="side-empty">Nothing archived. Card ⋯ → <b>Archive scene</b> takes a scene off the board without deleting it.</div>'}</div>`, { kind: 'archived' }, true);
+}
+function restoreScene(sid) {
+  const x = state.archived.splice(state.archived.findIndex(a => a.s.id === sid), 1)[0];
+  let c = locate('chapter', x.ch)?.c || state.acts.flatMap(a => a.chapters)[0];
+  if (!c) { c = ch('Restored scenes', []); if (!state.acts.length) state.acts.push(act('', [])); state.acts[0].chapters.push(c); }
+  const at = Math.min(x.si, c.scenes.length);
+  c.scenes.splice(at, 0, x.s);
+  commit(`Scene restored as Chapter ${chapterNo(c.id)} · Scene ${at + 1}${x.s.uses.length ? ` · ${x.s.uses.length} source ${x.s.uses.length === 1 ? 'use' : 'uses'} restored` : ''}`);
+  if (state.view === 'board') gotoScene(x.s.id);
+}
+
+// ---------- Deep links (G5, G7): #scene=5.2, #chapter=5, #kb=<entry>, #entry=<entry> ----------
+function applyHash(first) {
+  const h = new URLSearchParams(location.hash.slice(1));
+  let hl = h.get('kb');
+  if (first && !hl) try { hl = sessionStorage.getItem(HL_KEY); } catch {}
+  if (hl && entry(hl)) state.highlight = hl;
+  if (h.get('entry') && entry(h.get('entry'))) state.panel = { id: h.get('entry') };
+  render();
+  if (h.has('scene')) {
+    const [cn, sn] = h.get('scene').split('.').map(Number), s = sceneAt(cn, sn);
+    s ? gotoScene(s.id, first) : toast(`This book has no Chapter ${esc(cn)} · Scene ${esc(sn)}`);
+  } else if (h.has('chapter')) {
+    const c = chapterAt(+h.get('chapter'));
+    c ? gotoChapter(c.id, first) : toast(`This book has no Chapter ${esc(h.get('chapter'))}`);
+  }
+}
+
+function focusField(sel, selectAll) {
+  const f = document.querySelector(sel); if (!f) return;
+  f.scrollIntoView({ block: 'nearest', inline: 'nearest' }); f.focus();
+  const r = document.createRange(); r.selectNodeContents(f); if (!selectAll) r.collapse(false);
+  getSelection().removeAllRanges(); getSelection().addRange(r);
+}
+
+// ---------- Keyboard: Enter commits titles, Esc blurs, @ mentions, Alt+arrows reorder ----------
+document.addEventListener('keydown', e => {
+  if (pop.classList.contains('open')) {
+    if (e.key === 'Escape') { closePop(); return; }
+    if (e.key === 'Enter' && e.target.closest('#pop')) { e.preventDefault(); pop.querySelector('[data-pick-e],[data-pick-l],[data-pick-cat],[data-link],[data-mi]')?.click(); return; }
+  }
+  // Alias input: Enter adds a chip and stays ready for the next; Esc clears
+  if (e.target.matches?.('.alias-in')) {
+    if (e.key === 'Enter') { e.preventDefault(); if (addAlias(e.target)) { $('#kbAliases').innerHTML = aliasesHTML(entry(state.panel.id)); $('#kbAliases .alias-in').focus(); } }
+    if (e.key === 'Escape') { e.target.value = ''; e.target.blur(); }
+    return;
+  }
+  const f = e.target.closest?.('[data-field]');
+  if (f?.dataset.field === 'kb-name' && e.key === 'Enter' && state.panel?.mode === 'new') { e.preventDefault(); return createEntry(); }
+  if (f) {
+    if (e.key === 'Escape' || (e.key === 'Enter' && f.dataset.field !== 'summary' && f.dataset.field !== 'kb-summary')) { e.preventDefault(); f.blur(); return; }
+    if (e.key === '@' && f.dataset.field === 'summary') {
+      e.preventDefault();
+      const range = getSelection().getRangeAt(0).cloneRange();
+      let rect = range.getBoundingClientRect();
+      if (!rect.width && !rect.height) rect = f.getBoundingClientRect();
+      openCodexPicker(rect, f.closest('[data-scene]').dataset.scene, range);
+      return;
+    }
+  }
+  if (e.key === 'Escape' && state.panel) { state.panel = null; render(); return; }
+  const g = e.target.closest?.('[data-grip]');
+  if (g && e.altKey && e.key.startsWith('Arrow')) { e.preventDefault(); keyMove(g, e.key); }
+});
+function keyMove(g, key) {
+  const kind = g.dataset.grip, d = key === 'ArrowUp' || key === 'ArrowLeft' ? -1 : 1;
+  const host = g.closest(kind === 'scene' ? '[data-scene]' : kind === 'chapter' ? '[data-ch]' : '[data-a]');
+  const xid = host.dataset.scene || host.dataset.ch || host.dataset.a;
+  const loc = locate(kind, xid);
+  if (kind === 'scene' && (key === 'ArrowLeft' || key === 'ArrowRight')) {
+    const chs = state.acts.flatMap(a => a.chapters), i = chs.indexOf(loc.c) + d;
+    if (!chs[i]) return;
+    loc.c.scenes.splice(loc.si, 1); chs[i].scenes.push(loc.s);
+  } else {
+    const list = kind === 'scene' ? loc.c.scenes : kind === 'chapter' ? loc.a.chapters : state.acts;
+    const from = kind === 'scene' ? loc.si : kind === 'chapter' ? loc.ci : loc.ai, to = from + d;
+    if (to < 0 || to >= list.length) return;
+    list.splice(to, 0, list.splice(from, 1)[0]);
+  }
+  commit();
+  document.querySelector(`[data-${kind === 'scene' ? 'scene' : kind === 'chapter' ? 'ch' : 'a'}="${xid}"] [data-grip="${kind}"]`)?.focus();
+}
+
+// ---------- Drag & drop: acts, chapters, scenes; Codex entries onto scenes ----------
+let drag = null;
+const line = $('#dropline');
+document.addEventListener('pointerdown', e => {
+  const g = e.target.closest('[data-grip]');
+  if (!g) return;
+  const host = g.closest(g.dataset.grip === 'scene' ? '.scene' : g.dataset.grip === 'chapter' ? '.col' : '.act');
+  host.draggable = true;
+});
+document.addEventListener('pointerup', () => document.querySelectorAll('[draggable="true"]:not([data-entry])').forEach(el => el.draggable = false));
+document.addEventListener('dragstart', e => {
+  const en = e.target.closest?.('[data-entry]');
+  if (en) { drag = { type: 'codex', id: en.dataset.entry }; e.dataTransfer.effectAllowed = 'link'; e.dataTransfer.setData('text/plain', entry(en.dataset.entry).name); return; }
+  const el = e.target;
+  const type = el.matches('.scene') ? 'scene' : el.matches('.col') ? 'chapter' : el.matches('.act') ? 'act' : null;
+  if (!type) return;
+  drag = { type, id: el.dataset.scene || el.dataset.ch || el.dataset.a, el };
+  e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', type);
+  closePop();
+  requestAnimationFrame(() => el.classList.add('dragging'));
+});
+function showLine(x, y, w, h) { Object.assign(line.style, { display: 'block', left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px' }); }
+function dropSlot(items, y) {
+  // index among siblings by pointer position (vertical list)
+  let i = 0;
+  for (const it of items) { const r = it.getBoundingClientRect(); if (y > r.top + r.height / 2) i++; }
+  return i;
+}
+function wrapSlot(items, x, y) {
+  // index among wrapped columns: rows above the pointer count fully, the pointer's row by x
+  let i = 0;
+  for (const it of items) {
+    const r = it.getBoundingClientRect();
+    if (y > r.bottom + 5 || (y >= r.top - 5 && x > r.left + r.width / 2)) i++;
+  }
+  return i;
+}
+document.addEventListener('dragover', e => {
+  if (!drag) return;
+  document.querySelectorAll('.drop-target').forEach(x => x.classList.remove('drop-target'));
+  line.style.display = 'none'; drag.target = null;
+  if (drag.type === 'codex') {
+    const card = e.target.closest?.('.scene');
+    if (card) { e.preventDefault(); card.classList.add('drop-target'); drag.target = { scene: card.dataset.scene }; }
+    return;
+  }
+  if (drag.type === 'scene') {
+    const col = e.target.closest?.('.col'); if (!col) return;
+    e.preventDefault();
+    const list = col.querySelector('.scenes'), cards = [...list.children];
+    const i = dropSlot(cards, e.clientY), lr = list.getBoundingClientRect();
+    const y = !cards.length ? lr.top + 6 : i < cards.length ? cards[i].getBoundingClientRect().top - 4 : cards[cards.length - 1].getBoundingClientRect().bottom + 2;
+    showLine(lr.left + 6, y, lr.width - 12, 2);
+    drag.target = { ch: col.dataset.ch, index: i };
+  }
+  if (drag.type === 'chapter') {
+    const row = e.target.closest?.('.cols'); if (!row) return;
+    e.preventDefault();
+    const cols = [...row.querySelectorAll(':scope > .col')], i = wrapSlot(cols, e.clientX, e.clientY);
+    const ref = cols[Math.min(i, cols.length - 1)]?.getBoundingClientRect() || row.getBoundingClientRect();
+    showLine(i < cols.length ? ref.left - 6 : ref.right + 4, ref.top, 2, Math.max(60, ref.height));
+    drag.target = { act: row.closest('[data-a]').dataset.a, index: i };
+  }
+  if (drag.type === 'act') {
+    const board = $('#board'); if (!board.contains(e.target)) return;
+    e.preventDefault();
+    const acts = [...board.querySelectorAll(':scope > .act')], i = dropSlot(acts, e.clientY), br = board.getBoundingClientRect();
+    const y = i < acts.length ? acts[i].getBoundingClientRect().top : acts[acts.length - 1].getBoundingClientRect().bottom;
+    showLine(br.left + 12, y - 1, br.width - 24, 3);
+    drag.target = { index: i };
+  }
+});
+document.addEventListener('drop', e => {
+  if (!drag?.target) return;
+  e.preventDefault();
+  const t = drag.target;
+  if (drag.type === 'codex') {
+    const s = locate('scene', t.scene).s;
+    if (!refs(s).has(drag.id)) { s.codex.push(drag.id); commit(`Linked <b>${esc(entry(drag.id).name)}</b>`); }
+    return;
+  }
+  snapshot();
+  if (drag.type === 'scene') {
+    const loc = locate('scene', drag.id), to = locate('chapter', t.ch).c;
+    let i = t.index; if (to === loc.c && loc.si < i) i--;
+    loc.c.scenes.splice(loc.si, 1); to.scenes.splice(i, 0, loc.s);
+    if (to === loc.c && i === loc.si) return;
+    commit(`Moved to Chapter ${chapterNo(to.id)}, Scene ${i + 1}`, true);
+  }
+  if (drag.type === 'chapter') {
+    const loc = locate('chapter', drag.id), to = locate('act', t.act).a, before = chapterNo(loc.c.id);
+    let i = t.index; if (to === loc.a && loc.ci < i) i--;
+    loc.a.chapters.splice(loc.ci, 1); to.chapters.splice(i, 0, loc.c);
+    const after = chapterNo(loc.c.id);
+    if (before === after && to === loc.a) return;
+    commit(`Chapter ${before} → Chapter ${after} · chapters renumbered · <code>ch:${esc(loc.c.slug)}</code> unchanged`, true);
+  }
+  if (drag.type === 'act') {
+    const loc = locate('act', drag.id); let i = t.index; if (loc.ai < i) i--;
+    state.acts.splice(loc.ai, 1); state.acts.splice(i, 0, loc.a);
+    if (i !== loc.ai) commit(`Act ${loc.ai + 1} → Act ${i + 1} · chapters renumbered`, true);
+  }
+});
+document.addEventListener('dragend', () => {
+  drag?.el?.classList.remove('dragging'); drag?.el && (drag.el.draggable = false);
+  document.querySelectorAll('.drop-target').forEach(x => x.classList.remove('drop-target'));
+  line.style.display = 'none'; drag = null;
+});
+
+// ---------- Misc wiring ----------
+$('#q').addEventListener('input', e => { state.q = e.target.value.trim(); renderBoard(); });
+$('#sideToggle').addEventListener('click', () => { state.side = !state.side; renderChrome(); });
+if (matchMedia('(max-width: 720px)').matches) state.side = false;
+// Book header from the catalogue; back goes to the book's series (G3); tabs keep ?book= (G4)
+(function bookbar() {
+  const series = SERIES_NAMES[BOOK.series], back = $('#back'), where = series ? `Back to ${series}` : 'Back to Library';
+  back.href = series ? `library.html#series=${BOOK.series}` : 'library.html';
+  back.title = where; back.setAttribute('aria-label', where);
+  $('#cover').style.background = `linear-gradient(160deg, ${BOOK.cover[0]}, ${BOOK.cover[1]})`;
+  $('#bookTitle').textContent = BOOK.title;
+  $('#bookTitle').title = series ? `${series} · Book ${String(BOOK.n || '').padStart(3, '0')}` : BOOK.title;
+  document.querySelectorAll('[data-tab]').forEach(a => a.href = `${a.dataset.tab}.html${BOOK_Q}`);
+  document.title = `Codex · Plan · ${BOOK.title} (reference)`;
+  // The book opens on the screen it was last left on (G2). A new book has no id yet.
+  if (BOOK_ID !== 'new') try { localStorage.setItem('codex.last.' + BOOK_ID, 'plan'); } catch {}
+})();
+addEventListener('hashchange', () => applyHash());
+applyHash(true);
+</script>
+</body>
+</html>

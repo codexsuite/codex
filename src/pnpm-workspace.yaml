@@ -1,0 +1,11 @@
+# The client workspace: the web SPA and the platform-neutral core it shares with the mobile app (#35).
+packages:
+  - Codex.Client
+  - Codex.Core.Client
+  - Codex.Mobile
+
+allowBuilds:
+  core-js: false
+  es5-ext: false
+  "@parcel/watcher": false
+  unrs-resolver: false

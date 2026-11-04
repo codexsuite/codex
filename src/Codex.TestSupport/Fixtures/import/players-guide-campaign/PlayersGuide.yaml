@@ -1,0 +1,26 @@
+#pdf-engine: xelatex
+#template: main.tex
+
+# Additional settings you might want to include
+metadata:
+  title: "Players Guide to The Realm of Velmara"
+  author: "Joel Dickson"
+  date: "2024-06-12"
+# pandoc  -f markdown+smart+raw_tex -d defaults.yaml -t latex -o output.tex
+variables:
+  # mainfont: "Times New Roman"
+  # fontsize: "12pt"
+  # geometry: "margin=1in"
+  # linkcolor: "blue"
+  toc: true
+  toc-title: "Table of Contents"
+  toc-depth: 4
+
+output-file: PlayersGuideOutput.tex
+
+# Input files (you can specify multiple files)
+input-files:
+  #- index.md
+  - Chapter 1.md
+  - Chapter 3.md
+  - Chapter 4.md

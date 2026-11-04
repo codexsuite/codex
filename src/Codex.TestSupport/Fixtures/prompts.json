@@ -1,0 +1,27 @@
+{
+  "templates": [
+    {
+      "id": "continue-writing",
+      "name": "Continue writing",
+      "description": "Carry on from where the text stops, without repeating it.",
+      "builtIn": true
+    },
+    {
+      "id": "joels-voice",
+      "name": "Write in Joel's voice",
+      "description": "Draft the beat in the book's established voice, matching tense, point of view and rhythm.",
+      "builtIn": true
+    },
+    {
+      "id": "paraphrase",
+      "name": "Paraphrase",
+      "description": "Say the same thing in different words, keeping the meaning and the facts.",
+      "builtIn": true
+    }
+  ],
+  "models": [
+    { "id": "claude-sonnet-5-5", "label": "Sonnet 5.5", "default": true },
+    { "id": "claude-opus-5-5", "label": "Opus 5.5", "default": false },
+    { "id": "claude-haiku-5-5", "label": "Haiku 5.5", "default": false }
+  ]
+}
