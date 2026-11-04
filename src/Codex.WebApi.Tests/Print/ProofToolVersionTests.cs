@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Codex.Application.Features.Print.Render;
 using Codex.Application.Features.Print.Templates;
+using Codex.Contracts;
 using Codex.Contracts.Print;
 using Codex.TestSupport.Fixtures;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,19 +29,19 @@ public class ProofToolVersionTests : ProofApiFixture
         var chapter = SeedIds.Chapters.PlayersGuideCh1;
         using var response = await Client.PostAsJsonAsync($"{BookBase}/proofs", new ProofRequest(chapter));
         response.StatusCode.ShouldBe(HttpStatusCode.Accepted);
-        var queued = (await response.Content.ReadFromJsonAsync<ProofDto>())!;
+        var queued = (await response.Content.ReadFromJsonAsync<ProofDto>()).ShouldNotBeNull();
 
         var proof = await SettledAsync(queued.Id);
 
         proof.Status.ShouldBe("succeeded", proof.Log);
-        var list = (await Client.GetFromJsonAsync<ProofListDto>($"{BookBase}/proofs?chapterId={chapter}"))!;
+        var list = (await Client.GetFromJsonAsync<ProofListDto>($"{BookBase}/proofs?chapterId={chapter}")).ShouldNotBeNull();
         proof.CacheKey.ShouldBe(queued.CacheKey);
         list.CurrentCacheKey.ShouldBe(queued.CacheKey);
         list.Proofs.Single().CacheKey.ShouldBe(list.CurrentCacheKey);
 
         using var again = await Client.PostAsJsonAsync($"{BookBase}/proofs", new ProofRequest(chapter));
         again.StatusCode.ShouldBe(HttpStatusCode.OK);
-        var cached = (await again.Content.ReadFromJsonAsync<ProofDto>())!;
+        var cached = (await again.Content.ReadFromJsonAsync<ProofDto>()).ShouldNotBeNull();
         (cached.Cached, cached.Id).ShouldBe((true, proof.Id));
     }
 
