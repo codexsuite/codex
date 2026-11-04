@@ -31,7 +31,7 @@ public class ProofToolVersionTests : ProofApiFixture
         proof.CacheKey.ShouldBe(queued.CacheKey);
         var list = await ListAsync();
         list.CurrentCacheKey.ShouldBe(queued.CacheKey);
-        list.Proofs.Single().CacheKey.ShouldBe(list.CurrentCacheKey);
+        list.Proofs.Single(p => p.Id == proof.Id).CacheKey.ShouldBe(list.CurrentCacheKey);
 
         using var again = await Client.PostAsJsonAsync($"{BookBase}/proofs", new ProofRequest(Chapter));
         again.StatusCode.ShouldBe(HttpStatusCode.OK);
