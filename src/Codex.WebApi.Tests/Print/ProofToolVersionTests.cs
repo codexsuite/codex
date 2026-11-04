@@ -20,10 +20,8 @@ public class ProofToolVersionTests : ProofApiFixture
 
     private static readonly Guid Chapter = SeedIds.Chapters.PlayersGuideCh1;
 
-    private SwitchableTools _tools = null!;
-
     protected override Action<IServiceCollection>? ConfigureTestServices => services =>
-        services.AddSingleton<ToolVersions>(sp => _tools = new SwitchableTools(sp.GetRequiredService<RenderSettings>()));
+        services.AddSingleton<ToolVersions>(sp => new SwitchableTools(sp.GetRequiredService<RenderSettings>()));
 
     [Test]
     public async Task Proof_WhenTheWorkerFinishesWithNoEdit_ShouldReadAsCurrentInTheWebProcessAndBeServedFromTheCache()
@@ -46,7 +44,7 @@ public class ProofToolVersionTests : ProofApiFixture
     {
         var (queued, proof) = await RequestAsync();
 
-        _tools.Current = "pandoc 3.12|Tectonic 0.16.0";
+        SwitchableTools.Current = ToolchainWith("0.16.0");
 
         var list = await ListAsync();
         list.CurrentCacheKey.ShouldNotBe(proof.CacheKey);
@@ -78,8 +76,12 @@ public class ProofToolVersionTests : ProofApiFixture
         Toolchain(web).ShouldNotBeNull();
     }
 
+    // The tests of this class share one database, so each starts on a toolchain of its own: its first request is a miss.
+    private static string ToolchainWith(string tectonic) => $"pandoc 3.12|Tectonic {tectonic}";
+
     private async Task<(ProofDto Queued, ProofDto Proof)> RequestAsync()
     {
+        SwitchableTools.Current = ToolchainWith($"0.15.0+{Guid.NewGuid():N}");
         using var response = await Client.PostAsJsonAsync($"{BookBase}/proofs", new ProofRequest(Chapter));
         response.StatusCode.ShouldBe(HttpStatusCode.Accepted);
         var queued = (await response.Content.ReadFromJsonAsync<ProofDto>()).ShouldNotBeNull();
@@ -112,7 +114,7 @@ public class ProofToolVersionTests : ProofApiFixture
 
     private sealed class SwitchableTools(RenderSettings settings) : ToolVersions(settings)
     {
-        public string Current { get; set; } = "pandoc 3.12|Tectonic 0.15.0";
+        public static string Current { get; set; } = "pandoc 3.12|Tectonic 0.15.0";
 
         public override string Value => Current;
     }
