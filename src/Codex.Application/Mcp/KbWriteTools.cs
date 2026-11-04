@@ -256,7 +256,7 @@ public sealed class KbWriteTools(
     [Description("Connects an entry to the story, one result per link. `as`: scene (the chip on the Plan card; `scene`), mention (turns the first plain use " +
                  "of `anchor.text` in `scene` into a mention chip), addition (`scene`, `at`, `text`, expected_version: what the reader learns from here on), " +
                  "context (`beat`: + Context). `unlink` removes scene, mention and context links. A link outside the book's scope fails that link with " +
-                 "out_of_scope and the rest still run. Linking a source arrives with the References tools.")]
+                 "out_of_scope and the rest still run. `as` source is not supported here: to link an entry to a source, call update_source with its kb_entry field.")]
     public async Task<LinkKbEntryResult> LinkKbEntryAsync(
         McpServer server,
         [Description("The entry: id, name or alias.")] string entry,

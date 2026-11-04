@@ -39,7 +39,7 @@ public sealed class DraftTools(
                  "`integration`) and the Write screen's prompt (the book's style guide, the beat's context, the prose " +
                  "before it). Give `beat` (prose for that beat) or `scene` (continue at the end of the scene). Returns the generation id and a " +
                  "job_id at once; the draft is written in the background. Read it with get_draft or get_job once the state is done, then " +
-                 "resolve_draft. Never applies. Each session can start 20 of these; the 21st fails rate_limited. To supply the text yourself, use submit_draft.")]
+                 "resolve_draft. Never applies. Each token can start 20 of these per sliding hour by default (CODEX_MCP_MAX_GENERATIONS sets the limit); past it the call fails rate_limited. To supply the text yourself, use submit_draft.")]
     public async Task<DraftStarted> DraftProseAsync(
         McpServer server,
         [Description("Write the prose for this beat (its id).")] Guid? beat = null,
@@ -106,7 +106,7 @@ public sealed class DraftTools(
                  "The text may not contain ::beat or ::kb-addition lines, ::figure lines or ref: links. Nothing is applied: use resolve_draft.")]
     public async Task<DraftSubmitted> SubmitDraftAsync(
         McpServer server,
-        [Description("The prose, as Markdown in the stored format (docs/prose-format.md).")] string text,
+        [Description("The prose, as Markdown in the stored scene format: blocks separated by one blank line, with headings, lists, quotes and tables allowed. Read codex://scene/{id} to see a scene as stored.")] string text,
         [Description("The beat this is the prose for (its id).")] Guid? beat = null,
         [Description("Or the scene it continues at the end: an id or \"5.2\" with `book`.")] string? scene = null,
         [Description("The book, when `scene` is a display number.")] string? book = null,
